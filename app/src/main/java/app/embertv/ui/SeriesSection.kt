@@ -95,12 +95,12 @@ private fun SeriesGrid(vm: AppViewModel, repo: Repository, categoryId: String, m
                 )
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 138.dp),
+                    columns = GridCells.Adaptive(minSize = 100.dp),
                     state = vm.series.grid(categoryId),
                     modifier = modifier.fillMaxHeight(),
                     contentPadding = PaddingValues(top = 14.dp, bottom = 48.dp, start = 10.dp, end = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(22.dp),
-                    verticalArrangement = Arrangement.spacedBy(24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(22.dp),
                 ) {
                     items(list, key = { it.seriesId }) { s ->
                         PosterCard(

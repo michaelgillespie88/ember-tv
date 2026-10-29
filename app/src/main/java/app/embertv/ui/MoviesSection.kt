@@ -86,12 +86,12 @@ private fun MovieGrid(vm: AppViewModel, repo: Repository, categoryId: String, mo
                 )
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 138.dp),
+                    columns = GridCells.Adaptive(minSize = 100.dp),
                     state = vm.movies.grid(categoryId),
                     modifier = modifier.fillMaxHeight(),
                     contentPadding = PaddingValues(top = 14.dp, bottom = 48.dp, start = 10.dp, end = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(22.dp),
-                    verticalArrangement = Arrangement.spacedBy(24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(22.dp),
                 ) {
                     items(movies, key = { it.streamId }) { m ->
                         PosterCard(

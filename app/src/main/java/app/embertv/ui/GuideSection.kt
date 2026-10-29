@@ -42,8 +42,8 @@ import app.embertv.data.Programme
 import app.embertv.data.Repository
 import app.embertv.data.toChannel
 
-private const val WINDOW_MINUTES = 180
-private val CHANNEL_COLUMN = 190.dp
+private const val WINDOW_MINUTES = 120
+private val CHANNEL_COLUMN = 170.dp
 private val ROW_HEIGHT = 62.dp
 
 private data class GuideFocus(val channel: Channel, val programme: Programme?)

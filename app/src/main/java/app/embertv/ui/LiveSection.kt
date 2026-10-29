@@ -228,7 +228,7 @@ private fun PreviewDetails(repo: Repository, channel: Channel) {
         programmes == null -> Text("Loading guide…", style = Txt.Body, color = Ember.Faint)
         programmes.none { it.end > now } -> Text("No guide information for this channel.", style = Txt.Body, color = Ember.Faint)
         else -> {
-            val upcoming = programmes.filter { it.end > now }.take(4)
+            val upcoming = programmes.filter { it.end > now }.take(3)
             upcoming.forEachIndexed { i, p ->
                 val live = p.isLive(now)
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -255,7 +255,7 @@ private fun PreviewDetails(repo: Repository, channel: Channel) {
                             p.description,
                             style = Txt.Caption.copy(fontSize = 13.sp),
                             color = Ember.Dim,
-                            maxLines = 4,
+                            maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(start = 48.dp),
                         )
