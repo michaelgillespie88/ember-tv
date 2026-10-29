@@ -1,0 +1,283 @@
+package app.embertv.ui
+
+import android.app.Application
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import app.embertv.data.Account
+import app.embertv.data.AccountInfo
+import app.embertv.data.Channel
+import app.embertv.data.ContentType
+import app.embertv.data.DEFAULT_USER_AGENT
+import app.embertv.data.Episode
+import app.embertv.data.Favourite
+import app.embertv.data.Movie
+import app.embertv.data.Prefs
+import app.embertv.data.Repository
+import app.embertv.data.Series
+import app.embertv.data.XtreamClient
+import app.embertv.data.favouriteKey
+import app.embertv.data.normalizeServer
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+
+sealed interface Screen {
+    data object Home : Screen
+    data class MovieDetail(val movie: Movie) : Screen
+    data class SeriesDetail(val series: Series) : Screen
+    data class PlayLive(val channels: List<Channel>, val index: Int) : Screen
+    data class PlayVod(val items: List<VodItem>, val index: Int, val startMs: Long) : Screen
+}
+
+data class VodItem(
+    val key: String,
+    val title: String,
+    val subtitle: String,
+    val url: String,
+    val seriesId: Int? = null,
+    val episodeId: Int? = null,
+)
+
+data class Notice(val text: String, val id: Long = System.nanoTime())
+
+/** UI state for one browsable section, kept here so it survives opening a player or detail page. */
+class SectionState {
+    var categoryId by mutableStateOf<String?>(null)
+    val rail = LazyListState()
+    private val lists = HashMap<String, LazyListState>()
+    private val grids = HashMap<String, LazyGridState>()
+
+    fun list(category: String): LazyListState = lists.getOrPut(category) { LazyListState() }
+    fun grid(category: String): LazyGridState = grids.getOrPut(category) { LazyGridState() }
+}
+
+class AppViewModel(app: Application) : AndroidViewModel(app) {
+    val prefs = Prefs(app)
+
+    var account by mutableStateOf<Account?>(null)
+        private set
+    var repo by mutableStateOf<Repository?>(null)
+        private set
+    var accountInfo by mutableStateOf<AccountInfo?>(null)
+        private set
+    var loggingIn by mutableStateOf(false)
+        private set
+    var loginError by mutableStateOf<String?>(null)
+        private set
+
+    // Navigation: a simple stack, plus the item to re-focus when we come back.
+    val stack = mutableStateListOf<Screen>(Screen.Home)
+    private val returnKeys = ArrayList<String?>()
+    var lastFocusKey: String? = null
+    var restoreFocusKey by mutableStateOf<String?>(null)
+    var restoreClaimed = false
+
+    var tab by mutableIntStateOf(0)
+    var live = SectionState()
+        private set
+    var guide = SectionState()
+        private set
+    var movies = SectionState()
+        private set
+    var series = SectionState()
+        private set
+    var searchQuery by mutableStateOf("")
+
+    var reloadToken by mutableIntStateOf(0)
+        private set
+    var notice by mutableStateOf<Notice?>(null)
+        private set
+
+    var streamFormat by mutableStateOf(prefs.streamFormat)
+        private set
+    var userAgent by mutableStateOf(prefs.userAgent)
+        private set
+    var invertZap by mutableStateOf(prefs.invertZap)
+        private set
+
+    val favourites = mutableStateListOf<Favourite>()
+    val favKeys: Set<String> by derivedStateOf<Set<String>> { favourites.mapTo(HashSet()) { it.key } }
+
+    init {
+        favourites.addAll(prefs.favourites)
+        val saved = prefs.account
+        if (saved != null) startSession(saved, null)
+    }
+
+    // ---- Session ----
+
+    private fun startSession(acc: Account, info: AccountInfo?) {
+        account = acc
+        repo = Repository(XtreamClient(acc, userAgent))
+        accountInfo = info
+        if (info == null) refreshAccountInfo()
+    }
+
+    fun refreshAccountInfo() {
+        val r = repo ?: return
+        viewModelScope.launch {
+            try {
+                accountInfo = r.client.authenticate()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Keep using the saved login; Settings shows the account as unknown.
+            }
+        }
+    }
+
+    fun login(server: String, username: String, password: String) {
+        if (loggingIn) return
+        if (server.isBlank() || username.isBlank()) {
+            loginError = "Enter the server address and username."
+            return
+        }
+        loginError = null
+        loggingIn = true
+        viewModelScope.launch {
+            try {
+                val acc = Account(normalizeServer(server), username.trim(), password.trim())
+                val info = XtreamClient(acc, userAgent).authenticate()
+                prefs.account = acc
+                startSession(acc, info)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                loginError = e.message ?: "Sign-in failed."
+            } finally {
+                loggingIn = false
+            }
+        }
+    }
+
+    fun signOut() {
+        prefs.account = null
+        account = null
+        repo = null
+        accountInfo = null
+        stack.clear()
+        stack.add(Screen.Home)
+        returnKeys.clear()
+        restoreFocusKey = null
+        live = SectionState()
+        guide = SectionState()
+        movies = SectionState()
+        series = SectionState()
+        searchQuery = ""
+        tab = 0
+    }
+
+    fun reload() {
+        repo?.clearCaches()
+        reloadToken++
+    }
+
+    // ---- Navigation ----
+
+    fun push(screen: Screen) {
+        returnKeys.add(lastFocusKey)
+        stack.add(screen)
+    }
+
+    fun pop() {
+        if (stack.size <= 1) return
+        stack.removeAt(stack.lastIndex)
+        restoreClaimed = false
+        restoreFocusKey = if (returnKeys.isNotEmpty()) returnKeys.removeAt(returnKeys.lastIndex) else null
+    }
+
+    fun notify(text: String) {
+        notice = Notice(text)
+    }
+
+    fun clearNotice(n: Notice) {
+        if (notice == n) notice = null
+    }
+
+    // ---- Favourites ----
+
+    fun isFavourite(type: ContentType, id: Int): Boolean = favKeys.contains(favouriteKey(type, id))
+
+    fun toggleFavourite(f: Favourite) {
+        val i = favourites.indexOfFirst { it.key == f.key }
+        if (i >= 0) {
+            favourites.removeAt(i)
+            notify("Removed from favourites")
+        } else {
+            favourites.add(0, f)
+            notify("Added to favourites")
+        }
+        prefs.favourites = favourites.toList()
+    }
+
+    fun favouriteOf(c: Channel) = Favourite(ContentType.LIVE, c.streamId, c.name, c.icon, c.categoryId, "", c.num)
+    fun favouriteOf(m: Movie) = Favourite(ContentType.MOVIE, m.streamId, m.name, m.poster, m.categoryId, m.ext)
+    fun favouriteOf(s: Series) = Favourite(ContentType.SERIES, s.seriesId, s.name, s.cover, s.categoryId)
+
+    // ---- Settings ----
+
+    fun toggleStreamFormat() {
+        val next = if (streamFormat == "m3u8") "ts" else "m3u8"
+        streamFormat = next
+        prefs.streamFormat = next
+    }
+
+    fun toggleUserAgent() {
+        val next = if (userAgent == DEFAULT_USER_AGENT) app.embertv.data.VLC_USER_AGENT else DEFAULT_USER_AGENT
+        userAgent = next
+        prefs.userAgent = next
+        val acc = account ?: return
+        startSession(acc, accountInfo)
+        reloadToken++
+    }
+
+    fun toggleInvertZap() {
+        invertZap = !invertZap
+        prefs.invertZap = invertZap
+    }
+
+    // ---- Playback ----
+
+    fun liveUrl(c: Channel, alternate: Boolean): String {
+        val format = if (alternate) (if (streamFormat == "m3u8") "ts" else "m3u8") else streamFormat
+        return repo?.client?.liveUrl(c.streamId, format) ?: ""
+    }
+
+    fun playMovie(m: Movie, fromStart: Boolean) {
+        val r = repo ?: return
+        val key = "movie:${m.streamId}"
+        val start = if (fromStart) 0L else prefs.position(key)
+        push(Screen.PlayVod(listOf(VodItem(key, m.name, "", r.client.movieUrl(m.streamId, m.ext))), 0, start))
+    }
+
+    fun playEpisodes(s: Series, episodes: List<Episode>, index: Int, fromStart: Boolean) {
+        val r = repo ?: return
+        if (index !in episodes.indices) return
+        val items = episodes.map { e ->
+            VodItem(
+                key = "ep:${e.id}",
+                title = s.name,
+                subtitle = "Season ${e.season} · Episode ${e.number}  ${e.title}",
+                url = r.client.episodeUrl(e.id, e.ext),
+                seriesId = s.seriesId,
+                episodeId = e.id,
+            )
+        }
+        val start = if (fromStart) 0L else prefs.position(items[index].key)
+        push(Screen.PlayVod(items, index, start))
+    }
+
+    fun saveProgress(item: VodItem, positionMs: Long, durationMs: Long) {
+        prefs.savePosition(item.key, positionMs, durationMs)
+        val sid = item.seriesId
+        val eid = item.episodeId
+        if (sid != null && eid != null) prefs.setLastEpisode(sid, eid)
+    }
+}
