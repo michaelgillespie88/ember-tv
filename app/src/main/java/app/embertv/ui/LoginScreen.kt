@@ -25,7 +25,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
@@ -35,7 +37,11 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -149,6 +155,7 @@ fun Wordmark(large: Boolean = false) {
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun TvTextField(
     label: String,
@@ -164,6 +171,8 @@ fun TvTextField(
 ) {
     var focused by remember { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     if (autoFocus) {
         LaunchedEffect(Unit) {
             delay(150)
@@ -191,7 +200,26 @@ fun TvTextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(requester)
-                .onFocusChanged { focused = it.isFocused },
+                .onFocusChanged { focused = it.isFocused }
+                // TV remotes often register as keyboards, so a text field would treat up/down as
+                // cursor moves and trap focus. Move between fields ourselves; OK opens the keyboard.
+                .onPreviewKeyEvent { ev ->
+                    when (ev.nativeKeyEvent.keyCode) {
+                        AndroidKeyEvent.KEYCODE_DPAD_UP -> {
+                            if (ev.type == KeyEventType.KeyDown) focusManager.moveFocus(FocusDirection.Up)
+                            true
+                        }
+                        AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
+                            if (ev.type == KeyEventType.KeyDown) focusManager.moveFocus(FocusDirection.Down)
+                            true
+                        }
+                        AndroidKeyEvent.KEYCODE_DPAD_CENTER -> {
+                            if (ev.type == KeyEventType.KeyUp) keyboard?.show()
+                            true
+                        }
+                        else -> false
+                    }
+                },
             decorationBox = { inner ->
                 Box(
                     Modifier

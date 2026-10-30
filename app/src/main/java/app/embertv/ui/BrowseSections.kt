@@ -261,7 +261,7 @@ fun SettingsSection(vm: AppViewModel) {
                 if (info == null) "–" else "${info.activeConnections.ifEmpty { "0" }} of ${info.maxConnections.ifEmpty { "?" }} in use",
             )
             Spacer(Modifier.height(18.dp))
-            Text("Ember TV 1.0", style = Txt.Caption, color = Ember.Faint)
+            Text("Ember TV ${app.embertv.BuildConfig.VERSION_NAME}", style = Txt.Caption, color = Ember.Faint)
         }
         Spacer(Modifier.width(36.dp))
         Column(Modifier.width(520.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
