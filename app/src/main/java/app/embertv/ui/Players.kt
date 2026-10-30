@@ -930,7 +930,7 @@ private fun TimeshiftPanel(
         Spacer(Modifier.height(12.dp))
         if (isTv) {
             Text(
-                "OK  Play     ◀  Back 10s     ▶  Forward 30s     ⏪ ⏩  Skip     Up / Down  Change channel",
+                "OK  Play     ◀  Back 10s     ▶  Forward 30s     ◀◀ ▶▶  Skip     Up / Down  Change channel",
                 style = Txt.Caption,
                 color = Ember.Faint,
             )
@@ -957,7 +957,7 @@ private fun BehindLivePill(behindMs: Long, isTv: Boolean, modifier: Modifier, on
     ) {
         Text("−${clockLength(behindMs)}", style = Txt.Label.copy(fontWeight = FontWeight.SemiBold), color = Ember.Text)
         Spacer(Modifier.width(8.dp))
-        Text(if (isTv) "behind live  ·  ⏩ to catch up" else "behind live  ·  tap for live", style = Txt.Caption, color = Ember.Dim)
+        Text(if (isTv) "behind live  ·  ▶▶ to catch up" else "behind live  ·  tap for live", style = Txt.Caption, color = Ember.Dim)
     }
 }
 
