@@ -723,6 +723,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun applyCategoryFilter() {
         val r = repo ?: return
         val p = profile ?: return
+        hiddenChannels = prefs.hiddenChannels
+        r.hiddenChannels = hiddenChannels
         val rules = categoryRules(p)
         r.filter = if (!rules.allowMode && rules.keys.isEmpty()) {
             { _, _ -> true }
@@ -1108,6 +1110,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- Favourites ----
+
+    /** Channels hidden on this profile. */
+    var hiddenChannels by mutableStateOf<Set<Int>>(emptySet())
+        private set
+
+    /** Hides or shows channels; the lists, guide and channel up/down update straight away. */
+    fun setChannelsHidden(ids: Collection<Int>, hidden: Boolean) {
+        val next = if (hidden) hiddenChannels + ids else hiddenChannels - ids.toSet()
+        if (next == hiddenChannels) return
+        hiddenChannels = next
+        prefs.hiddenChannels = next
+        repo?.hiddenChannels = next
+    }
+
+    /** Called when leaving the channel editor, so open lists pick up hidden channels. */
+    fun channelsEdited() {
+        reloadToken++
+    }
+
+    /** Moves a favourite channel up (-1) or down (+1) among the favourite channels. */
+    fun moveFavouriteChannel(key: String, by: Int): Boolean {
+        val liveIdx = favourites.indices.filter { favourites[it].type == ContentType.LIVE }
+        val pos = liveIdx.indexOfFirst { favourites[it].key == key }
+        val target = pos + by
+        if (pos < 0 || target !in liveIdx.indices) return false
+        val a = liveIdx[pos]
+        val b = liveIdx[target]
+        val item = favourites[a]
+        favourites[a] = favourites[b]
+        favourites[b] = item
+        prefs.favourites = favourites.toList()
+        return true
+    }
+
+    fun removeFavourite(key: String) {
+        if (favourites.removeAll { it.key == key }) prefs.favourites = favourites.toList()
+    }
 
     fun isFavourite(type: ContentType, id: Int): Boolean = favKeys.contains(favouriteKey(type, id))
 

@@ -19,6 +19,23 @@ class Prefs(context: Context) {
 
     private fun pkFor(id: String, base: String): String = if (id == MAIN_PROFILE) base else "p_${id}_$base"
 
+    /** Channels this profile has hidden from the lists, guide and channel up/down. */
+    var hiddenChannels: Set<Int>
+        get() {
+            val raw = sp.getString(pk("hidden_channels"), null) ?: return emptySet()
+            return try {
+                val arr = JSONArray(raw)
+                (0 until arr.length()).map { arr.getInt(it) }.toSet()
+            } catch (e: Exception) {
+                emptySet()
+            }
+        }
+        set(value) {
+            val arr = JSONArray()
+            for (id in value) arr.put(id)
+            sp.edit().putString(pk("hidden_channels"), arr.toString()).apply()
+        }
+
     /** Football clubs this profile follows, for goal alerts and the Home card. */
     var followedTeams: List<Team>
         get() {
@@ -147,7 +164,7 @@ class Prefs(context: Context) {
         val e = sp.edit()
         for (key in sp.all.keys) {
             val belongs = if (id == MAIN_PROFILE) {
-                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams", "watched") ||
+                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams", "watched", "hidden_channels") ||
                     key.startsWith("pos_") || key.startsWith("last_ep_")
             } else {
                 key.startsWith("p_${id}_")

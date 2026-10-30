@@ -650,7 +650,7 @@ private fun GroupPicker(categories: List<Category>, selectedId: String, onDismis
 
 /** Jumping the guide to another day, at the same time of day. */
 @Composable
-private fun DayPicker(now: Long, showing: Long, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
+internal fun DayPicker(now: Long, showing: Long, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
     val today = startOfDay(now)
     val current = ((startOfDay(showing) - today) / 86_400L).toInt()
     Dialog(onDismissRequest = onDismiss) {

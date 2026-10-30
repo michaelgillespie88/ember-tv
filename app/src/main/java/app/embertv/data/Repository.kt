@@ -82,12 +82,21 @@ class Repository(val client: XtreamClient) {
     private suspend fun rawAllMovies(): List<Movie> = allMovies ?: client.movies(null).also { allMovies = it }
     private suspend fun rawAllSeries(): List<Series> = allSeries ?: client.series(null).also { allSeries = it }
 
-    suspend fun allChannels(): List<Channel> = rawAllChannels().filter { filter(ContentType.LIVE, it.categoryId) }
+    /** Channels the profile has hidden. The cached lists keep them; only what's handed out leaves them out. */
+    var hiddenChannels: Set<Int> = emptySet()
+
+    suspend fun allChannels(): List<Channel> = rawAllChannels().filter { filter(ContentType.LIVE, it.categoryId) && it.streamId !in hiddenChannels }
     suspend fun allMovies(): List<Movie> = movies(ALL)
     suspend fun allSeries(): List<Series> = series(ALL)
 
     suspend fun channels(categoryId: String): List<Channel> {
-        if (categoryId == ALL) return allChannels()
+        val all = channelsIncludingHidden(categoryId)
+        return if (hiddenChannels.isEmpty()) all else all.filter { it.streamId !in hiddenChannels }
+    }
+
+    /** A group's channels with hidden ones still in, for choosing what to hide. */
+    suspend fun channelsIncludingHidden(categoryId: String): List<Channel> {
+        if (categoryId == ALL) return rawAllChannels().filter { filter(ContentType.LIVE, it.categoryId) }
         if (!filter(ContentType.LIVE, categoryId)) return emptyList()
         liveByCat[categoryId]?.let { return it }
         val everything = allLive
@@ -120,6 +129,9 @@ class Repository(val client: XtreamClient) {
 
     /** Movies in a category, each film once with its other qualities as [Movie.versions]. */
     suspend fun movies(categoryId: String): List<Movie> {
+        if (categoryId == RECENT) {
+            return movies(ALL).filter { it.added > 0 }.sortedByDescending { it.added }.take(RECENT_LIMIT)
+        }
         val raw = rawMovies(categoryId)
         if (!mergeVersions) return raw
         mergedMovies[categoryId]?.let { return it }
@@ -130,6 +142,9 @@ class Repository(val client: XtreamClient) {
     }
 
     suspend fun series(categoryId: String): List<Series> {
+        if (categoryId == RECENT) {
+            return series(ALL).filter { it.updated > 0 }.sortedByDescending { it.updated }.take(RECENT_LIMIT)
+        }
         val raw = rawSeries(categoryId)
         if (!mergeVersions) return raw
         mergedSeries[categoryId]?.let { return it }
@@ -291,3 +306,6 @@ class Repository(val client: XtreamClient) {
         return if (matching.isEmpty() || matching.size == size) this else matching
     }
 }
+
+/** How many titles the Recently added group shows. */
+private const val RECENT_LIMIT = 300

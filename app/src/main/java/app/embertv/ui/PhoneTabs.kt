@@ -1,6 +1,21 @@
 package app.embertv.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.key
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +58,7 @@ import app.embertv.data.Category
 import app.embertv.data.Channel
 import app.embertv.data.ContentType
 import app.embertv.data.FAVOURITES
+import app.embertv.data.RECENT
 import app.embertv.data.Programme
 import app.embertv.data.Repository
 import app.embertv.data.catchupAvailable
@@ -51,8 +67,10 @@ import app.embertv.data.toChannel
 import app.embertv.data.toMovie
 import app.embertv.data.toSeries
 
-private fun withVirtualCategories(cats: List<Category>, allLabel: String): List<Category> =
-    listOf(Category(FAVOURITES, "★ Favourites"), Category(ALL, allLabel)) + cats
+private fun withVirtualCategories(cats: List<Category>, allLabel: String, recent: Boolean): List<Category> =
+    listOf(Category(FAVOURITES, "★ Favourites")) +
+        (if (recent) listOf(Category(RECENT, "Recently added")) else emptyList()) +
+        listOf(Category(ALL, allLabel)) + cats
 
 /** Loads a section's categories, then shows chips above [content] for the chosen one. */
 @Composable
@@ -70,7 +88,7 @@ private fun CategorySection(
         is LoadResult.Loading -> LoadingView(text = loadingText)
         is LoadResult.Err -> ErrorView(c.message) { vm.reload() }
         is LoadResult.Ok -> {
-            val categories = remember(c.value) { withVirtualCategories(c.value, allLabel) }
+            val categories = remember(c.value) { withVirtualCategories(c.value, allLabel, recent = allLabel != "All channels") }
             val selectedId = section.categoryId ?: c.value.firstOrNull()?.id ?: ALL
             // The chips live in the frosted header, which belongs to PhoneHome.
             val holder = LocalHeaderChips.current
@@ -134,12 +152,37 @@ fun PhoneLiveTab(vm: AppViewModel) {
 
 // ---------------- Guide ----------------
 
+private val P_CHANNEL = 74.dp
+private val P_ROW = 54.dp
+private val P_PER_MINUTE = 3.2.dp
+private const val P_DAY_MINUTES = 24 * 60
+
+/**
+ * The phone guide, matching the TV's: the chosen programme's details across the top, then a real
+ * timeline grid. Every row scrolls together through the whole day, with the channel column pinned.
+ * Tap a programme to see it at the top, tap it again to watch (or catch up, or set a reminder).
+ */
 @Composable
 fun PhoneGuideTab(vm: AppViewModel) {
     var details by remember { mutableStateOf<Pair<GuideFocus, List<Channel>>?>(null) }
     // Days from today: negative for catch-up, positive for what's coming.
     var day by remember { mutableIntStateOf(0) }
-    val dayState = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = 4)
+    var pickingDay by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf<GuideFocus?>(null) }
+    val scroll = rememberScrollState(
+        with(LocalDensity.current) { (P_PER_MINUTE * (((LocalNow.current - startOfDay(LocalNow.current)) / 60f) - 30f).coerceAtLeast(0f)).roundToPx() }
+    )
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val now = LocalNow.current
+
+    // Where "now" (or this time of day, on other days) sits along the timeline, less half an hour.
+    fun targetPx(): Int = with(density) { (P_PER_MINUTE * (((now - startOfDay(now)) / 60f) - 30f).coerceAtLeast(0f)).roundToPx() }
+    LaunchedEffect(day) { scroll.scrollTo(targetPx()) }
+    val awayFromNow by remember(now, day) {
+        derivedStateOf { day != 0 || kotlin.math.abs(scroll.value - targetPx()) > with(density) { 160.dp.roundToPx() } }
+    }
+
     CategorySection(vm, vm.guide, "All channels", "Loading guide…", { it.liveCategories() }) { repo, categoryId ->
         when (val r = rememberChannels(vm, repo, categoryId)) {
             is LoadResult.Loading -> LoadingView()
@@ -153,32 +196,60 @@ fun PhoneGuideTab(vm: AppViewModel) {
                     )
                 } else {
                     val pad = LocalContentPadding.current
-                    val now = LocalNow.current
-                    LazyColumn(
-                        state = vm.guide.list(categoryId),
-                        contentPadding = PaddingValues(top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        item(key = "days") {
-                            LazyRow(
-                                state = dayState,
-                                contentPadding = PaddingValues(horizontal = 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    val dayStart = startOfDay(now) + day * 86_400L
+                    fun watch(ch: Channel) = vm.push(Screen.PlayLive(channels, channels.indexOf(ch).coerceAtLeast(0)))
+                    Box(Modifier.fillMaxSize()) {
+                        Column(Modifier.fillMaxSize().padding(top = pad.calculateTopPadding() + 8.dp)) {
+                            PhoneGuideInfo(
+                                focus = selected,
+                                now = now,
+                                onWatch = { selected?.let { watch(it.channel) } },
+                                onMore = { selected?.let { f -> details = f to channels } },
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            PhoneTimeHeader(dayStart, now, day, scroll, onDay = { pickingDay = true })
+                            LazyColumn(
+                                state = vm.guide.list(categoryId),
+                                contentPadding = PaddingValues(top = 2.dp, bottom = pad.calculateBottomPadding() + 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp),
+                                modifier = Modifier.fillMaxSize(),
                             ) {
-                                items((-7..7).toList(), key = { it }) { d ->
-                                    DayChip(formatDay(now + d * 86_400L, now), d == day, "guide:day:$d", autoFocus = false) { day = d }
+                                items(channels, key = { it.streamId }) { ch ->
+                                    PhoneGuideRow(
+                                        repo = repo,
+                                        channel = ch,
+                                        day = day,
+                                        dayStart = dayStart,
+                                        now = now,
+                                        scroll = scroll,
+                                        selected = selected,
+                                        onWatch = { watch(ch) },
+                                        onTap = { p ->
+                                            val f = GuideFocus(ch, p)
+                                            if (selected == f) {
+                                                // Second tap: on now plays it; anything else opens catch-up / reminder.
+                                                if (p.isLive(now)) watch(ch) else details = f to channels
+                                            } else {
+                                                selected = f
+                                            }
+                                        },
+                                        onHold = { p -> details = GuideFocus(ch, p) to channels },
+                                    )
                                 }
                             }
                         }
-                        itemsIndexed(channels, key = { _, ch -> ch.streamId }) { index, ch ->
-                            PhoneGuideRow(
-                                repo = repo,
-                                channel = ch,
-                                day = day,
-                                onWatch = { vm.push(Screen.PlayLive(channels, index)) },
-                                onDetails = { p -> details = GuideFocus(ch, p) to channels },
-                            )
+                        // Back to now, once you've scrolled away from it.
+                        if (awayFromNow) {
+                            PillButton(
+                                "Now",
+                                primary = true,
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(end = 16.dp, bottom = pad.calculateBottomPadding() + 12.dp),
+                            ) {
+                                day = 0
+                                scope.launch { scroll.animateScrollTo(targetPx()) }
+                            }
                         }
                     }
                 }
@@ -190,100 +261,290 @@ fun PhoneGuideTab(vm: AppViewModel) {
         val (focus, channels) = d
         ProgrammeDialog(vm, focus, channels) { details = null }
     }
+    if (pickingDay) {
+        DayPicker(now, startOfDay(now) + day * 86_400L, onDismiss = { pickingDay = false }) { d2 ->
+            pickingDay = false
+            day = d2
+        }
+    }
+}
+
+/** The chosen programme, Apple TV style, with Watch and More. */
+@Composable
+private fun PhoneGuideInfo(focus: GuideFocus?, now: Long, onWatch: () -> Unit, onMore: () -> Unit) {
+    Column(
+        Modifier
+            .padding(horizontal = 12.dp)
+            .fillMaxWidth()
+            .heightIn(min = 112.dp)
+            .glassSurface(RoundedCornerShape(20.dp), Color(0x14FFFFFF))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        if (focus?.programme == null) {
+            Text("TV GUIDE", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Accent)
+            Spacer(Modifier.height(4.dp))
+            Text("What's on", style = Txt.Headline.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold))
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Tap a programme to see what it's about, and tap it again to watch. Swipe sideways to move through the day.",
+                style = Txt.Caption.copy(letterSpacing = 0.sp, fontSize = 13.sp),
+                color = Ember.Dim,
+                maxLines = 3,
+            )
+            return
+        }
+        val p = focus.programme
+        val ch = focus.channel
+        val live = p.isLive(now)
+        Text(
+            (if (ch.num > 0) "${ch.num}  ·  " else "") + ch.name.uppercase(),
+            style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp),
+            color = Ember.Accent,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(3.dp))
+        Text(p.title, style = Txt.Headline.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(3.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val timing = if (live) {
+                "${formatClock(p.start)} – ${formatClock(p.end)}  ·  ${(p.end - now) / 60} min left"
+            } else {
+                "${formatDay(p.start, now)}  ${formatClock(p.start)} – ${formatClock(p.end)}"
+            }
+            Text(timing, style = Txt.Caption.copy(fontSize = 13.sp, letterSpacing = 0.sp), color = Ember.Dim, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+            if (live) {
+                Spacer(Modifier.width(10.dp))
+                ProgressBar(p.progress(now), Modifier.width(70.dp))
+            }
+        }
+        if (p.description.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(p.description, style = Txt.Caption.copy(fontSize = 13.sp, letterSpacing = 0.sp, lineHeight = 17.sp), color = Ember.Faint, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (live) {
+                SmallPill("Watch", primary = true, onClick = onWatch)
+            }
+            SmallPill(
+                when {
+                    live -> "More"
+                    p.end <= now -> "Catch up"
+                    else -> "Remind me"
+                },
+                primary = !live,
+                onClick = onMore,
+            )
+        }
+    }
 }
 
 @Composable
-private fun PhoneGuideRow(repo: Repository, channel: Channel, day: Int, onWatch: () -> Unit, onDetails: (Programme) -> Unit) {
-    val now = LocalNow.current
-    // Today shows what's on now and next (quick to load); other days need the full guide.
-    val programmes = if (day == 0) rememberProgrammes(repo, channel.streamId) else rememberFullProgrammes(repo, channel.streamId)
-    val dayStart = startOfDay(now) + day * 86_400L
-    val upcoming = if (day == 0) {
-        programmes.orEmpty().filter { it.end > now }.take(10)
-    } else {
-        programmes.orEmpty().filter { it.end > dayStart && it.start < dayStart + 86_400L }
+private fun SmallPill(text: String, primary: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    Box(
+        Modifier
+            .height(32.dp)
+            .then(if (primary) Modifier.clip(shape).background(Color.White) else Modifier.glassSurface(shape))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = Txt.Label.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold), color = if (primary) Color.Black else Ember.Text)
     }
-    Row(Modifier.fillMaxWidth().height(76.dp), verticalAlignment = Alignment.CenterVertically) {
+}
+
+/** The day button and the times along the top, scrolling with the grid. */
+@Composable
+private fun PhoneTimeHeader(dayStart: Long, now: Long, day: Int, scroll: ScrollState, onDay: () -> Unit) {
+    Row(Modifier.fillMaxWidth().height(30.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(P_CHANNEL).padding(start = 8.dp)) {
+            Row(
+                Modifier
+                    .height(26.dp)
+                    .glassSurface(RoundedCornerShape(13.dp))
+                    .clickable(onClick = onDay)
+                    .padding(horizontal = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    when (day) {
+                        0 -> "Today"
+                        -1 -> "Yday"
+                        1 -> "Tmrw"
+                        else -> formatDay(dayStart + 43_200L, now).take(6)
+                    },
+                    style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
+                    color = if (day == 0) Ember.Text else Ember.Accent,
+                    maxLines = 1,
+                )
+                Text(" ▾", style = Txt.Caption.copy(fontSize = 9.sp), color = Ember.Dim)
+            }
+        }
+        Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scroll)) {
+            Box(Modifier.width(P_PER_MINUTE * P_DAY_MINUTES.toFloat()).fillMaxHeight()) {
+                val nowX = P_PER_MINUTE * ((now - dayStart) / 60f)
+                val showNow = day == 0
+                for (slot in 0 until P_DAY_MINUTES / 30) {
+                    val x = P_PER_MINUTE * (slot * 30).toFloat()
+                    if (showNow && x > nowX - 46.dp && x < nowX + 24.dp) continue
+                    Row(Modifier.offset(x = x).fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.width(1.dp).height(10.dp).background(Color(0x33FFFFFF)))
+                        Spacer(Modifier.width(5.dp))
+                        Text(formatClock(dayStart + slot * 1800L), style = Txt.Caption.copy(letterSpacing = 0.sp), color = Ember.Dim)
+                    }
+                }
+                if (showNow) {
+                    Box(
+                        Modifier
+                            .offset(x = nowX - 20.dp, y = 6.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Ember.Accent)
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    ) {
+                        Text(formatClock(now), style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp), color = Color.Black)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PhoneGuideRow(
+    repo: Repository,
+    channel: Channel,
+    day: Int,
+    dayStart: Long,
+    now: Long,
+    scroll: ScrollState,
+    selected: GuideFocus?,
+    onWatch: () -> Unit,
+    onTap: (Programme) -> Unit,
+    onHold: (Programme) -> Unit,
+) {
+    // The whole day's guide; today shows now and next straight away while it loads.
+    val full = rememberFullProgrammes(repo, channel.streamId)
+    val quick = if (day == 0) rememberProgrammes(repo, channel.streamId) else null
+    val programmes = full ?: quick
+    val dayEnd = dayStart + 86_400L
+    val list = programmes.orEmpty().filter { it.end > dayStart && it.start < dayEnd }
+    Row(Modifier.fillMaxWidth().height(P_ROW)) {
+        // Pinned channel: tap to watch.
         Column(
             Modifier
-                .padding(start = 12.dp)
-                .width(84.dp)
+                .padding(start = 8.dp, end = 4.dp)
+                .width(P_CHANNEL - 12.dp)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = onWatch)
-                .padding(4.dp),
+                .glassSurface(RoundedCornerShape(10.dp), Color(0x0FFFFFFF))
+                .clickable(onClick = onWatch),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            ChannelLogo(channel.icon, channel.name, Modifier.size(width = 64.dp, height = 40.dp))
-            Spacer(Modifier.height(4.dp))
-            Text(channel.name, style = Txt.Caption, color = Ember.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Spacer(Modifier.width(6.dp))
-        if (upcoming.isEmpty()) {
-            Box(
-                Modifier
-                    .padding(end = 12.dp)
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .glassSurface(RoundedCornerShape(12.dp), Color(0x12FFFFFF))
-                    .clickable(onClick = onWatch)
-                    .padding(horizontal = 14.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Text(
-                    if (programmes == null) "Loading…" else "No guide information",
-                    style = Txt.Label,
-                    color = Ember.Faint,
-                )
+            ChannelLogo(channel.icon, channel.name, Modifier.size(width = 44.dp, height = 26.dp))
+            if (channel.num > 0) {
+                Text(channel.num.toString(), style = Txt.Caption.copy(fontSize = 10.sp, letterSpacing = 0.sp), color = Ember.Faint, maxLines = 1)
             }
-        } else {
-            LazyRow(
-                contentPadding = PaddingValues(end = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.weight(1f),
-            ) {
-                items(upcoming, key = { it.start }) { p ->
-                    val live = p.isLive(now)
-                    val past = p.end <= now
-                    val catchup = past && catchupAvailable(channel, p, now)
-                    Column(
+        }
+        Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scroll)) {
+            Box(Modifier.width(P_PER_MINUTE * P_DAY_MINUTES.toFloat()).fillMaxHeight()) {
+                if (list.isEmpty()) {
+                    val x = if (day == 0) P_PER_MINUTE * ((now - dayStart) / 60f - 30f).coerceAtLeast(0f) else 0.dp
+                    Box(
                         Modifier
-                            .width(176.dp)
+                            .offset(x = x)
+                            .width(280.dp)
                             .fillMaxHeight()
-                            .glassSurface(RoundedCornerShape(12.dp), if (live) Color(0x29FFFFFF) else Color(0x12FFFFFF))
-                            .clickable { if (live) onWatch() else onDetails(p) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.Center,
+                            .glassSurface(RoundedCornerShape(10.dp), Color(0x0AFFFFFF))
+                            .clickable(onClick = onWatch)
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.CenterStart,
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (catchup) {
-                                androidx.compose.material3.Icon(EmberIcons.Catchup, "On catch-up", tint = Ember.Accent, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(5.dp))
+                        Text(if (programmes == null) "Loading…" else "No guide information", style = Txt.Caption.copy(fontSize = 13.sp, letterSpacing = 0.sp), color = Ember.Faint)
+                    }
+                }
+                for (p in list) {
+                    key(p.start) {
+                        val start = maxOf(p.start, dayStart)
+                        val end = minOf(p.end, dayEnd)
+                        val live = p.isLive(now)
+                        val past = p.end <= now
+                        val catchup = past && catchupAvailable(channel, p, now)
+                        val isSelected = selected?.channel?.streamId == channel.streamId && selected.programme?.start == p.start
+                        val shape = RoundedCornerShape(10.dp)
+                        Box(
+                            Modifier
+                                .offset(x = P_PER_MINUTE * ((start - dayStart) / 60f))
+                                .width((P_PER_MINUTE * ((end - start) / 60f) - 3.dp).coerceAtLeast(4.dp))
+                                .fillMaxHeight()
+                                .then(
+                                    if (isSelected) Modifier.clip(shape).background(Color.White)
+                                    else Modifier.glassSurface(
+                                        shape,
+                                        when {
+                                            live -> Color(0x2EFFFFFF)
+                                            past -> Color(0x0AFFFFFF)
+                                            else -> Color(0x17FFFFFF)
+                                        },
+                                    )
+                                )
+                                .combinedClickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = androidx.compose.foundation.LocalIndication.current,
+                                    onLongClick = { onHold(p) },
+                                    onClick = { onTap(p) },
+                                )
+                                .padding(horizontal = 9.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (catchup) {
+                                        androidx.compose.material3.Icon(
+                                            EmberIcons.Catchup,
+                                            "On catch-up",
+                                            tint = if (isSelected) Color.Black else Ember.Accent,
+                                            modifier = Modifier.size(12.dp),
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                    }
+                                    Text(
+                                        p.title,
+                                        style = Txt.Label.copy(fontSize = 13.sp, fontWeight = if (live) FontWeight.SemiBold else FontWeight.Medium),
+                                        color = when {
+                                            isSelected -> Color.Black
+                                            past && !catchup -> Ember.Faint
+                                            live -> Ember.Text
+                                            else -> Ember.Dim
+                                        },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                Text(
+                                    "${formatClock(p.start)} – ${formatClock(p.end)}",
+                                    style = Txt.Caption.copy(fontSize = 11.sp, letterSpacing = 0.sp),
+                                    color = if (isSelected) Color(0xFF555559) else Ember.Faint,
+                                    maxLines = 1,
+                                )
                             }
-                            Text(
-                                p.title,
-                                style = Txt.Label,
-                                color = if (past && !catchup) Ember.Dim else Ember.Text,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Spacer(Modifier.height(3.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                if (live) "NOW" else formatClock(p.start),
-                                style = Txt.Caption,
-                                color = if (live) Ember.Accent else Ember.Faint,
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("– ${formatClock(p.end)}", style = Txt.Caption, color = Ember.Faint)
-                        }
-                        if (live) {
-                            Spacer(Modifier.height(6.dp))
-                            ProgressBar(p.progress(now), Modifier.fillMaxWidth())
+                            if (live && !isSelected) {
+                                Box(
+                                    Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(bottom = 1.dp)
+                                        .fillMaxWidth(p.progress(now))
+                                        .height(2.dp)
+                                        .background(Ember.Accent.copy(alpha = 0.85f))
+                                )
+                            }
                         }
                     }
+                }
+                if (day == 0) {
+                    Box(Modifier.offset(x = P_PER_MINUTE * ((now - dayStart) / 60f)).width(1.5.dp).fillMaxHeight().background(Ember.Accent.copy(alpha = 0.5f)))
                 }
             }
         }

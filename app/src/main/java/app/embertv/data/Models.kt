@@ -3,6 +3,8 @@ package app.embertv.data
 /** Virtual category ids used alongside the provider's own categories. */
 const val ALL = "__all"
 const val FAVOURITES = "__fav"
+/** The newest films or series from the provider, newest first. */
+const val RECENT = "__recent"
 
 fun nowSeconds(): Long = System.currentTimeMillis() / 1000
 

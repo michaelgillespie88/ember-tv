@@ -252,6 +252,7 @@ fun SearchSection(vm: AppViewModel) {
 fun SettingsSection(vm: AppViewModel) {
     var confirmSignOut by remember { mutableStateOf(false) }
     var managingCategories by remember { mutableStateOf(false) }
+    var managingChannels by remember { mutableStateOf(false) }
     var pickingTeams by remember { mutableStateOf(false) }
     var choosingPlayer by remember { mutableStateOf(false) }
     var editingTmdb by remember { mutableStateOf(false) }
@@ -322,6 +323,19 @@ fun SettingsSection(vm: AppViewModel) {
                     "Hide categories you never watch",
                     focusKey = "set:categories",
                 ) { managingCategories = true }
+            }
+            if (!kids) {
+                val favChannels = vm.favourites.count { it.type == app.embertv.data.ContentType.LIVE }
+                val hiddenCount = vm.hiddenChannels.size
+                SettingRow(
+                    "Channels",
+                    listOfNotNull(
+                        if (favChannels > 0) "$favChannels favourites" else null,
+                        if (hiddenCount > 0) "$hiddenCount hidden" else null,
+                    ).joinToString(" · ").ifEmpty { "All shown" },
+                    "Put favourite channels in order and hide ones you never watch",
+                    focusKey = "set:channels",
+                ) { managingChannels = true }
             }
 
             // ---- Watching ----
@@ -513,6 +527,9 @@ fun SettingsSection(vm: AppViewModel) {
     }
 
     val managed = vm.profile
+    if (managingChannels) {
+        ChannelManager(vm) { managingChannels = false }
+    }
     if (managingCategories && managed != null) {
         CategoryManager(vm, managed) { managingCategories = false }
     }
