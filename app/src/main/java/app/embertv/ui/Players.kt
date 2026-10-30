@@ -125,7 +125,7 @@ private fun PhoneFullscreen() {
     }
 }
 
-private val ControlBg = Color(0x66000000)
+private val ControlBg = Color(0x47000000)
 
 @Composable
 private fun rememberExoPlayer(userAgent: String, onStop: (ExoPlayer) -> Unit): ExoPlayer {
@@ -472,15 +472,15 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    IconCircleButton(EmberIcons.Back, "Back", background = ControlBg) { vm.pop() }
+                    IconCircleButton(EmberIcons.Back, "Back", background = ControlBg, glass = true) { vm.pop() }
                     Spacer(Modifier.weight(1f))
-                    IconCircleButton(EmberIcons.ChevronUp, "Channel up", background = ControlBg) { zap(upStep) }
-                    IconCircleButton(EmberIcons.ChevronDown, "Channel down", background = ControlBg) { zap(-upStep) }
-                    IconCircleButton(EmberIcons.ChannelList, "Channel list", background = ControlBg) { listOpen = true }
+                    IconCircleButton(EmberIcons.ChevronUp, "Channel up", background = ControlBg, glass = true) { zap(upStep) }
+                    IconCircleButton(EmberIcons.ChevronDown, "Channel down", background = ControlBg, glass = true) { zap(-upStep) }
+                    IconCircleButton(EmberIcons.ChannelList, "Channel list", background = ControlBg, glass = true) { listOpen = true }
                     IconCircleButton(
                         if (fav) EmberIcons.StarFilled else EmberIcons.Star,
                         "Favourite",
-                        background = ControlBg,
+                        background = ControlBg, glass = true,
                         tint = if (fav) Ember.Accent else Ember.Text,
                     ) {
                         vm.toggleFavourite(vm.favouriteOf(channel))
@@ -1027,7 +1027,7 @@ private fun VodTouchOverlay(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconCircleButton(EmberIcons.Back, "Back", background = ControlBg, onClick = onBack)
+            IconCircleButton(EmberIcons.Back, "Back", background = ControlBg, glass = true, onClick = onBack)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(item.title, style = Txt.Headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1036,7 +1036,7 @@ private fun VodTouchOverlay(
                 }
             }
             Spacer(Modifier.width(10.dp))
-            IconCircleButton(EmberIcons.Subtitles, "Audio and subtitles", background = ControlBg, onClick = onTracks)
+            IconCircleButton(EmberIcons.Subtitles, "Audio and subtitles", background = ControlBg, glass = true, onClick = onTracks)
         }
 
         Row(
@@ -1049,7 +1049,8 @@ private fun VodTouchOverlay(
                 if (playing) EmberIcons.Pause else EmberIcons.Play,
                 if (playing) "Pause" else "Play",
                 size = 76.dp,
-                background = Color(0x80000000),
+                background = Color(0x59000000),
+                glass = true,
                 onClick = onTogglePlay,
             )
             SkipButton("+10") { onSkip(10_000L) }
@@ -1092,8 +1093,7 @@ private fun SkipButton(label: String, onClick: () -> Unit) {
     Box(
         Modifier
             .size(56.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(ControlBg)
+            .glassSurface(RoundedCornerShape(28.dp), ControlBg)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -1129,10 +1129,11 @@ private fun TracksDialog(exo: ExoPlayer, onDismiss: () -> Unit) {
     }
 
     Dialog(onDismissRequest = onDismiss) {
+        DialogBackdropBlur()
         Row(
             Modifier
                 .clip(RoundedCornerShape(20.dp))
-                .background(Ember.Panel)
+                .background(dialogPanelColor())
                 .padding(28.dp)
         ) {
             Column(Modifier.width(300.dp)) {

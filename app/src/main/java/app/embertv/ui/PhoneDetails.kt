@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,10 +43,30 @@ import app.embertv.data.Episode
 import app.embertv.data.Movie
 import app.embertv.data.Series
 
-/** Wide artwork at the top of a detail page, fading into the background, with a back button. */
+/** Detail page frame: content scrolls under a floating frosted back button. */
 @Composable
-private fun PhoneHeroImage(vm: AppViewModel, url: String, fallbackName: String) {
-    Box(Modifier.fillMaxWidth().aspectRatio(16f / 10f)) {
+private fun PhoneDetailFrame(vm: AppViewModel, content: @Composable (Modifier) -> Unit) {
+    val backdrop = rememberBackdrop()
+    Box(Modifier.fillMaxSize().background(Ember.Bg)) {
+        content(Modifier.fillMaxSize().backdropSource(backdrop).background(Ember.Bg))
+        Box(
+            Modifier
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(10.dp)
+                .size(44.dp)
+                .frosted(backdrop, CircleShape, tint = Color(0x66101014))
+                .clickable { vm.pop() },
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.Icon(EmberIcons.Back, contentDescription = "Back", tint = Ember.Text, modifier = Modifier.size(22.dp))
+        }
+    }
+}
+
+/** Wide artwork at the top of a detail page, fading into the background. */
+@Composable
+private fun PhoneHeroImage(url: String, fallbackName: String) {
+    Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f)) {
         Placeholder(fallbackName, Modifier.fillMaxSize(), fontSizeSp = 40)
         NetImage(url, Modifier.fillMaxSize())
         Box(
@@ -53,12 +74,6 @@ private fun PhoneHeroImage(vm: AppViewModel, url: String, fallbackName: String) 
                 Brush.verticalGradient(0f to Color(0x99000000), 0.3f to Color.Transparent, 0.65f to Color.Transparent, 1f to Ember.Bg)
             )
         )
-        IconCircleButton(
-            EmberIcons.Back,
-            "Back",
-            modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(8.dp),
-            background = Color(0x66000000),
-        ) { vm.pop() }
     }
 }
 
@@ -77,14 +92,15 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
     val isFav = vm.isFavourite(ContentType.MOVIE, movie.streamId)
     val backdrop = info?.backdrop?.takeIf { it.isNotBlank() } ?: info?.poster?.takeIf { it.isNotBlank() } ?: movie.poster
 
+    PhoneDetailFrame(vm) { frame ->
     LazyColumn(
-        Modifier.fillMaxSize().background(Ember.Bg),
+        frame,
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { PhoneHeroImage(vm, backdrop, movie.name) }
+        item { PhoneHeroImage(backdrop, movie.name) }
         item {
             Column(Modifier.padding(horizontal = 16.dp).windowInsetsPadding(WindowInsets.navigationBars)) {
-                Text(movie.name, style = Txt.Title, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(movie.name, style = Txt.LargeTitle, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(6.dp))
                 MetaLine(
                     listOf(
@@ -130,6 +146,7 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
             }
         }
     }
+    }
 }
 
 @Composable
@@ -146,14 +163,15 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
     val episodes = if (info != null && season != null) info.episodes[season].orEmpty() else emptyList()
     val backdrop = info?.backdrop?.takeIf { it.isNotBlank() } ?: info?.cover?.takeIf { it.isNotBlank() } ?: series.cover
 
+    PhoneDetailFrame(vm) { frame ->
     LazyColumn(
-        Modifier.fillMaxSize().background(Ember.Bg),
+        frame,
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { PhoneHeroImage(vm, backdrop, series.name) }
+        item { PhoneHeroImage(backdrop, series.name) }
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                Text(series.name, style = Txt.Title, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(series.name, style = Txt.LargeTitle, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(6.dp))
                 MetaLine(
                     listOf(
@@ -202,8 +220,10 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
                         Box(
                             Modifier
                                 .height(36.dp)
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(if (selected) Color.White else Ember.Card)
+                                .then(
+                                    if (selected) Modifier.clip(RoundedCornerShape(18.dp)).background(Color.White)
+                                    else Modifier.glassSurface(RoundedCornerShape(18.dp), Color(0x14FFFFFF))
+                                )
                                 .clickable { chosenSeason = s }
                                 .padding(horizontal = 16.dp),
                             contentAlignment = Alignment.Center,
@@ -228,6 +248,7 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
             )
         }
         item { Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars)) }
+    }
     }
 }
 

@@ -84,7 +84,7 @@ fun EntryRow(
                 val shown = if (masked) "•".repeat(value.length) else value
                 Text(
                     shown.ifEmpty { placeholder },
-                    style = TextStyle(fontSize = 18.sp),
+                    style = Txt.Body.copy(fontSize = 18.sp),
                     color = if (value.isEmpty()) Ember.Faint else Ember.Text,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -118,6 +118,7 @@ fun TextEntryDialog(
         }
     }
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        DialogBackdropBlur()
         val requester = remember { FocusRequester() }
         val keyboard = LocalSoftwareKeyboardController.current
         LaunchedEffect(Unit) {
@@ -134,7 +135,7 @@ fun TextEntryDialog(
                     .widthIn(max = 640.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Ember.Panel)
+                    .background(dialogPanelColor())
                     .padding(28.dp)
             ) {
                 Text(title, style = Txt.Headline)
@@ -143,7 +144,7 @@ fun TextEntryDialog(
                     value = value,
                     onValueChange = onValueChange,
                     singleLine = true,
-                    textStyle = TextStyle(color = Ember.Text, fontSize = 20.sp),
+                    textStyle = Txt.Body.copy(color = Ember.Text, fontSize = 20.sp),
                     cursorBrush = SolidColor(Ember.Accent),
                     keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
                     keyboardActions = KeyboardActions(onAny = { close() }),
@@ -178,7 +179,7 @@ fun TextEntryDialog(
                             contentAlignment = Alignment.CenterStart,
                         ) {
                             if (value.isEmpty() && placeholder.isNotEmpty()) {
-                                Text(placeholder, style = TextStyle(color = Ember.Faint, fontSize = 20.sp))
+                                Text(placeholder, style = Txt.Body.copy(color = Ember.Faint, fontSize = 20.sp))
                             }
                             inner()
                         }

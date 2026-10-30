@@ -25,6 +25,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,10 +70,12 @@ private fun CategorySection(
         is LoadResult.Ok -> {
             val categories = remember(c.value) { withVirtualCategories(c.value, allLabel) }
             val selectedId = section.categoryId ?: c.value.firstOrNull()?.id ?: ALL
-            Column(Modifier.fillMaxSize()) {
-                CategoryChips(categories, selectedId, section.rail) { section.categoryId = it.id }
-                Box(Modifier.weight(1f).fillMaxWidth()) { content(repo, selectedId) }
-            }
+            // The chips live in the frosted header, which belongs to PhoneHome.
+            val holder = LocalHeaderChips.current
+            val spec = ChipsSpec(categories, selectedId, section.rail) { section.categoryId = it.id }
+            SideEffect { holder?.value = spec }
+            DisposableEffect(holder) { onDispose { holder?.value = null } }
+            Box(Modifier.fillMaxSize()) { content(repo, selectedId) }
         }
     }
 }
@@ -100,9 +105,10 @@ fun PhoneLiveTab(vm: AppViewModel) {
                         else "No channels in this category."
                     )
                 } else {
+                    val pad = LocalContentPadding.current
                     LazyColumn(
                         state = vm.live.list(categoryId),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 16.dp),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
@@ -141,9 +147,10 @@ fun PhoneGuideTab(vm: AppViewModel) {
                         else "No channels in this category."
                     )
                 } else {
+                    val pad = LocalContentPadding.current
                     LazyColumn(
                         state = vm.guide.list(categoryId),
-                        contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
+                        contentPadding = PaddingValues(top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 8.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
@@ -203,8 +210,7 @@ private fun PhoneGuideRow(repo: Repository, channel: Channel, onWatch: () -> Uni
                     .padding(end = 12.dp)
                     .weight(1f)
                     .fillMaxHeight()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Ember.Card)
+                    .glassSurface(RoundedCornerShape(12.dp), Color(0x12FFFFFF))
                     .clickable(onClick = onWatch)
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart,
@@ -227,8 +233,7 @@ private fun PhoneGuideRow(repo: Repository, channel: Channel, onWatch: () -> Uni
                         Modifier
                             .width(176.dp)
                             .fillMaxHeight()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (live) Ember.CardHi else Ember.Card)
+                            .glassSurface(RoundedCornerShape(12.dp), if (live) Color(0x29FFFFFF) else Color(0x12FFFFFF))
                             .clickable { if (live) onWatch() else onDetails(p) }
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.Center,
@@ -274,10 +279,11 @@ fun PhoneMoviesTab(vm: AppViewModel) {
                         else "No movies in this category."
                     )
                 } else {
+                    val pad = LocalContentPadding.current
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 104.dp),
                         state = vm.movies.grid(categoryId),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 20.dp),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = pad.calculateTopPadding() + 10.dp, bottom = pad.calculateBottomPadding() + 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.fillMaxSize(),
@@ -317,10 +323,11 @@ fun PhoneSeriesTab(vm: AppViewModel) {
                         else "No series in this category."
                     )
                 } else {
+                    val pad = LocalContentPadding.current
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 104.dp),
                         state = vm.series.grid(categoryId),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 20.dp),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = pad.calculateTopPadding() + 10.dp, bottom = pad.calculateBottomPadding() + 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.fillMaxSize(),

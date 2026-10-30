@@ -325,11 +325,12 @@ private fun ProgrammeBlock(
 internal fun ProgrammeDialog(focus: GuideFocus, onWatch: () -> Unit, onDismiss: () -> Unit) {
     val p = focus.programme ?: return
     Dialog(onDismissRequest = onDismiss) {
+        DialogBackdropBlur()
         Column(
             Modifier
                 .width(560.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Ember.Panel)
+                .background(dialogPanelColor())
                 .padding(if (LocalIsTv.current) 32.dp else 22.dp)
         ) {
             Text(p.title, style = Txt.Title)

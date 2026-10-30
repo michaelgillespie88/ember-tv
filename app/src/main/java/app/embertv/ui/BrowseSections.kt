@@ -64,7 +64,7 @@ fun FavouritesSection(vm: AppViewModel) {
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 48.dp),
+        contentPadding = PaddingValues(top = LocalContentPadding.current.calculateTopPadding() + 12.dp, bottom = LocalContentPadding.current.calculateBottomPadding() + 48.dp),
         verticalArrangement = Arrangement.spacedBy(30.dp),
     ) {
         if (channels.isNotEmpty()) {
@@ -204,7 +204,7 @@ fun SearchSection(vm: AppViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        Box(Modifier.padding(start = edgePadding(), end = edgePadding(), top = 10.dp).fillMaxWidth().widthIn(max = 620.dp)) {
+        Box(Modifier.padding(start = edgePadding(), end = edgePadding(), top = LocalContentPadding.current.calculateTopPadding() + 10.dp).fillMaxWidth().widthIn(max = 620.dp)) {
             EntryRow(
                 label = "",
                 value = vm.searchQuery,
@@ -220,7 +220,7 @@ fun SearchSection(vm: AppViewModel) {
                 LoadingView(text = "Searching your catalogue…")
             r != null && !r.isEmpty -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp),
+                contentPadding = PaddingValues(top = 4.dp, bottom = LocalContentPadding.current.calculateBottomPadding() + 48.dp),
                 verticalArrangement = Arrangement.spacedBy(26.dp),
             ) {
                 if (r.channels.isNotEmpty()) item(key = "s-ch") { ChannelShelf(vm, "Channels", r.channels, "search") }
@@ -329,7 +329,13 @@ fun SettingsSection(vm: AppViewModel) {
             settingsList(Modifier.width(520.dp))
         }
     } else {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        val pad = LocalContentPadding.current
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 16.dp, bottom = pad.calculateBottomPadding() + 16.dp)
+        ) {
             accountCard(Modifier.fillMaxWidth())
             Spacer(Modifier.height(16.dp))
             settingsList(Modifier.fillMaxWidth())
@@ -338,11 +344,12 @@ fun SettingsSection(vm: AppViewModel) {
 
     if (confirmSignOut) {
         Dialog(onDismissRequest = { confirmSignOut = false }) {
+            DialogBackdropBlur()
             Column(
                 Modifier
                     .width(480.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Ember.Panel)
+                    .background(dialogPanelColor())
                     .padding(if (isTv) 32.dp else 22.dp)
             ) {
                 Text("Sign out of Ember TV?", style = Txt.Title)
