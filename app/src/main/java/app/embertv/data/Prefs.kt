@@ -19,6 +19,32 @@ class Prefs(context: Context) {
 
     private fun pkFor(id: String, base: String): String = if (id == MAIN_PROFILE) base else "p_${id}_$base"
 
+    /** Football clubs this profile follows, for goal alerts and the Home card. */
+    var followedTeams: List<Team>
+        get() {
+            val raw = sp.getString(pk("teams"), null) ?: return emptyList()
+            return try {
+                JSONArray(raw).objects().map { o ->
+                    Team(o.optString("id"), o.optString("name"), o.optString("short"), o.optString("logo"), o.optString("league"))
+                }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+        set(value) {
+            val arr = JSONArray()
+            for (t in value) {
+                val o = JSONObject()
+                o.put("id", t.id)
+                o.put("name", t.name)
+                o.put("short", t.shortName)
+                o.put("logo", t.logo)
+                o.put("league", t.league)
+                arr.put(o)
+            }
+            sp.edit().putString(pk("teams"), arr.toString()).apply()
+        }
+
     var reminders: List<Reminder>
         get() {
             val raw = sp.getString(pk("reminders"), null) ?: return emptyList()
@@ -121,7 +147,7 @@ class Prefs(context: Context) {
         val e = sp.edit()
         for (key in sp.all.keys) {
             val belongs = if (id == MAIN_PROFILE) {
-                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules") ||
+                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams") ||
                     key.startsWith("pos_") || key.startsWith("last_ep_")
             } else {
                 key.startsWith("p_${id}_")
@@ -161,6 +187,13 @@ class Prefs(context: Context) {
             .let { if (it == OLD_DEFAULT_USER_AGENT) DEFAULT_USER_AGENT else it }
         set(value) {
             sp.edit().putString("ua", value).apply()
+        }
+
+    /** Switch the TV's refresh rate to match what's playing. */
+    var matchFrameRate: Boolean
+        get() = sp.getBoolean("match_frame_rate", true)
+        set(value) {
+            sp.edit().putBoolean("match_frame_rate", value).apply()
         }
 
     /** Minutes of no remote presses before the TV screensaver starts; 0 turns it off. */

@@ -130,7 +130,7 @@ private fun PhoneFullscreen() {
 private val ControlBg = Color(0x47000000)
 
 /** What's actually on screen: picture height and the measured frame rate. */
-private data class VideoStats(val width: Int, val height: Int, val fps: Float?) {
+private data class VideoStats(val width: Int, val height: Int, val fps: Float?, val declared: Boolean = false) {
     val label: String
         get() {
             val res = when {
@@ -188,7 +188,13 @@ private fun rememberVideoStats(exo: ExoPlayer, key: Any): VideoStats? {
             val w = if (size.width > 0) size.width else format?.width ?: 0
             val h = if (size.height > 0) size.height else format?.height ?: 0
             if (h > 0 || measured != null || declared != null) {
-                value = VideoStats(w, h, measured?.takeIf { it > 1f } ?: declared ?: value?.fps)
+                val m = measured?.takeIf { it > 1f }
+                value = when {
+                    // A rate the stream states outright is exact; prefer it once it matches what's measured.
+                    declared != null && (m == null || kotlin.math.abs(m - declared) < 1.5f) -> VideoStats(w, h, declared, declared = true)
+                    m != null -> VideoStats(w, h, m)
+                    else -> VideoStats(w, h, value?.fps, value?.declared ?: false)
+                }
             }
         }
     }
@@ -205,6 +211,31 @@ private fun AutoPip() {
         if (ok) runCatching { activity.setPictureInPictureParams(app.embertv.Pip.params(autoEnter = true)) }
         onDispose {
             if (ok) runCatching { activity.setPictureInPictureParams(app.embertv.Pip.params(autoEnter = false)) }
+        }
+    }
+}
+
+/**
+ * While a player is open on a TV, switches the display's refresh rate to suit [stats]
+ * (50Hz for UK channels, 24Hz for films). Hands control back to the system when the player closes.
+ */
+@Composable
+private fun MatchFrameRate(stats: VideoStats?) {
+    val vm = LocalAppVm.current
+    if (!LocalIsTv.current || !vm.matchFrameRate) return
+    val activity = LocalContext.current.findActivity() ?: return
+    DisposableEffect(activity) {
+        onDispose { runCatching { app.embertv.FrameRate.request(activity, 0) } }
+    }
+    val fps = stats?.fps
+    val target = fps?.let { app.embertv.FrameRate.standard(it, stats.declared) }
+    LaunchedEffect(target) {
+        // A dip while the TV switches (or buffers) gives no target; keep the current mode then.
+        if (target == null) return@LaunchedEffect
+        delay(400)
+        runCatching {
+            val mode = app.embertv.FrameRate.modeFor(activity, target) ?: return@runCatching
+            if (mode.modeId != app.embertv.FrameRate.currentModeId(activity)) app.embertv.FrameRate.request(activity, mode.modeId)
         }
     }
 }
@@ -369,6 +400,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
 
     val channel = channels[index]
     val videoStats = rememberVideoStats(exo, channel.streamId)
+    MatchFrameRate(videoStats)
     // So coming back from catch-up returns to this channel, not the one the player opened on.
     LaunchedEffect(index) { vm.noteLiveIndex(index) }
 
@@ -710,7 +742,13 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, stats: VideoStats?, 
                             Spacer(Modifier.width(10.dp))
                             Text("★", color = Ember.Accent, fontSize = 20.sp)
                         }
-                        val label = stats?.label.orEmpty()
+                        val activity = LocalContext.current.findActivity()
+                        val tvRate = if (isTv && vm.matchFrameRate && activity != null) {
+                            runCatching { app.embertv.FrameRate.label(app.embertv.FrameRate.currentRefresh(activity)) }.getOrNull()
+                        } else {
+                            null
+                        }
+                        val label = listOfNotNull(stats?.label?.takeIf { it.isNotEmpty() }, tvRate?.let { "TV $it" }).joinToString(" · ")
                         if (label.isNotEmpty()) {
                             Spacer(Modifier.width(12.dp))
                             Box(
@@ -957,6 +995,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
     val focus = remember { FocusRequester() }
 
     var current by remember { mutableIntStateOf(startIndex.coerceIn(0, items.lastIndex)) }
+    MatchFrameRate(rememberVideoStats(exo, current))
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(true) }

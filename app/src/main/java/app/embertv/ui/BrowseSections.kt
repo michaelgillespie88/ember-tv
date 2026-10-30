@@ -249,6 +249,7 @@ fun SearchSection(vm: AppViewModel) {
 fun SettingsSection(vm: AppViewModel) {
     var confirmSignOut by remember { mutableStateOf(false) }
     var managingCategories by remember { mutableStateOf(false) }
+    var pickingTeams by remember { mutableStateOf(false) }
     val kids = vm.profile?.kids == true
     val account = vm.account
     val info = vm.accountInfo
@@ -292,6 +293,12 @@ fun SettingsSection(vm: AppViewModel) {
                 "Switch, add or edit profiles",
                 focusKey = "set:profile",
             ) { vm.switchProfile() }
+            SettingRow(
+                "My teams",
+                if (vm.followedTeams.isEmpty()) "None" else vm.followedTeams.joinToString(", ") { it.shortName },
+                "Goal alerts and their next match on Home",
+                focusKey = "set:teams",
+            ) { pickingTeams = true }
             val p = vm.profile
             if (!kids && p != null) {
                 val hidden = vm.categoryRules(p).keys.size
@@ -324,6 +331,12 @@ fun SettingsSection(vm: AppViewModel) {
                 ) { vm.toggleInvertZap() }
             }
             if (isTv) {
+                SettingRow(
+                    "Match frame rate",
+                    if (vm.matchFrameRate) "On" else "Off",
+                    "50Hz for UK channels, 24Hz for films. The screen may blink as it switches",
+                    focusKey = "set:afr",
+                ) { vm.toggleMatchFrameRate() }
                 SettingRow(
                     "Screensaver",
                     if (vm.screensaverMinutes == 0) "Off" else "After ${vm.screensaverMinutes} min",
@@ -393,6 +406,8 @@ fun SettingsSection(vm: AppViewModel) {
             settingsList(Modifier.fillMaxWidth())
         }
     }
+
+    if (pickingTeams) TeamPicker(vm) { pickingTeams = false }
 
     val managed = vm.profile
     if (managingCategories && managed != null) {

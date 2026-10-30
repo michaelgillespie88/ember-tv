@@ -67,6 +67,8 @@ private fun involves(m: Match, title: String?): Boolean {
 @Composable
 fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
     val isTv = LocalIsTv.current
+    val vm = LocalAppVm.current
+    val followed = vm.followedTeams.map { it.id }.toSet()
     var league by remember { mutableStateOf(ALL_LEAGUES) }
     var matches by remember { mutableStateOf<List<Match>?>(null) }
     var updated by remember { mutableLongStateOf(0L) }
@@ -141,9 +143,10 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
             list.isEmpty() -> EmptyView("No ${if (league.code == "all") "" else league.name + " "}matches today.", Modifier.weight(1f))
             else -> {
                 val pinned = list.filter { involves(it, programmeTitle) }
+                val mine = list.filter { it !in pinned && (it.home.id in followed || it.away.id in followed) }
                 // Group by competition (ones with live games first), live matches first within each.
                 val liveLeagues = list.filter { it.state == MatchState.LIVE }.map { it.league.code }.toSet()
-                val rest = (list - pinned.toSet()).sortedWith(
+                val rest = (list - pinned.toSet() - mine.toSet()).sortedWith(
                     compareBy<Match>(
                         { if (it.league.code in liveLeagues) 0 else 1 },
                         { LEAGUES.indexOfFirst { l -> l.code == it.league.code } },
@@ -158,7 +161,11 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
                 ) {
                     if (pinned.isNotEmpty()) {
                         item(key = "pinned-h") { ScoresHeader("On this channel") }
-                        items(pinned, key = { "p" + it.id }) { MatchRow(it, highlight = true) }
+                        items(pinned, key = { "p" + it.id }) { MatchRow(it, highlight = true) { vm.findingMatch = it } }
+                    }
+                    if (mine.isNotEmpty()) {
+                        item(key = "mine-h") { ScoresHeader("Your teams") }
+                        items(mine, key = { "m" + it.id }) { MatchRow(it, highlight = true) { vm.findingMatch = it } }
                     }
                     var lastLeague = ""
                     for (m in rest) {
@@ -166,14 +173,14 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
                             lastLeague = m.league.code
                             item(key = "h-${m.league.code}-${m.id}") { ScoresHeader(m.league.name) }
                         }
-                        item(key = m.id + m.league.code) { MatchRow(m, highlight = false) }
+                        item(key = m.id + m.league.code) { MatchRow(m, highlight = false) { vm.findingMatch = m } }
                     }
                 }
             }
         }
         if (isTv) {
             Text(
-                "Press Back to close",
+                "OK on a match: find which channel is showing it · Back to close",
                 style = Txt.Caption,
                 color = Ember.Faint,
                 modifier = Modifier.padding(start = 20.dp, bottom = 16.dp),
@@ -188,7 +195,7 @@ private fun ScoresHeader(text: String) {
 }
 
 @Composable
-private fun MatchRow(m: Match, highlight: Boolean) {
+private fun MatchRow(m: Match, highlight: Boolean, onClick: () -> Unit) {
     val live = m.state == MatchState.LIVE
     FocusBox(
         modifier = Modifier.fillMaxWidth().height(64.dp),
@@ -197,7 +204,7 @@ private fun MatchRow(m: Match, highlight: Boolean) {
         focusedScale = 1.02f,
         color = if (highlight) Ember.Accent.copy(alpha = 0.16f) else Color(0x10FFFFFF),
         focusedColor = Color(0x33FFFFFF),
-        onClick = {},
+        onClick = onClick,
     ) {
         Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {

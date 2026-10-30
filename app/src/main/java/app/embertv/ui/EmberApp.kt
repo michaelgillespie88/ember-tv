@@ -108,6 +108,12 @@ fun EmberApp(vm: AppViewModel, isTv: Boolean) {
 
                 if (vm.update != null && vm.repo != null) UpdateDialog(vm)
 
+                // Followed teams: goal alerts, and "Where's it on?"
+                if (vm.repo != null && !vm.pickingProfile) {
+                    TeamAlertBanner(vm)
+                    vm.findingMatch?.let { MatchFinderDialog(vm, it) }
+                }
+
                 NoticeOverlay(vm)
             }
         }

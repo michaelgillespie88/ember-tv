@@ -35,6 +35,12 @@ import app.embertv.data.MAIN_PROFILE
 import app.embertv.data.Profile
 import app.embertv.data.Programme
 import app.embertv.data.Reminder
+import app.embertv.data.Match
+import app.embertv.data.MatchHit
+import app.embertv.data.MatchState
+import app.embertv.data.ScoresClient
+import app.embertv.data.Team
+import app.embertv.data.cupsFor
 import app.embertv.data.nowSeconds
 import app.embertv.data.UpdateInfo
 import app.embertv.data.Updates
@@ -58,6 +64,11 @@ sealed interface Screen {
 }
 
 const val CATCHUP_PREFIX = "catchup:"
+
+/** Something happening in a followed team's match. [good] is true when it's our team who scored. */
+data class TeamAlert(val kind: Kind, val match: app.embertv.data.Match, val good: Boolean?, val id: Long = System.nanoTime()) {
+    enum class Kind { KICK_OFF, GOAL, FULL_TIME }
+}
 
 data class VodItem(
     val key: String,
@@ -144,6 +155,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var invertZap by mutableStateOf(prefs.invertZap)
         private set
 
+    var matchFrameRate by mutableStateOf(prefs.matchFrameRate)
+        private set
+
+    fun toggleMatchFrameRate() {
+        matchFrameRate = !matchFrameRate
+        prefs.matchFrameRate = matchFrameRate
+    }
+
     // Picture-in-picture (phones) and screensaver (TVs)
     var inPip by mutableStateOf(false)
     var screensaverMinutes by mutableIntStateOf(prefs.screensaverMinutes)
@@ -163,6 +182,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Channels watched recently on this profile, newest first. */
     val recentChannels = mutableStateListOf<Favourite>()
+
+    /** Football clubs this profile follows. */
+    val followedTeams = mutableStateListOf<Team>()
+    /** Live, today's and upcoming matches for [followedTeams], most urgent first. */
+    var teamMatches by mutableStateOf<List<Match>>(emptyList())
+        private set
+    /** A goal, kick-off or full time to announce. */
+    var teamAlert by mutableStateOf<TeamAlert?>(null)
+        private set
+    /** The match "Where's it on?" is searching for. */
+    var findingMatch by mutableStateOf<Match?>(null)
+    private var teamWatcher: kotlinx.coroutines.Job? = null
 
     /** Programmes this profile wants a nudge about, soonest first. */
     val reminders = mutableStateListOf<Reminder>()
@@ -263,6 +294,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- Sign in from a phone ----
+
+    /** The address a phone can open to type the login, while the TV sign-in screen is up. */
+    var phoneLoginUrl by mutableStateOf<String?>(null)
+        private set
+    /** The server and username a phone last sent, so the TV's boxes can show them. */
+    var phoneLoginFill by mutableStateOf<Triple<String, String, String>?>(null)
+        private set
+    private var phoneLogin: app.embertv.data.PhoneLoginServer? = null
+
+    fun startPhoneLogin() {
+        if (phoneLogin != null) return
+        val server = app.embertv.data.PhoneLoginServer { srv, user, pass -> signInFromPhone(srv, user, pass) }
+        phoneLogin = server
+        viewModelScope.launch {
+            server.run { url -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { if (phoneLogin === server) phoneLoginUrl = url } }
+        }
+    }
+
+    fun stopPhoneLogin() {
+        phoneLogin?.stop()
+        phoneLogin = null
+        phoneLoginUrl = null
+    }
+
+    /** Runs the sign-in on the TV and waits for the answer, so the phone can say how it went. */
+    private suspend fun signInFromPhone(server: String, user: String, pass: String): String? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            if (repo != null) return@withContext null
+            phoneLoginFill = Triple(server, user, pass)
+            login(server, user, pass)
+            var waited = 0
+            while ((loggingIn || loginError == null && repo == null) && waited < 30_000) {
+                kotlinx.coroutines.delay(200)
+                waited += 200
+            }
+            when {
+                repo != null -> null
+                else -> loginError ?: "The TV couldn't sign in. Check the details and try again."
+            }
+        }
+
     fun signOut() {
         prefs.account = null
         account = null
@@ -304,6 +377,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         reminders.clear()
         reminders.addAll(prefs.reminders.filter { it.end > nowSeconds() }.sortedBy { it.start })
         dueReminder = null
+        followedTeams.clear()
+        followedTeams.addAll(prefs.followedTeams)
+        startTeamWatcher()
         audioLanguage = prefs.audioLanguage
         subtitleMode = prefs.subtitleMode
         applyCategoryFilter()
@@ -713,6 +789,108 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             image = channel.icon,
         )
         push(Screen.PlayVod(listOf(item), 0, 0L))
+    }
+
+    // ---- Followed teams ----
+
+    fun isFollowing(team: Team): Boolean = followedTeams.any { it.id == team.id }
+
+    fun toggleFollow(team: Team) {
+        val i = followedTeams.indexOfFirst { it.id == team.id }
+        if (i >= 0) followedTeams.removeAt(i) else followedTeams.add(team)
+        prefs.followedTeams = followedTeams.toList()
+        startTeamWatcher()
+    }
+
+    fun dismissTeamAlert(alert: TeamAlert) {
+        if (teamAlert == alert) teamAlert = null
+    }
+
+    /**
+     * While the app is open, keeps an eye on the followed teams: their fixtures for the next three
+     * weeks (for Home), and today's matches every 45 seconds while one is on, announcing kick-offs,
+     * goals and full time.
+     */
+    private fun startTeamWatcher() {
+        teamWatcher?.cancel()
+        teamMatches = emptyList()
+        if (followedTeams.isEmpty()) return
+        teamWatcher = viewModelScope.launch {
+            val seen = HashMap<String, Match>()
+            var fixtures = emptyList<Match>()
+            var fixturesAt = 0L
+            while (true) {
+                val ids = followedTeams.map { it.id }.toSet()
+                fun ours(m: Match) = m.home.id in ids || m.away.id in ids
+                val leagues = followedTeams.flatMap { t ->
+                    listOfNotNull(app.embertv.data.LEAGUES.firstOrNull { it.code == t.league }) + cupsFor(t.league)
+                }.distinctBy { it.code }
+                val nowMs = System.currentTimeMillis()
+                if (nowMs - fixturesAt > 30 * 60_000L || fixtures.isEmpty() && nowMs - fixturesAt > 5 * 60_000L) {
+                    fixtures = try {
+                        ScoresClient.upcoming(leagues, 21).filter { ours(it) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        fixtures
+                    }
+                    fixturesAt = nowMs
+                }
+                // Today's scoreboards, only for competitions where one of ours plays today
+                // (all of their competitions if the fixture list couldn't be fetched).
+                val todayLeagues = if (fixtures.isEmpty()) leagues else fixtures
+                    .filter { it.state == MatchState.LIVE || startOfDayMs(it.kickoff) == startOfDayMs(nowMs) }
+                    .map { it.league }
+                    .distinctBy { it.code }
+                val today = if (todayLeagues.isEmpty()) emptyList() else try {
+                    ScoresClient.today(todayLeagues).filter { ours(it) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                for (m in today) {
+                    val before = seen[m.id]
+                    if (before != null) announce(before, m, ids)
+                    seen[m.id] = m
+                }
+                val merged = (today + fixtures.filter { f -> today.none { it.id == f.id } })
+                    .filter { it.state != MatchState.FINISHED || nowMs - it.kickoff < 4 * 3600_000L }
+                    .sortedWith(compareBy<Match>({ if (it.state == MatchState.LIVE) 0 else 1 }, { it.kickoff }))
+                teamMatches = merged
+                val busy = today.any {
+                    it.state == MatchState.LIVE || (it.state == MatchState.UPCOMING && it.kickoff - nowMs < 20 * 60_000L)
+                }
+                kotlinx.coroutines.delay(if (busy) 45_000L else 5 * 60_000L)
+            }
+        }
+    }
+
+    private fun startOfDayMs(ms: Long): Long = startOfDay(ms / 1000)
+
+    private fun announce(before: Match, now: Match, ids: Set<String>) {
+        val hs = now.home.score.toIntOrNull() ?: 0
+        val as_ = now.away.score.toIntOrNull() ?: 0
+        val hb = before.home.score.toIntOrNull() ?: 0
+        val ab = before.away.score.toIntOrNull() ?: 0
+        val alert = when {
+            before.state == MatchState.UPCOMING && now.state == MatchState.LIVE -> TeamAlert(TeamAlert.Kind.KICK_OFF, now, null)
+            hs > hb -> TeamAlert(TeamAlert.Kind.GOAL, now, if (now.home.id in ids) true else if (now.away.id in ids) false else null)
+            as_ > ab -> TeamAlert(TeamAlert.Kind.GOAL, now, if (now.away.id in ids) true else if (now.home.id in ids) false else null)
+            before.state == MatchState.LIVE && now.state == MatchState.FINISHED -> TeamAlert(TeamAlert.Kind.FULL_TIME, now, null)
+            else -> null
+        }
+        if (alert != null) teamAlert = alert
+    }
+
+    /** Plays one of the channels "Where's it on?" found, with the others a channel-change away. */
+    fun playFound(hits: List<MatchHit>, index: Int) {
+        findingMatch = null
+        val channels = hits.map { it.channel }
+        if (index !in channels.indices) return
+        val top = stack.last()
+        if (top is Screen.PlayLive || top is Screen.PlayVod) pop()
+        push(Screen.PlayLive(channels, index))
     }
 
     // ---- Reminders ----

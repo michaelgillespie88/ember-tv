@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +64,20 @@ fun LoginScreen(vm: AppViewModel) {
         focusNext = next
     }
 
+    // Lets a phone on the same Wi-Fi type the details instead.
+    DisposableEffect(Unit) {
+        vm.startPhoneLogin()
+        onDispose { vm.stopPhoneLogin() }
+    }
+    val fill = vm.phoneLoginFill
+    LaunchedEffect(fill) {
+        if (fill != null) {
+            server = fill.first
+            user = fill.second
+            pass = fill.third
+        }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -82,13 +98,34 @@ fun LoginScreen(vm: AppViewModel) {
                     style = Txt.Body,
                     color = Ember.Dim,
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 Text(
                     "Use ▲ ▼ to pick a box and press OK to type in it.",
                     style = Txt.Body,
                     color = Ember.Faint,
                 )
-                Spacer(Modifier.height(28.dp))
+                val url = vm.phoneLoginUrl
+                if (url != null) {
+                    Spacer(Modifier.height(20.dp))
+                    Row(
+                        Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color(0x14FFFFFF))
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        QrCode(url, 112.dp)
+                        Spacer(Modifier.width(18.dp))
+                        Column {
+                            Text("Easier: use your phone", style = Txt.Headline)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Scan the code with your phone's camera, or open this address on a phone on the same Wi-Fi:", style = Txt.Caption, color = Ember.Dim)
+                            Spacer(Modifier.height(6.dp))
+                            Text(url.removePrefix("http://"), style = Txt.Label, color = Ember.Accent)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
                 Text("Version ${app.embertv.BuildConfig.VERSION_NAME}", style = Txt.Caption, color = Ember.Faint)
             }
             Spacer(Modifier.width(64.dp))

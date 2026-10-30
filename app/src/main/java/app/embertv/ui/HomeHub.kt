@@ -180,6 +180,18 @@ private fun LazyListScope.homeRows(
     gap: Dp,
 ) {
     val rowPadding = PaddingValues(horizontal = edge, vertical = 12.dp)
+    val matches = vm.teamMatches.take(8)
+    if (matches.isNotEmpty()) {
+        item(key = "row-teams") {
+            HomeRow("Your Teams", edge) {
+                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    items(matches, key = { it.id }) { m ->
+                        MatchCard(m, continueWidth, "home:match:${m.id}") { vm.findingMatch = m }
+                    }
+                }
+            }
+        }
+    }
     val history = vm.history.toList()
     if (history.isNotEmpty()) {
         item(key = "row-continue") {

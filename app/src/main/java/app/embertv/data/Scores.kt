@@ -34,9 +34,22 @@ val LEAGUES = listOf(
     League("fra.1", "Ligue 1"),
 )
 
+/** The leagues (not cups) teams can be followed from. */
+val TEAM_LEAGUES = LEAGUES.filter { it.code in setOf("eng.1", "eng.2", "eng.3", "eng.4", "sco.1", "esp.1", "ita.1", "ger.1", "fra.1") }
+
+/** Cups a team from [leagueCode] may also play in. */
+fun cupsFor(leagueCode: String): List<League> {
+    val codes = mutableListOf("uefa.champions", "uefa.europa", "uefa.europa.conf")
+    if (leagueCode.startsWith("eng.")) codes += listOf("eng.fa", "eng.league_cup")
+    return LEAGUES.filter { it.code in codes }
+}
+
 enum class MatchState { UPCOMING, LIVE, FINISHED }
 
-data class TeamScore(val name: String, val shortName: String, val logo: String, val score: String)
+data class TeamScore(val name: String, val shortName: String, val logo: String, val score: String, val id: String = "")
+
+/** A club someone follows. [league] is the code of its domestic league. */
+data class Team(val id: String, val name: String, val shortName: String, val logo: String, val league: String)
 
 data class Match(
     val id: String,
@@ -86,9 +99,15 @@ object ScoresClient {
         }
     }
 
-    suspend fun matches(league: League): List<Match> {
-        val day = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
-        val root = fetch("https://site.api.espn.com/apis/site/v2/sports/soccer/${league.code}/scoreboard?dates=$day")
+    private fun day(offsetDays: Int): String =
+        SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(System.currentTimeMillis() + offsetDays * 86_400_000L))
+
+    /** Today's matches in [league]. */
+    suspend fun matches(league: League): List<Match> = matches(league, day(0))
+
+    /** Matches in [league] on [dates]: one day "20261030" or a range "20261030-20261120". */
+    suspend fun matches(league: League, dates: String): List<Match> {
+        val root = fetch("https://site.api.espn.com/apis/site/v2/sports/soccer/${league.code}/scoreboard?dates=$dates&limit=300")
             ?: return emptyList()
         val clockFormat = SimpleDateFormat("HH:mm", Locale.UK)
         return asArray(root.opt("events")).objects().mapNotNull { ev ->
@@ -100,11 +119,17 @@ object ScoresClient {
                 val logo = team.s("logo").ifEmpty {
                     asArray(team.opt("logos")).objects().firstOrNull()?.s("href") ?: ""
                 }
+                val score = when (val raw = c.opt("score")) {
+                    is JSONObject -> raw.s("displayValue").ifEmpty { raw.s("value") }
+                    null, JSONObject.NULL -> ""
+                    else -> raw.toString()
+                }
                 return TeamScore(
                     name = team.s("displayName").ifEmpty { team.s("name") },
                     shortName = team.s("shortDisplayName").ifEmpty { team.s("abbreviation") }.ifEmpty { team.s("displayName") },
                     logo = logo,
-                    score = c.s("score"),
+                    score = score,
+                    id = team.s("id").ifEmpty { c.s("id") },
                 )
             }
             val home = side("home") ?: return@mapNotNull null
@@ -129,6 +154,40 @@ object ScoresClient {
             }
             Match(ev.s("id"), league, home, away, state, label, kickoff)
         }
+    }
+
+    /** Matches across [leagues] from today to [days] ahead, soonest first. */
+    suspend fun upcoming(leagues: List<League>, days: Int): List<Match> = coroutineScope {
+        val range = day(0) + "-" + day(days)
+        leagues.map { l -> async { matches(l, range) } }.awaitAll().flatten().distinctBy { it.id }.sortedBy { it.kickoff }
+    }
+
+    private val teamCache = HashMap<String, List<Team>>()
+
+    /** Every club in [league], A to Z. */
+    suspend fun teams(league: League): List<Team> {
+        teamCache[league.code]?.let { return it }
+        val root = fetch("https://site.api.espn.com/apis/site/v2/sports/soccer/${league.code}/teams") ?: return emptyList()
+        // Teams sit at sports[].leagues[].teams[].team; look for them anywhere in case the shape shifts.
+        val found = LinkedHashMap<String, Team>()
+        fun walk(v: Any?) {
+            when (v) {
+                is JSONObject -> {
+                    val t = v.optJSONObject("team")
+                    if (t != null && t.s("id").isNotEmpty() && t.s("displayName").isNotEmpty()) {
+                        val logo = t.s("logo").ifEmpty { asArray(t.opt("logos")).objects().firstOrNull()?.s("href") ?: "" }
+                        found.getOrPut(t.s("id")) {
+                            Team(t.s("id"), t.s("displayName"), t.s("shortDisplayName").ifEmpty { t.s("displayName") }, logo, league.code)
+                        }
+                    }
+                    val keys = v.keys()
+                    while (keys.hasNext()) walk(v.opt(keys.next()))
+                }
+                is org.json.JSONArray -> for (i in 0 until v.length()) walk(v.opt(i))
+            }
+        }
+        walk(root)
+        return found.values.sortedBy { it.name }.also { if (it.isNotEmpty()) teamCache[league.code] = it }
     }
 
     /** Today's matches across [leagues], live ones first. */
