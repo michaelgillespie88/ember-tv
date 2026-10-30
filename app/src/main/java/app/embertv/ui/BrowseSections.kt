@@ -181,6 +181,7 @@ fun SearchSection(vm: AppViewModel) {
         if (wanted) loadCatalogue(repo) else null
     }
     var results by remember { mutableStateOf<SearchResults?>(null) }
+    var editing by remember { mutableStateOf(false) }
     val cat = (catalogue as? LoadResult.Ok)?.value
 
     LaunchedEffect(query, cat) {
@@ -200,17 +201,17 @@ fun SearchSection(vm: AppViewModel) {
 
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.padding(start = 48.dp, end = 48.dp, top = 10.dp).width(620.dp)) {
-            TvTextField(
+            EntryRow(
                 label = "",
                 value = vm.searchQuery,
-                onValueChange = { vm.searchQuery = it },
                 placeholder = "Search channels, movies and series",
-                imeAction = ImeAction.Search,
+                focusKey = "search:box",
+                onClick = { editing = true },
             )
         }
         val r = results
         when {
-            query.length < 2 -> EmptyView("Type at least two letters to search everything your provider offers.")
+            query.length < 2 -> EmptyView("Press OK on the search box and type at least two letters to search everything your provider offers.")
             catalogue is LoadResult.Loading || (cat != null && r == null) ->
                 LoadingView(text = "Searching your catalogue…")
             r != null && !r.isEmpty -> LazyColumn(
@@ -224,6 +225,17 @@ fun SearchSection(vm: AppViewModel) {
             }
             else -> EmptyView("Nothing matches \"$query\".")
         }
+    }
+
+    if (editing) {
+        TextEntryDialog(
+            title = "Search",
+            value = vm.searchQuery,
+            onValueChange = { vm.searchQuery = it },
+            placeholder = "Channel, movie or series name",
+            imeAction = ImeAction.Search,
+            onDone = { editing = false },
+        )
     }
 }
 

@@ -149,6 +149,7 @@ fun FocusBox(
     color: Color = Ember.Card,
     focusedColor: Color = Ember.CardHi,
     autoFocus: Boolean = false,
+    requester: FocusRequester? = null,
     onFocusChange: ((Boolean) -> Unit)? = null,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
@@ -157,7 +158,8 @@ fun FocusBox(
     val vm = LocalAppVm.current
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) focusedScale else 1f, label = "focusScale")
-    val requester = remember { FocusRequester() }
+    val ownRequester = remember { FocusRequester() }
+    val requester = requester ?: ownRequester
 
     val shouldRestore = focusKey != null && vm.restoreFocusKey == focusKey
     if (shouldRestore) {
@@ -352,6 +354,7 @@ fun TvButton(
     icon: String? = null,
     focusKey: String? = null,
     autoFocus: Boolean = false,
+    requester: FocusRequester? = null,
     onClick: () -> Unit,
 ) {
     FocusBox(
@@ -362,6 +365,7 @@ fun TvButton(
         color = Color(0x26FFFFFF),
         focusedColor = Color.White,
         autoFocus = autoFocus,
+        requester = requester,
         onClick = onClick,
     ) { focused ->
         Row(

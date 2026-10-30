@@ -1,23 +1,16 @@
 package app.embertv.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,40 +18,46 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.embertv.data.credentialsFromLink
 import kotlinx.coroutines.delay
+
+private const val SERVER = 0
+private const val USER = 1
+private const val PASS = 2
+private const val SIGN_IN = 3
 
 @Composable
 fun LoginScreen(vm: AppViewModel) {
     var server by remember { mutableStateOf("") }
     var user by remember { mutableStateOf("") }
     var pass by remember { mutableStateOf("") }
-    val focusManager = LocalFocusManager.current
+    var editing by remember { mutableStateOf<Int?>(null) }
+    var focusNext by remember { mutableStateOf<Int?>(null) }
+    val requesters = remember { List(4) { FocusRequester() } }
+
+    // After a pop-up editor closes, move on to the next box (or the Sign in button).
+    LaunchedEffect(focusNext) {
+        val target = focusNext ?: return@LaunchedEffect
+        delay(200)
+        runCatching { requesters[target].requestFocus() }
+        focusNext = null
+    }
+
+    fun finishEditing(next: Int) {
+        editing = null
+        focusNext = next
+    }
 
     Box(
         Modifier
@@ -82,56 +81,83 @@ fun LoginScreen(vm: AppViewModel) {
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Tip: if you paste a full playlist link into the server box, the username and password are filled in for you.",
+                    "Use ▲ ▼ to pick a box and press OK to type in it.",
                     style = Txt.Body,
                     color = Ember.Faint,
                 )
             }
             Spacer(Modifier.width(64.dp))
             Column(Modifier.width(440.dp)) {
-                TvTextField(
+                EntryRow(
                     label = "Server address",
                     value = server,
-                    onValueChange = { text ->
-                        server = text
-                        val creds = credentialsFromLink(text)
-                        if (creds != null) {
-                            if (user.isEmpty()) user = creds.first
-                            if (pass.isEmpty()) pass = creds.second
-                        }
-                    },
                     placeholder = "http://example.com:8080",
-                    keyboardType = KeyboardType.Uri,
                     autoFocus = true,
-                    onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
+                    requester = requesters[SERVER],
+                    onClick = { editing = SERVER },
                 )
-                TvTextField(
+                EntryRow(
                     label = "Username",
                     value = user,
-                    onValueChange = { user = it },
-                    onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
+                    requester = requesters[USER],
+                    onClick = { editing = USER },
                 )
-                TvTextField(
+                EntryRow(
                     label = "Password",
                     value = pass,
-                    onValueChange = { pass = it },
-                    password = true,
-                    imeAction = ImeAction.Done,
-                    onImeAction = { vm.login(server, user, pass) },
+                    masked = true,
+                    requester = requesters[PASS],
+                    onClick = { editing = PASS },
                 )
                 val error = vm.loginError
                 if (error != null) {
                     Text(error, style = Txt.Body, color = Color(0xFFFF8A80), modifier = Modifier.padding(bottom = 16.dp))
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TvButton(
-                        text = if (vm.loggingIn) "Signing in…" else "Sign in",
-                        icon = "→",
-                        onClick = { vm.login(server, user, pass) },
-                    )
-                }
+                Spacer(Modifier.height(6.dp))
+                TvButton(
+                    text = if (vm.loggingIn) "Signing in…" else "Sign in",
+                    icon = "→",
+                    requester = requesters[SIGN_IN],
+                    onClick = { vm.login(server, user, pass) },
+                )
             }
         }
+    }
+
+    when (editing) {
+        SERVER -> TextEntryDialog(
+            title = "Server address",
+            value = server,
+            onValueChange = { text ->
+                server = text
+                // A pasted playlist link carries the username and password too.
+                val creds = credentialsFromLink(text)
+                if (creds != null) {
+                    if (user.isEmpty()) user = creds.first
+                    if (pass.isEmpty()) pass = creds.second
+                }
+            },
+            placeholder = "http://example.com:8080",
+            keyboardType = KeyboardType.Uri,
+            imeAction = ImeAction.Next,
+            onDone = { finishEditing(if (user.isNotEmpty() && pass.isNotEmpty()) SIGN_IN else USER) },
+        )
+        USER -> TextEntryDialog(
+            title = "Username",
+            value = user,
+            onValueChange = { user = it },
+            keyboardType = KeyboardType.Email,
+            imeAction = ImeAction.Next,
+            onDone = { finishEditing(PASS) },
+        )
+        PASS -> TextEntryDialog(
+            title = "Password",
+            value = pass,
+            onValueChange = { pass = it },
+            keyboardType = KeyboardType.Password,
+            imeAction = ImeAction.Done,
+            onDone = { finishEditing(SIGN_IN) },
+        )
     }
 }
 
@@ -151,92 +177,6 @@ fun Wordmark(large: Boolean = false) {
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.5).sp,
             color = Ember.Text,
-        )
-    }
-}
-
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-fun TvTextField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    placeholder: String = "",
-    password: Boolean = false,
-    imeAction: ImeAction = ImeAction.Next,
-    keyboardType: KeyboardType = KeyboardType.Text,
-    autoFocus: Boolean = false,
-    onImeAction: () -> Unit = {},
-) {
-    var focused by remember { mutableStateOf(false) }
-    val requester = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
-    val keyboard = LocalSoftwareKeyboardController.current
-    if (autoFocus) {
-        LaunchedEffect(Unit) {
-            delay(150)
-            runCatching { requester.requestFocus() }
-        }
-    }
-    val shape = RoundedCornerShape(12.dp)
-    Column(modifier.fillMaxWidth().padding(bottom = 18.dp)) {
-        if (label.isNotEmpty()) {
-            Text(label, style = Txt.Caption, color = if (focused) Ember.Text else Ember.Dim)
-            Spacer(Modifier.height(8.dp))
-        }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = TextStyle(color = Ember.Text, fontSize = 18.sp),
-            cursorBrush = SolidColor(Ember.Accent),
-            visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = if (password) KeyboardType.Password else keyboardType,
-                imeAction = imeAction,
-            ),
-            keyboardActions = KeyboardActions(onAny = { onImeAction() }),
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(requester)
-                .onFocusChanged { focused = it.isFocused }
-                // TV remotes often register as keyboards, so a text field would treat up/down as
-                // cursor moves and trap focus. Move between fields ourselves; OK opens the keyboard.
-                .onPreviewKeyEvent { ev ->
-                    when (ev.nativeKeyEvent.keyCode) {
-                        AndroidKeyEvent.KEYCODE_DPAD_UP -> {
-                            if (ev.type == KeyEventType.KeyDown) focusManager.moveFocus(FocusDirection.Up)
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (ev.type == KeyEventType.KeyDown) focusManager.moveFocus(FocusDirection.Down)
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_CENTER -> {
-                            if (ev.type == KeyEventType.KeyUp) keyboard?.show()
-                            true
-                        }
-                        else -> false
-                    }
-                },
-            decorationBox = { inner ->
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .clip(shape)
-                        .background(if (focused) Ember.CardHi else Ember.Card)
-                        .then(if (focused) Modifier.border(2.dp, Ember.Focus, shape) else Modifier)
-                        .padding(horizontal = 18.dp),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    if (value.isEmpty() && placeholder.isNotEmpty()) {
-                        Text(placeholder, style = TextStyle(color = Ember.Faint, fontSize = 18.sp))
-                    }
-                    inner()
-                }
-            },
         )
     }
 }
