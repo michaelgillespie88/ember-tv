@@ -19,6 +19,8 @@ import app.embertv.data.DEFAULT_USER_AGENT
 import app.embertv.data.Episode
 import app.embertv.data.Favourite
 import app.embertv.data.HistoryEntry
+import app.embertv.data.MAIN_PROFILE
+import app.embertv.data.Profile
 import app.embertv.data.Movie
 import app.embertv.data.Prefs
 import app.embertv.data.Repository
@@ -128,9 +130,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Part-watched movies and episodes, most recent first. */
     val history = mutableStateListOf<HistoryEntry>()
 
+    // ---- Profiles ----
+
+    val profiles = mutableStateListOf<Profile>()
+    var profile by mutableStateOf<Profile?>(null)
+        private set
+    /** True while the "Who's watching?" screen is showing. */
+    var pickingProfile by mutableStateOf(false)
+        private set
+    /** False on the screen shown at start-up, where Back leaves the app. */
+    var pickerCancelable by mutableStateOf(false)
+        private set
+
     init {
-        favourites.addAll(prefs.favourites)
-        history.addAll(prefs.history)
+        profiles.addAll(prefs.profiles)
+        if (profiles.isEmpty()) {
+            profiles.add(Profile(MAIN_PROFILE, "Me", 0))
+            prefs.profiles = profiles.toList()
+        }
+        val last = prefs.lastProfile
+        activate(profiles.firstOrNull { it.id == last } ?: profiles.first())
+        pickingProfile = profiles.size > 1
         val saved = prefs.account
         if (saved != null) startSession(saved, null)
     }
@@ -186,6 +206,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         account = null
         repo = null
         accountInfo = null
+        resetBrowsing()
+    }
+
+    private fun resetBrowsing() {
         stack.clear()
         stack.add(Screen.Home)
         returnKeys.clear()
@@ -197,6 +221,65 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         series = SectionState()
         searchQuery = ""
         tab = Tabs.HOME
+    }
+
+    // ---- Profiles ----
+
+    private fun activate(p: Profile) {
+        prefs.profileId = p.id
+        prefs.lastProfile = p.id
+        profile = p
+        favourites.clear()
+        favourites.addAll(prefs.favourites)
+        history.clear()
+        history.addAll(prefs.history)
+    }
+
+    fun chooseProfile(p: Profile) {
+        if (profile?.id != p.id) {
+            activate(p)
+            resetBrowsing()
+        }
+        pickingProfile = false
+    }
+
+    fun switchProfile() {
+        pickerCancelable = true
+        pickingProfile = true
+    }
+
+    fun closeProfilePicker() {
+        if (pickerCancelable) pickingProfile = false
+    }
+
+    fun addProfile(name: String, color: Int): Profile {
+        val id = "p" + java.lang.Long.toString(System.currentTimeMillis(), 36)
+        val p = Profile(id, name.trim().ifEmpty { "Profile ${profiles.size + 1}" }, color)
+        profiles.add(p)
+        prefs.profiles = profiles.toList()
+        return p
+    }
+
+    fun updateProfile(p: Profile) {
+        val i = profiles.indexOfFirst { it.id == p.id }
+        if (i < 0) return
+        val fixed = p.copy(name = p.name.trim().ifEmpty { profiles[i].name })
+        profiles[i] = fixed
+        prefs.profiles = profiles.toList()
+        if (profile?.id == fixed.id) profile = fixed
+    }
+
+    /** Removes a profile and everything saved for it. The last profile can't be deleted. */
+    fun deleteProfile(p: Profile) {
+        if (profiles.size <= 1) return
+        prefs.deleteProfileData(p.id)
+        profiles.removeAll { it.id == p.id }
+        prefs.profiles = profiles.toList()
+        if (profile?.id == p.id) {
+            activate(profiles.first())
+            resetBrowsing()
+        }
+        notify("Deleted ${p.name}")
     }
 
     fun reload() {

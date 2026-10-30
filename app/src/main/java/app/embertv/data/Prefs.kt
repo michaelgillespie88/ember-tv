@@ -4,9 +4,66 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Everything the app remembers, stored on the TV only. */
+/**
+ * Everything the app remembers, stored on the device only. Login and playback settings are shared;
+ * favourites, history and resume points belong to the active profile ([profileId]).
+ */
 class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("ember", Context.MODE_PRIVATE)
+
+    /** Which profile per-profile data is read from and written to. */
+    var profileId: String = MAIN_PROFILE
+
+    // The main profile uses the original key names, so data from before profiles carries over.
+    private fun pk(base: String): String = if (profileId == MAIN_PROFILE) base else "p_${profileId}_$base"
+
+    var profiles: List<Profile>
+        get() {
+            val raw = sp.getString("profiles", "[]") ?: "[]"
+            return try {
+                val arr = JSONArray(raw)
+                val out = ArrayList<Profile>()
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val id = o.optString("id")
+                    if (id.isNotEmpty()) out.add(Profile(id, o.optString("name"), o.optInt("color")))
+                }
+                out
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+        set(value) {
+            val arr = JSONArray()
+            for (p in value) {
+                val o = JSONObject()
+                o.put("id", p.id)
+                o.put("name", p.name)
+                o.put("color", p.color)
+                arr.put(o)
+            }
+            sp.edit().putString("profiles", arr.toString()).apply()
+        }
+
+    var lastProfile: String?
+        get() = sp.getString("last_profile", null)
+        set(value) {
+            sp.edit().putString("last_profile", value).apply()
+        }
+
+    /** Forgets everything saved for one profile. */
+    fun deleteProfileData(id: String) {
+        val e = sp.edit()
+        for (key in sp.all.keys) {
+            val belongs = if (id == MAIN_PROFILE) {
+                key == "favourites" || key == "history" || key.startsWith("pos_") || key.startsWith("last_ep_")
+            } else {
+                key.startsWith("p_${id}_")
+            }
+            if (belongs) e.remove(key)
+        }
+        e.apply()
+    }
 
     var account: Account?
         get() {
@@ -47,7 +104,7 @@ class Prefs(context: Context) {
 
     var favourites: List<Favourite>
         get() {
-            val raw = sp.getString("favourites", "[]") ?: "[]"
+            val raw = sp.getString(pk("favourites"), "[]") ?: "[]"
             return try {
                 val arr = JSONArray(raw)
                 val out = ArrayList<Favourite>()
@@ -84,12 +141,12 @@ class Prefs(context: Context) {
                 o.put("num", f.num)
                 arr.put(o)
             }
-            sp.edit().putString("favourites", arr.toString()).apply()
+            sp.edit().putString(pk("favourites"), arr.toString()).apply()
         }
 
     var history: List<HistoryEntry>
         get() {
-            val raw = sp.getString("history", "[]") ?: "[]"
+            val raw = sp.getString(pk("history"), "[]") ?: "[]"
             return try {
                 val arr = JSONArray(raw)
                 val out = ArrayList<HistoryEntry>()
@@ -136,22 +193,23 @@ class Prefs(context: Context) {
                 o.put("at", h.updatedAt)
                 arr.put(o)
             }
-            sp.edit().putString("history", arr.toString()).apply()
+            sp.edit().putString(pk("history"), arr.toString()).apply()
         }
 
-    fun position(key: String): Long = sp.getLong("pos_$key", 0L)
+    fun position(key: String): Long = sp.getLong(pk("pos_$key"), 0L)
 
     /** Keeps a resume point unless the video was barely started or is basically finished. */
     fun savePosition(key: String, positionMs: Long, durationMs: Long) {
         val finished = durationMs > 0 && positionMs.toDouble() > durationMs.toDouble() * 0.95
         val e = sp.edit()
-        if (positionMs < 60_000L || finished) e.remove("pos_$key") else e.putLong("pos_$key", positionMs)
+        val k = pk("pos_$key")
+        if (positionMs < 60_000L || finished) e.remove(k) else e.putLong(k, positionMs)
         e.apply()
     }
 
-    fun lastEpisode(seriesId: Int): Int? = sp.getInt("last_ep_$seriesId", -1).takeIf { it >= 0 }
+    fun lastEpisode(seriesId: Int): Int? = sp.getInt(pk("last_ep_$seriesId"), -1).takeIf { it >= 0 }
 
     fun setLastEpisode(seriesId: Int, episodeId: Int) {
-        sp.edit().putInt("last_ep_$seriesId", episodeId).apply()
+        sp.edit().putInt(pk("last_ep_$seriesId"), episodeId).apply()
     }
 }

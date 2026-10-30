@@ -133,3 +133,9 @@ data class HistoryEntry(
     val progress: Float
         get() = if (durationMs > 0) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
 }
+
+/** The first profile. It keeps the data saved before profiles existed. */
+const val MAIN_PROFILE = "main"
+
+/** A person using the app: their own favourites, Continue Watching and resume points. */
+data class Profile(val id: String, val name: String, val color: Int)

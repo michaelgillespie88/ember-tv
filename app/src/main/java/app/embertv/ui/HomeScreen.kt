@@ -109,7 +109,9 @@ fun HomeScreen(vm: AppViewModel) {
                     )
                 }
             }
-            Spacer(Modifier.width(24.dp))
+            Spacer(Modifier.width(20.dp))
+            ProfileButton(vm)
+            Spacer(Modifier.width(16.dp))
             Text(formatClock(LocalNow.current), style = Txt.Label, color = Ember.Dim)
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {

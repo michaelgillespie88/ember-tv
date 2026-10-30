@@ -3,6 +3,7 @@
 A clean, Apple TV-style IPTV player for Android TV, Google TV, Fire TV and Android phones, using an Xtream Codes login.
 The same app gives TVs a remote-friendly layout and phones a touch layout.
 
+- **Profiles** – everyone gets their own favourites, Continue Watching and resume points; "Who's watching?" appears at start when there's more than one
 - **Home** – opens first: a featured banner, Continue Watching, your channels, My List and the latest movies and series
 - **Live TV** – categories, channel logos, now/next with progress, quick channel list, number keys to jump to a channel
 - **Guide** – a programme grid for any category (on phones, open it from Live TV)

@@ -173,6 +173,7 @@ fun PhoneHome(vm: AppViewModel) {
                 if (tab == TAB_LIVE) IconCircleButton(EmberIcons.Guide, "TV guide") { openOverlayTab(TAB_GUIDE) }
                 if (tab != TAB_SEARCH) IconCircleButton(EmberIcons.Search, "Search") { openOverlayTab(TAB_SEARCH) }
                 if (tab != TAB_SETTINGS) IconCircleButton(EmberIcons.Settings, "Settings") { openOverlayTab(TAB_SETTINGS) }
+                ProfileButton(vm)
             }
             if (hasChips) {
                 Box(Modifier.fillMaxWidth().height(CHIPS_ROW)) {

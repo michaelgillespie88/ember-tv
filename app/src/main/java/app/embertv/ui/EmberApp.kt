@@ -52,6 +52,8 @@ fun EmberApp(vm: AppViewModel, isTv: Boolean) {
 
                 if (vm.repo == null) {
                     if (isTv) LoginScreen(vm) else PhoneLoginScreen(vm)
+                } else if (vm.pickingProfile) {
+                    ProfilePicker(vm)
                 } else {
                     when (val screen = vm.stack.last()) {
                         Screen.Home -> if (isTv) HomeScreen(vm) else PhoneHome(vm)

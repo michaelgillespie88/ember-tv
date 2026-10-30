@@ -285,6 +285,12 @@ fun SettingsSection(vm: AppViewModel) {
     val settingsList: @Composable (Modifier) -> Unit = { modifier ->
         Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SettingRow(
+                "Profile",
+                vm.profile?.name ?: "",
+                "Switch, add or edit profiles",
+                focusKey = "set:profile",
+            ) { vm.switchProfile() }
+            SettingRow(
                 "Stream format",
                 if (vm.streamFormat == "m3u8") "HLS (.m3u8)" else "MPEG-TS (.ts)",
                 "Switch if channels buffer or won't start",
