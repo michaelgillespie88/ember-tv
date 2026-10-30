@@ -53,6 +53,58 @@ class MainActivity : ComponentActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    override fun onStart() {
+        super.onStart()
+        if (isTv) {
+            vm.remoteKeys = { key -> pressFromPhone(key) }
+            vm.startTvLink(tvName())
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (isTv) {
+            vm.stopTvLink()
+            vm.remoteKeys = null
+        }
+    }
+
+    /** A button pressed on a phone's remote, as if it came from the TV remote. */
+    private fun pressFromPhone(key: String) {
+        if (key == "home") {
+            while (vm.stack.size > 1) vm.pop()
+            return
+        }
+        val code = when (key) {
+            "up" -> KeyEvent.KEYCODE_DPAD_UP
+            "down" -> KeyEvent.KEYCODE_DPAD_DOWN
+            "left" -> KeyEvent.KEYCODE_DPAD_LEFT
+            "right" -> KeyEvent.KEYCODE_DPAD_RIGHT
+            "ok" -> KeyEvent.KEYCODE_DPAD_CENTER
+            "back" -> KeyEvent.KEYCODE_BACK
+            "playpause" -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+            "rewind" -> KeyEvent.KEYCODE_MEDIA_REWIND
+            "forward" -> KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
+            "chup" -> KeyEvent.KEYCODE_CHANNEL_UP
+            "chdown" -> KeyEvent.KEYCODE_CHANNEL_DOWN
+            "menu" -> KeyEvent.KEYCODE_MENU
+            else -> return
+        }
+        // BACK has to go through the back dispatcher for Compose to see it.
+        if (code == KeyEvent.KEYCODE_BACK) {
+            if (vm.userActivity(wake = true)) return
+            onBackPressedDispatcher.onBackPressed()
+            return
+        }
+        dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+        dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+    }
+
+    private fun tvName(): String {
+        val named = runCatching { android.provider.Settings.Global.getString(contentResolver, "device_name") }.getOrNull()
+        return named?.takeIf { it.isNotBlank() } ?: Build.MODEL.ifBlank { "Streammania TV" }
+    }
+
     /** Pressing Home during a video on a phone shrinks it into picture-in-picture (Android 8 to 11; 12+ does it itself). */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()

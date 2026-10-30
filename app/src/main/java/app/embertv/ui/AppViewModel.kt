@@ -42,6 +42,11 @@ import app.embertv.data.MatchHit
 import app.embertv.data.MatchState
 import app.embertv.data.ScoresClient
 import app.embertv.data.Team
+import app.embertv.data.Tmdb
+import app.embertv.data.FoundTv
+import app.embertv.data.TvFinder
+import app.embertv.data.TvLinkClient
+import app.embertv.data.TvLinkServer
 import app.embertv.data.cupsFor
 import app.embertv.data.nowSeconds
 import app.embertv.data.UpdateInfo
@@ -63,6 +68,8 @@ sealed interface Screen {
     data class PlayLive(val channels: List<Channel>, val index: Int) : Screen
     data class PlayVod(val items: List<VodItem>, val index: Int, val startMs: Long) : Screen
     data class Catchup(val channel: Channel) : Screen
+    /** Two or four channels at once; [pool] is what the empty pictures can be filled from. */
+    data class MultiView(val channels: List<Channel>, val pool: List<Channel>) : Screen
 }
 
 const val CATCHUP_PREFIX = "catchup:"
@@ -421,7 +428,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var lastActivity = android.os.SystemClock.uptimeMillis()
 
     /** True while a video or channel is playing. */
-    val playerOpen: Boolean get() = stack.last().let { it is Screen.PlayLive || it is Screen.PlayVod }
+    val playerOpen: Boolean get() = stack.last().let { it is Screen.PlayLive || it is Screen.PlayVod || it is Screen.MultiView }
 
     val favourites = mutableStateListOf<Favourite>()
     val favKeys: Set<String> by derivedStateOf<Set<String>> { favourites.mapTo(HashSet()) { it.key } }
@@ -769,10 +776,311 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         reloadToken++
     }
 
+    // ---- Play on TV (the TV side) ----
+
+    /** A phone asking to pair, with the code shown on the TV. */
+    var tvPairing by mutableStateOf<Pair<String, String>?>(null)
+        private set
+    /** Remote buttons from a phone are pressed through this (set by the activity). */
+    var remoteKeys: ((String) -> Unit)? = null
+    private var tvLink: TvLinkServer? = null
+    private var tvLinkJob: kotlinx.coroutines.Job? = null
+
+    fun startTvLink(name: String) {
+        if (tvLink != null) return
+        val server = TvLinkServer(name, object : TvLinkServer.Handler {
+            override suspend fun hello(): org.json.JSONObject = org.json.JSONObject().put("name", name).put("app", "Streammania")
+
+            override suspend fun pairRequested(phone: String) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                val code = (1000 + java.security.SecureRandom().nextInt(9000)).toString()
+                tvPairing = phone to code
+                userActivity(wake = true)
+                Unit
+            }
+
+            override suspend fun pairConfirmed(code: String, extras: org.json.JSONObject): String? =
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    val p = tvPairing ?: return@withContext null
+                    if (code != p.second) return@withContext null
+                    tvPairing = null
+                    val bytes = ByteArray(18).also { java.security.SecureRandom().nextBytes(it) }
+                    val token = android.util.Base64.encodeToString(bytes, android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP)
+                    prefs.tvTokens = (prefs.tvTokens + token).toList().takeLast(12).toSet()
+                    pairedPhoneCount = prefs.tvTokens.size
+                    // A phone with film details turned on shares its key so the TV gets them too.
+                    val key = extras.optString("tmdbKey")
+                    if (key.isNotBlank() && tmdbKey.isBlank()) saveTmdbKey(key)
+                    notify("${p.first} can now control this TV")
+                    token
+                }
+
+            override fun authorised(token: String): Boolean = token.isNotEmpty() && token in prefs.tvTokens
+
+            override suspend fun play(spec: org.json.JSONObject): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (repo == null) return@withContext "The TV isn't signed in yet"
+                if (pickingProfile) return@withContext "Pick a profile on the TV first"
+                val screen = screenFromSpec(spec) ?: return@withContext "The TV couldn't read that"
+                userActivity(wake = true)
+                while (playerOpen) pop()
+                push(screen)
+                null
+            }
+
+            override suspend fun key(key: String) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                remoteKeys?.invoke(key)
+                Unit
+            }
+        })
+        tvLink = server
+        tvLinkJob = viewModelScope.launch {
+            runCatching {
+                server.run(getApplication()) { address ->
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { if (tvLink === server) tvLinkAddress = address }
+                }
+            }
+        }
+    }
+
+    fun stopTvLink() {
+        tvLink?.stop()
+        tvLink = null
+        tvLinkJob?.cancel()
+        tvLinkJob = null
+        tvPairing = null
+        tvLinkAddress = null
+    }
+
+    /** Where phones can reach this TV, for typing in by hand. */
+    var tvLinkAddress by mutableStateOf<String?>(null)
+        private set
+    var pairedPhoneCount by mutableIntStateOf(prefs.tvTokens.size)
+        private set
+
+    fun forgetPairedPhones() {
+        if (prefs.tvTokens.isEmpty()) return
+        prefs.tvTokens = emptySet()
+        pairedPhoneCount = 0
+        notify("Phones unpaired. They'll need a new code")
+    }
+
+    fun cancelTvPairing() {
+        tvPairing = null
+    }
+
+    // ---- Play on TV (the phone side) ----
+
+    /** TVs this phone has paired with; the token proves it to the TV. */
+    data class PairedTv(val tv: FoundTv, val token: String)
+
+    val pairedTvs = mutableStateListOf<PairedTv>().also { list ->
+        runCatching {
+            val arr = org.json.JSONArray(prefs.pairedTvs)
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                list.add(PairedTv(FoundTv(o.getString("name"), o.getString("host"), o.getInt("port")), o.getString("token")))
+            }
+        }
+    }
+    val foundTvs = mutableStateListOf<FoundTv>()
+    /** Where videos play: null means this phone. */
+    var castTarget by mutableStateOf<PairedTv?>(null)
+        private set
+    var showCastSheet by mutableStateOf(false)
+    var showRemote by mutableStateOf(false)
+    /** A TV waiting for its code to be typed in. */
+    var pairingWith by mutableStateOf<FoundTv?>(null)
+        private set
+    private var finder: TvFinder? = null
+
+    private fun savePairedTvs() {
+        val arr = org.json.JSONArray()
+        for (p in pairedTvs) {
+            arr.put(org.json.JSONObject().put("name", p.tv.name).put("host", p.tv.host).put("port", p.tv.port).put("token", p.token))
+        }
+        prefs.pairedTvs = arr.toString()
+    }
+
+    fun startFindingTvs() {
+        if (finder != null) return
+        finder = TvFinder(getApplication()) { list ->
+            foundTvs.clear()
+            foundTvs.addAll(list)
+            // A TV that moved to a new address on the network keeps its pairing.
+            var changed = false
+            for (tv in list) {
+                val i = pairedTvs.indexOfFirst { it.tv.name == tv.name }
+                if (i >= 0 && pairedTvs[i].tv != tv) {
+                    pairedTvs[i] = pairedTvs[i].copy(tv = tv)
+                    if (castTarget?.tv?.name == tv.name) castTarget = pairedTvs[i]
+                    changed = true
+                }
+            }
+            if (changed) savePairedTvs()
+        }.also { it.start() }
+    }
+
+    fun stopFindingTvs() {
+        finder?.stop()
+        finder = null
+    }
+
+    fun isPaired(tv: FoundTv): Boolean = pairedTvs.any { it.tv.name == tv.name }
+
+    fun chooseTv(tv: FoundTv?) {
+        if (tv == null) {
+            castTarget = null
+            notify("Playing on this phone")
+            return
+        }
+        val paired = pairedTvs.firstOrNull { it.tv.name == tv.name }
+        if (paired != null) {
+            castTarget = paired
+            notify("Playing on ${tv.name}")
+            return
+        }
+        viewModelScope.launch {
+            val error = TvLinkClient.requestPairing(tv, phoneName())
+            if (error != null) notify(error) else pairingWith = tv
+        }
+    }
+
+    fun addTvByAddress(text: String) {
+        val t = text.trim()
+        if (t.isEmpty()) return
+        val host = t.substringBefore(':')
+        val port = t.substringAfter(':', "8771").toIntOrNull() ?: 8771
+        viewModelScope.launch {
+            val probe = FoundTv(host, host, port)
+            val hello = TvLinkClient.hello(probe)
+            if (hello == null) {
+                notify("No Streammania TV at $t")
+                return@launch
+            }
+            chooseTv(FoundTv(hello.optString("name").ifBlank { host }, host, port))
+        }
+    }
+
+    fun cancelPairing() {
+        pairingWith = null
+    }
+
+    fun enterPairingCode(code: String) {
+        val tv = pairingWith ?: return
+        pairingWith = null
+        viewModelScope.launch {
+            val extras = org.json.JSONObject()
+            if (tmdbKey.isNotBlank()) extras.put("tmdbKey", tmdbKey)
+            val token = TvLinkClient.confirmPairing(tv, code, extras)
+            if (token == null) {
+                notify("That code didn't match. Try again from Play on TV.")
+                return@launch
+            }
+            pairedTvs.removeAll { it.tv.name == tv.name }
+            val p = PairedTv(tv, token)
+            pairedTvs.add(p)
+            savePairedTvs()
+            castTarget = p
+            notify("Paired. Playing on ${tv.name}")
+        }
+    }
+
+    fun forgetTv(p: PairedTv) {
+        pairedTvs.removeAll { it.tv.name == p.tv.name }
+        savePairedTvs()
+        if (castTarget?.tv?.name == p.tv.name) castTarget = null
+    }
+
+    fun pressRemote(key: String) {
+        val target = castTarget ?: return
+        viewModelScope.launch {
+            if (!TvLinkClient.key(target.tv, target.token, key)) notify("Couldn't reach ${target.tv.name}")
+        }
+    }
+
+    private fun phoneName(): String = listOf(Build.MANUFACTURER.replaceFirstChar { it.uppercase() }, Build.MODEL)
+        .distinct().joinToString(" ").take(40)
+
+    private fun sendToTv(screen: Screen, target: PairedTv) {
+        val spec = specFor(screen) ?: return
+        notify("Sending to ${target.tv.name}…")
+        viewModelScope.launch {
+            val error = TvLinkClient.play(target.tv, target.token, spec)
+            notify(error ?: "Playing on ${target.tv.name}")
+            if (error == null) showRemote = true
+        }
+    }
+
+    private fun specFor(screen: Screen): org.json.JSONObject? {
+        val o = org.json.JSONObject()
+        when (screen) {
+            is Screen.PlayLive -> {
+                // Only the channels near the one chosen, so channel up/down still works on the TV.
+                val from = (screen.index - 50).coerceAtLeast(0)
+                val to = (screen.index + 50).coerceAtMost(screen.channels.size)
+                val arr = org.json.JSONArray()
+                for (c in screen.channels.subList(from, to)) {
+                    arr.put(
+                        org.json.JSONObject().put("id", c.streamId).put("num", c.num).put("name", c.name).put("icon", c.icon)
+                            .put("cat", c.categoryId).put("epg", c.epgId).put("archive", c.hasArchive).put("days", c.archiveDays)
+                    )
+                }
+                o.put("kind", "live").put("index", screen.index - from).put("channels", arr)
+            }
+            is Screen.PlayVod -> {
+                val arr = org.json.JSONArray()
+                for (v in screen.items) {
+                    arr.put(
+                        org.json.JSONObject().put("key", v.key).put("title", v.title).put("subtitle", v.subtitle).put("url", v.url)
+                            .put("seriesId", v.seriesId ?: -1).put("episodeId", v.episodeId ?: -1).put("contentId", v.contentId)
+                            .put("image", v.image).put("cover", v.seriesCover).put("ext", v.ext)
+                    )
+                }
+                o.put("kind", "vod").put("index", screen.index).put("startMs", screen.startMs).put("items", arr)
+            }
+            else -> return null
+        }
+        return o
+    }
+
+    private fun screenFromSpec(o: org.json.JSONObject): Screen? = runCatching {
+        when (o.getString("kind")) {
+            "live" -> {
+                val arr = o.getJSONArray("channels")
+                val chans = (0 until arr.length()).map { i ->
+                    val c = arr.getJSONObject(i)
+                    Channel(
+                        c.getInt("id"), c.optInt("num"), c.optString("name"), c.optString("icon"), c.optString("cat"),
+                        c.optString("epg"), c.optBoolean("archive"), c.optInt("days"),
+                    )
+                }
+                if (chans.isEmpty()) null else Screen.PlayLive(chans, o.optInt("index").coerceIn(0, chans.lastIndex))
+            }
+            "vod" -> {
+                val arr = o.getJSONArray("items")
+                val items = (0 until arr.length()).map { i ->
+                    val v = arr.getJSONObject(i)
+                    VodItem(
+                        v.getString("key"), v.optString("title"), v.optString("subtitle"), v.getString("url"),
+                        v.optInt("seriesId", -1).takeIf { it >= 0 }, v.optInt("episodeId", -1).takeIf { it >= 0 },
+                        v.optInt("contentId"), v.optString("image"), v.optString("cover"), v.optString("ext"),
+                    )
+                }
+                if (items.isEmpty()) null else Screen.PlayVod(items, o.optInt("index").coerceIn(0, items.lastIndex), o.optLong("startMs"))
+            }
+            else -> null
+        }
+    }.getOrNull()
+
     // ---- Navigation ----
 
     fun push(screen: Screen) {
         // With another player chosen in Settings, channels and videos open there instead.
+        // With a TV chosen from the phone, it plays there instead.
+        val target = castTarget
+        if (target != null && (screen is Screen.PlayLive || screen is Screen.PlayVod)) {
+            sendToTv(screen, target)
+            return
+        }
         val pkg = externalPlayer
         if (pkg.isNotEmpty() && (screen is Screen.PlayLive || screen is Screen.PlayVod)) {
             if (openExternally(screen, pkg)) return
@@ -1110,6 +1418,207 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             image = channel.icon,
         )
         push(Screen.PlayVod(listOf(item), 0, 0L))
+    }
+
+    // ---- Richer detail pages ----
+
+    var tmdbKey by mutableStateOf(prefs.tmdbKey)
+        private set
+    private var tmdb: Tmdb? = prefs.tmdbKey.takeIf { it.isNotBlank() }?.let { Tmdb(it) }
+
+    /** Saves a TMDB key after checking it works. Empty removes it. */
+    fun saveTmdbKey(raw: String) {
+        val key = raw.trim()
+        if (key.isEmpty()) {
+            tmdbKey = ""
+            prefs.tmdbKey = ""
+            tmdb = null
+            notify("Film details from TMDB turned off")
+            return
+        }
+        viewModelScope.launch {
+            val t = app.embertv.data.Tmdb(key)
+            if (t.check()) {
+                tmdbKey = key
+                prefs.tmdbKey = key
+                tmdb = t
+                notify("TMDB connected: cast photos and suggestions are on")
+            } else {
+                notify("That TMDB key didn't work. Check it and try again")
+            }
+        }
+    }
+
+    suspend fun movieExtras(m: Movie, info: app.embertv.data.MovieInfo?): app.embertv.data.Extras? =
+        tmdb?.extras("movie", info?.tmdbId ?: 0, m.name, info?.year ?: "")
+
+    suspend fun seriesExtras(s: Series, info: app.embertv.data.SeriesInfo?): app.embertv.data.Extras? =
+        tmdb?.extras("tv", info?.tmdbId ?: 0, s.name, info?.year ?: s.year)
+
+    /** TMDB's suggestions that you can actually watch, then more from the same category. */
+    suspend fun moreLikeThis(m: Movie, extras: app.embertv.data.Extras?): List<Movie> {
+        val r = repo ?: return emptyList()
+        val ownKey = Versions.key(m.name)
+        val pool = r.loadedMovies()
+        val byKey = pool.groupBy { Versions.key(it.name) }
+        val suggested = extras?.suggestions.orEmpty().mapNotNull { s ->
+            byKey[Versions.key(s.title)]?.firstOrNull { s.year.isEmpty() || Versions.year(it.name).let { y -> y == null || y == s.year } }
+        }
+        val sameCategory = try {
+            r.movies(m.categoryId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+        return (suggested + sameCategory.shuffled(java.util.Random(m.streamId.toLong())))
+            .filter { Versions.key(it.name) != ownKey }
+            .distinctBy { Versions.key(it.name) }
+            .take(16)
+    }
+
+    suspend fun moreLikeThis(s: Series, extras: app.embertv.data.Extras?): List<Series> {
+        val r = repo ?: return emptyList()
+        val ownKey = Versions.key(s.name)
+        val byKey = r.loadedSeries().groupBy { Versions.key(it.name) }
+        val suggested = extras?.suggestions.orEmpty().mapNotNull { sg -> byKey[Versions.key(sg.title)]?.firstOrNull() }
+        val sameCategory = try {
+            r.series(s.categoryId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+        return (suggested + sameCategory.shuffled(java.util.Random(s.seriesId.toLong())))
+            .filter { Versions.key(it.name) != ownKey }
+            .distinctBy { Versions.key(it.name) }
+            .take(16)
+    }
+
+    /** Opens a YouTube trailer in the YouTube app (or the browser if it isn't installed). */
+    fun playTrailer(youtubeId: String) {
+        val ctx = getApplication<Application>()
+        val app = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$youtubeId")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$youtubeId")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            ctx.startActivity(app)
+        } catch (e: ActivityNotFoundException) {
+            try {
+                ctx.startActivity(web)
+            } catch (e2: ActivityNotFoundException) {
+                notify("Install the YouTube app to watch trailers")
+            }
+        }
+    }
+
+    // ---- Live Sport Now and the score bug ----
+
+    /** A match on now, and the channels found showing it (best first). */
+    data class LiveSport(val match: Match, val hits: List<MatchHit>)
+
+    var sportOnHome by mutableStateOf(prefs.sportOnHome)
+        private set
+    /** Football on now (or about to start), for the Home row. */
+    var liveSport by mutableStateOf<List<LiveSport>>(emptyList())
+        private set
+    private var sportJob: kotlinx.coroutines.Job? = null
+    // Channel searches by match id, with when they were done.
+    private val sportHits = HashMap<String, Pair<Long, List<MatchHit>>>()
+
+    fun toggleSportOnHome() {
+        sportOnHome = !sportOnHome
+        prefs.sportOnHome = sportOnHome
+        if (!sportOnHome) liveSport = emptyList()
+    }
+
+    /** Home calls this while it's showing: refreshes live matches every minute and finds their channels. */
+    fun watchLiveSport(active: Boolean) {
+        sportJob?.cancel()
+        sportJob = null
+        if (!active || !sportOnHome || profile?.kids == true) return
+        val r = repo ?: return
+        sportJob = viewModelScope.launch {
+            while (true) {
+                val nowMs = System.currentTimeMillis()
+                val matches = try {
+                    ScoresClient.today(app.embertv.data.POPULAR_LEAGUES)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }.filter {
+                    it.state == MatchState.LIVE || (it.state == MatchState.UPCOMING && it.kickoff - nowMs in 0..15 * 60_000L)
+                }.take(10)
+                val out = ArrayList<LiveSport>()
+                for (m in matches) {
+                    val cached = sportHits[m.id]
+                    val hits = if (cached != null && nowMs - cached.first < 10 * 60_000L) cached.second else {
+                        val found = try {
+                            app.embertv.data.MatchFinder.find(r, m, nowSeconds()) { _, _, _ -> }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            emptyList()
+                        }.filter { it.score >= 4 }.take(12)
+                        sportHits[m.id] = nowMs to found
+                        found
+                    }
+                    out += LiveSport(m, hits)
+                    // Show what's ready so far rather than waiting for every search.
+                    liveSport = sortSport(out)
+                }
+                liveSport = sortSport(out)
+                kotlinx.coroutines.delay(60_000)
+            }
+        }
+    }
+
+    private fun sortSport(list: List<LiveSport>): List<LiveSport> =
+        list.sortedWith(compareBy({ if (it.hits.isEmpty()) 1 else 0 }, { if (it.match.state == MatchState.LIVE) 0 else 1 }, { it.match.kickoff }))
+
+    /** A match whose score sits in the corner of the screen. */
+    var pinnedMatch by mutableStateOf<Match?>(null)
+        private set
+    /** When the pinned score last changed (ms), to flash it. */
+    var pinnedChangedAt by mutableStateOf(0L)
+        private set
+    private var pinJob: kotlinx.coroutines.Job? = null
+
+    fun pinMatch(m: Match) {
+        pinJob?.cancel()
+        pinnedMatch = m
+        pinnedChangedAt = 0L
+        notify("${m.home.shortName} v ${m.away.shortName} pinned to the corner")
+        pinJob = viewModelScope.launch {
+            var finishedAt = 0L
+            while (true) {
+                kotlinx.coroutines.delay(30_000)
+                val fresh = try {
+                    ScoresClient.matches(m.league).firstOrNull { it.id == m.id }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                } ?: continue
+                val before = pinnedMatch ?: break
+                if (fresh.home.score != before.home.score || fresh.away.score != before.away.score) {
+                    pinnedChangedAt = System.currentTimeMillis()
+                }
+                pinnedMatch = fresh
+                if (fresh.state == MatchState.FINISHED) {
+                    if (finishedAt == 0L) finishedAt = System.currentTimeMillis()
+                    // Leave the final score up for a few minutes.
+                    if (System.currentTimeMillis() - finishedAt > 4 * 60_000L) break
+                }
+            }
+            pinnedMatch = null
+        }
+    }
+
+    fun unpinMatch() {
+        pinJob?.cancel()
+        pinJob = null
+        pinnedMatch = null
     }
 
     // ---- Followed teams ----

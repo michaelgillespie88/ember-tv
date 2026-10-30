@@ -213,6 +213,34 @@ class Prefs(context: Context) {
             sp.edit().putString(pk("watched"), arr.toString()).apply()
         }
 
+    /** Phones allowed to control this TV (tokens handed out when pairing). Kept on this device only. */
+    var tvTokens: Set<String>
+        get() = sp.getStringSet("tv_tokens", emptySet())?.toSet() ?: emptySet()
+        set(value) {
+            sp.edit().putStringSet("tv_tokens", value).apply()
+        }
+
+    /** On a phone: the TVs it has paired with, as JSON (name, host, port, token). */
+    var pairedTvs: String
+        get() = sp.getString("paired_tvs", "[]") ?: "[]"
+        set(value) {
+            sp.edit().putString("paired_tvs", value).apply()
+        }
+
+    /** The user's own TMDB key, for cast photos, trailers and suggestions. Empty when not set. */
+    var tmdbKey: String
+        get() = sp.getString("tmdb_key", "") ?: ""
+        set(value) {
+            sp.edit().putString("tmdb_key", value).apply()
+        }
+
+    /** Show the Live Sport Now row on Home. */
+    var sportOnHome: Boolean
+        get() = sp.getBoolean("sport_on_home", true)
+        set(value) {
+            sp.edit().putBoolean("sport_on_home", value).apply()
+        }
+
     /** Slimmer rows in the TV guide and channel list, so more channels fit. */
     var compactLists: Boolean
         get() = sp.getBoolean("compact_lists", true)

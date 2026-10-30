@@ -127,19 +127,21 @@ fun TextEntryDialog(
             delay(100)
             keyboard?.show()
         }
-        Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.TopCenter) {
-            val shape = RoundedCornerShape(12.dp)
+        // Sits near the top so the keyboard never covers it.
+        Box(Modifier.fillMaxSize().background(Color(0x66000000)), contentAlignment = Alignment.TopCenter) {
+            val shape = RoundedCornerShape(16.dp)
             Column(
                 Modifier
                     .padding(top = 48.dp, start = 16.dp, end = 16.dp)
-                    .widthIn(max = 640.dp)
+                    .widthIn(max = 600.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(28.dp))
                     .background(dialogPanelColor())
-                    .padding(28.dp)
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(title, style = Txt.Headline)
-                Spacer(Modifier.height(14.dp))
+                SheetTitle(title)
+                Spacer(Modifier.height(20.dp))
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
@@ -173,8 +175,9 @@ fun TextEntryDialog(
                                 .fillMaxWidth()
                                 .height(60.dp)
                                 .clip(shape)
-                                .background(Ember.CardHi)
-                                .border(2.dp, Ember.Focus, shape)
+                                .background(Color(0x1FFFFFFF))
+                                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0x14FFFFFF), Color.Transparent)))
+                                .border(1.5.dp, Color(0xCCFFFFFF), shape)
                                 .padding(horizontal = 18.dp),
                             contentAlignment = Alignment.CenterStart,
                         ) {
@@ -190,6 +193,7 @@ fun TextEntryDialog(
                     "When you've finished, press Next or Done on the keyboard, or press Back.",
                     style = Txt.Caption,
                     color = Ember.Faint,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
             }
         }

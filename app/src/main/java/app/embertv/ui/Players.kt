@@ -112,7 +112,7 @@ private fun Context.findActivity(): Activity? {
 
 /** On phones, play sideways and full screen; put things back when playback ends. */
 @Composable
-private fun PhoneFullscreen() {
+internal fun PhoneFullscreen() {
     if (LocalIsTv.current) return
     val activity = LocalContext.current.findActivity() ?: return
     DisposableEffect(activity) {
@@ -694,7 +694,12 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     }
 
     if (optionsOpen) {
-        LiveOptionsDialog(vm, channel, onOpenElsewhere = { vm.openElsewhere(Screen.PlayLive(channels, index)) }) { optionsOpen = false }
+        LiveOptionsDialog(
+            vm,
+            channel,
+            onOpenElsewhere = { vm.openElsewhere(Screen.PlayLive(channels, index)) },
+            onMultiView = { vm.push(Screen.MultiView(listOf(channels[index]), channels)) },
+        ) { optionsOpen = false }
     }
 }
 
@@ -827,6 +832,11 @@ private fun BoxScope.ZapList(
                         onClose()
                         vm.openElsewhere(Screen.PlayLive(channels, current))
                     }
+                    ZapAction(EmberIcons.MultiView, "Multi-view", "") {
+                        onClose()
+                        vm.push(Screen.MultiView(listOf(channels[current]), channels))
+                    }
+                    if (vm.pinnedMatch != null) ZapAction(EmberIcons.Football, "Remove pinned score", "") { vm.unpinMatch() }
                     val left = vm.sleepMinutesLeft()
                     ZapAction(EmberIcons.Moon, "Sleep timer", if (left == null) "Off" else "$left min") { vm.cycleSleepTimer() }
                     ZapAction(EmberIcons.Subtitles, "Subtitles", if (vm.subtitleMode == "off") "Off" else "English") { vm.cycleSubtitles() }
@@ -918,23 +928,29 @@ private fun SleepBadge(minutes: Int, modifier: Modifier = Modifier) {
 
 /** Phone "more" sheet for the live player: sleep timer, audio and subtitles. */
 @Composable
-private fun LiveOptionsDialog(vm: AppViewModel, channel: Channel, onOpenElsewhere: () -> Unit, onDismiss: () -> Unit) {
+private fun LiveOptionsDialog(vm: AppViewModel, channel: Channel, onOpenElsewhere: () -> Unit, onMultiView: () -> Unit, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         DialogBackdropBlur()
         Column(
             Modifier
                 .width(420.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(28.dp))
                 .background(dialogPanelColor())
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Options", style = Txt.Headline, modifier = Modifier.padding(bottom = 6.dp))
+            SheetTitle(channel.name, eyebrow = "Options")
+            Spacer(Modifier.height(8.dp))
             CatchupActions(vm, channel, onDismiss)
             ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
                 onDismiss()
                 onOpenElsewhere()
             }
+            ZapAction(EmberIcons.MultiView, "Multi-view", "") {
+                onDismiss()
+                onMultiView()
+            }
+            if (vm.pinnedMatch != null) ZapAction(EmberIcons.Football, "Remove pinned score", "") { vm.unpinMatch() }
             val left = vm.sleepMinutesLeft()
             ZapAction(EmberIcons.Moon, "Sleep timer", if (left == null) "Off" else "$left min") { vm.cycleSleepTimer() }
             ZapAction(EmberIcons.Subtitles, "Subtitles", if (vm.subtitleMode == "off") "Off" else "English") { vm.cycleSubtitles() }
@@ -1472,13 +1488,12 @@ private fun TracksDialog(vm: AppViewModel, exo: ExoPlayer, onOpenElsewhere: () -
         DialogBackdropBlur()
         Row(
             Modifier
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(28.dp))
                 .background(dialogPanelColor())
                 .padding(28.dp)
         ) {
             Column(Modifier.width(300.dp)) {
-                Text("Audio", style = Txt.Headline)
-                Spacer(Modifier.height(14.dp))
+                SheetSection("Audio")
                 if (audio.isEmpty()) {
                     Text("Only one audio track", style = Txt.Body, color = Ember.Faint)
                 }
@@ -1488,20 +1503,17 @@ private fun TracksDialog(vm: AppViewModel, exo: ExoPlayer, onOpenElsewhere: () -
             }
             Spacer(Modifier.width(28.dp))
             Column(Modifier.width(300.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
-                Text("Subtitles", style = Txt.Headline)
-                Spacer(Modifier.height(14.dp))
+                SheetSection("Subtitles")
                 TrackRow("Off", subtitlesOff, autoFocus = audio.isEmpty()) { selectSubtitle(null) }
                 subs.forEach { o ->
                     TrackRow(o.label, o.selected && !subtitlesOff, autoFocus = false) { selectSubtitle(o) }
                 }
                 Spacer(Modifier.height(18.dp))
-                Text("Sleep timer", style = Txt.Headline)
-                Spacer(Modifier.height(10.dp))
+                SheetSection("Sleep timer")
                 val left = vm.sleepMinutesLeft()
                 ZapAction(EmberIcons.Moon, if (left == null) "Off" else "Stops in $left min", "Change") { vm.cycleSleepTimer() }
                 Spacer(Modifier.height(18.dp))
-                Text("Won't play properly?", style = Txt.Headline)
-                Spacer(Modifier.height(10.dp))
+                SheetSection("Won't play properly?")
                 ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
                     onDismiss()
                     onOpenElsewhere()
@@ -1515,8 +1527,8 @@ private fun TracksDialog(vm: AppViewModel, exo: ExoPlayer, onOpenElsewhere: () -
 private fun TrackRow(label: String, selected: Boolean, autoFocus: Boolean, onClick: () -> Unit) {
     FocusBox(
         modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp).height(48.dp),
-        shape = RoundedCornerShape(10.dp),
-        focusedScale = 1.03f,
+        shape = RoundedCornerShape(14.dp),
+        focusedScale = 1.04f,
         color = if (selected) Color(0x26FFFFFF) else Color.Transparent,
         focusedColor = Color.White,
         autoFocus = autoFocus,

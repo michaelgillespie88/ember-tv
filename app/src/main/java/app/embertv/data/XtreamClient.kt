@@ -67,6 +67,14 @@ internal fun JSONArray.objects(): List<JSONObject> {
     return out
 }
 
+/** A YouTube video id from whatever the provider gives: the id itself or a full link. */
+internal fun youtubeId(raw: String): String {
+    val s = raw.trim()
+    if (s.isEmpty()) return ""
+    Regex("(?:v=|youtu\\.be/|embed/)([A-Za-z0-9_-]{11})").find(s)?.let { return it.groupValues[1] }
+    return if (Regex("^[A-Za-z0-9_-]{11}$").matches(s)) s else ""
+}
+
 internal fun asArray(value: Any?): JSONArray = value as? JSONArray ?: JSONArray()
 
 internal fun firstString(value: Any?): String = when (value) {
@@ -249,6 +257,8 @@ class XtreamClient(val account: Account, private val userAgent: String) {
             rating = info.str("rating"),
             backdrop = firstString(info.opt("backdrop_path")),
             poster = info.str("movie_image").ifEmpty { info.str("cover_big") },
+            trailer = youtubeId(info.str("youtube_trailer").ifEmpty { info.str("trailer") }),
+            tmdbId = info.str("tmdb_id").ifEmpty { info.str("tmdb") }.toIntOrNull() ?: 0,
         )
     }
 
@@ -307,6 +317,8 @@ class XtreamClient(val account: Account, private val userAgent: String) {
             cover = info.str("cover"),
             seasons = seasons,
             episodes = sorted,
+            trailer = youtubeId(info.str("youtube_trailer")),
+            tmdbId = info.str("tmdb").ifEmpty { info.str("tmdb_id") }.toIntOrNull() ?: 0,
         )
     }
 

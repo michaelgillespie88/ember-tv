@@ -139,6 +139,13 @@ class Repository(val client: XtreamClient) {
         return merged
     }
 
+    /** Every film already loaded (from any list), for matching suggestions. */
+    fun loadedMovies(): List<Movie> =
+        ((allMovies ?: emptyList()) + moviesByCat.values.flatten()).filter { filter(ContentType.MOVIE, it.categoryId) }
+
+    fun loadedSeries(): List<Series> =
+        ((allSeries ?: emptyList()) + seriesByCat.values.flatten()).filter { filter(ContentType.SERIES, it.categoryId) }
+
     /** Every quality of [m] that can be found: in lists already loaded, and in categories named for a quality. */
     suspend fun movieVersions(m: Movie): List<Movie> {
         val pool = ArrayList<Movie>()

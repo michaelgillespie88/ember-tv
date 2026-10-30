@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -93,6 +94,9 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
     LaunchedEffect(movie.streamId) { vm.loadVersions(movie) }
     val isFav = vm.isFavourite(ContentType.MOVIE, movie.streamId)
     val backdrop = info?.backdrop?.takeIf { it.isNotBlank() } ?: info?.poster?.takeIf { it.isNotBlank() } ?: movie.poster
+    val extras by produceState<app.embertv.data.Extras?>(null, movie.streamId, info, vm.tmdbKey) { value = vm.movieExtras(movie, info) }
+    val more by produceState<List<Movie>>(emptyList(), movie.streamId, extras) { value = vm.moreLikeThis(movie, extras) }
+    val trailer = info?.trailer?.takeIf { it.isNotBlank() } ?: extras?.trailer?.takeIf { it.isNotBlank() }
 
     PhoneDetailFrame(vm) { frame ->
     LazyColumn(
@@ -132,6 +136,10 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
                         vm.playMovie(movie, fromStart = true)
                     }
                 }
+                if (trailer != null) {
+                    Spacer(Modifier.height(10.dp))
+                    PillButton("Trailer", icon = EmberIcons.Play, modifier = Modifier.fillMaxWidth()) { vm.playTrailer(trailer) }
+                }
                 Spacer(Modifier.height(10.dp))
                 PillButton(
                     if (isFav) "In favourites" else "Add to favourites",
@@ -147,12 +155,15 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
                     Spacer(Modifier.height(14.dp))
                     Text("Director  ${info.director}", style = Txt.Caption, color = Ember.Dim)
                 }
-                if (info != null && info.cast.isNotBlank()) {
+                if (info != null && info.cast.isNotBlank() && extras?.cast.isNullOrEmpty()) {
                     Spacer(Modifier.height(4.dp))
                     Text("Starring  ${info.cast}", style = Txt.Caption, color = Ember.Dim)
                 }
+                Spacer(Modifier.height(18.dp))
             }
         }
+        item(key = "cast") { CastRow(extras?.cast.orEmpty(), 16.dp) }
+        item(key = "more") { MoreMoviesRow(vm, more, 16.dp) }
     }
     }
 }
@@ -166,6 +177,9 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
     val isFav = vm.isFavourite(ContentType.SERIES, series.seriesId)
     var chosenSeason by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(series.seriesId) { vm.loadVersions(series) }
+    val extras by produceState<app.embertv.data.Extras?>(null, series.seriesId, info, vm.tmdbKey) { value = vm.seriesExtras(series, info) }
+    val more by produceState<List<Series>>(emptyList(), series.seriesId, extras) { value = vm.moreLikeThis(series, extras) }
+    val trailer = info?.trailer?.takeIf { it.isNotBlank() } ?: extras?.trailer?.takeIf { it.isNotBlank() }
 
     val start = info?.let { startingEpisode(it, lastEpisodeId) }
     val season = chosenSeason ?: start?.season ?: info?.seasons?.firstOrNull()
@@ -207,6 +221,10 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
                         val eps = info.episodes[start.season].orEmpty()
                         vm.playEpisodes(series, eps, eps.indexOfFirst { it.id == start.id }, fromStart = !resumed)
                     }
+                    Spacer(Modifier.height(10.dp))
+                }
+                if (trailer != null) {
+                    PillButton("Trailer", icon = EmberIcons.Play, modifier = Modifier.fillMaxWidth()) { vm.playTrailer(trailer) }
                     Spacer(Modifier.height(10.dp))
                 }
                 PillButton(
@@ -262,6 +280,8 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
                 onClick = { vm.playEpisodes(series, episodes, index, fromStart = false) },
             )
         }
+        item(key = "cast") { CastRow(extras?.cast.orEmpty(), 16.dp) }
+        item(key = "more") { MoreSeriesRow(vm, more, 16.dp) }
         item { Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars)) }
     }
     }

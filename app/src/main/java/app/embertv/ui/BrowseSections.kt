@@ -254,6 +254,8 @@ fun SettingsSection(vm: AppViewModel) {
     var managingCategories by remember { mutableStateOf(false) }
     var pickingTeams by remember { mutableStateOf(false) }
     var choosingPlayer by remember { mutableStateOf(false) }
+    var editingTmdb by remember { mutableStateOf(false) }
+    var tmdbDraft by remember { mutableStateOf(vm.tmdbKey) }
     val kids = vm.profile?.kids == true
     val account = vm.account
     val info = vm.accountInfo
@@ -305,6 +307,12 @@ fun SettingsSection(vm: AppViewModel) {
                 "Goal alerts and their next match on Home",
                 focusKey = "set:teams",
             ) { pickingTeams = true }
+            if (!kids) SettingRow(
+                "Live sport on Home",
+                if (vm.sportOnHome) "On" else "Off",
+                "Football on now across your channels, with the score",
+                focusKey = "set:sport",
+            ) { vm.toggleSportOnHome() }
             val p = vm.profile
             if (!kids && p != null) {
                 val hidden = vm.categoryRules(p).keys.size
@@ -403,6 +411,15 @@ fun SettingsSection(vm: AppViewModel) {
                     "Movie and series artwork when the remote is left alone",
                     focusKey = "set:screensaver",
                 ) { vm.cycleScreensaver() }
+                if (!kids) {
+                    val phones = vm.pairedPhoneCount
+                    SettingRow(
+                        "Phones that can control this TV",
+                        if (phones == 0) "None yet" else "$phones paired · select to unpair all",
+                        "On your phone, tap the TV button on Home. Address if it's needed: ${vm.tvLinkAddress ?: "starting…"}",
+                        focusKey = "set:phones",
+                    ) { vm.forgetPairedPhones() }
+                }
             }
 
             // ---- Connection (grown-ups only) ----
@@ -424,6 +441,12 @@ fun SettingsSection(vm: AppViewModel) {
 
             // ---- App ----
             SettingsHeader("App")
+            if (!kids) SettingRow(
+                "Film details (TMDB)",
+                if (vm.tmdbKey.isBlank()) "Off" else "Connected",
+                "Cast photos, trailers and suggestions. Paste a free key from themoviedb.org",
+                focusKey = "set:tmdb",
+            ) { editingTmdb = true }
             SettingRow(
                 "Check for updates",
                 "Version ${app.embertv.BuildConfig.VERSION_NAME}",
@@ -463,6 +486,18 @@ fun SettingsSection(vm: AppViewModel) {
     }
 
     if (pickingTeams) TeamPicker(vm) { pickingTeams = false }
+    if (editingTmdb) {
+        TextEntryDialog(
+            title = "TMDB API key or Read Access Token (themoviedb.org → Settings → API). Leave empty to turn off.",
+            value = tmdbDraft,
+            onValueChange = { tmdbDraft = it.trim() },
+            placeholder = "Paste your key",
+            onDone = {
+                editingTmdb = false
+                if (tmdbDraft != vm.tmdbKey) vm.saveTmdbKey(tmdbDraft)
+            },
+        )
+    }
     if (choosingPlayer) {
         PlayerPickerDialog(
             vm = vm,

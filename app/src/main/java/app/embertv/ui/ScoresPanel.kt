@@ -51,7 +51,7 @@ import kotlinx.coroutines.delay
 
 /** "All" plus each competition. All shows the UK and big European leagues together. */
 private val ALL_LEAGUES = League("all", "All")
-private val ALL_SET = LEAGUES.take(8) + LEAGUES.filter { it.code in setOf("esp.1", "ita.1", "ger.1", "fra.1") }
+private val ALL_SET = app.embertv.data.POPULAR_LEAGUES
 
 private fun involves(m: Match, title: String?): Boolean {
     if (title.isNullOrBlank()) return false

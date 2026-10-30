@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -360,11 +362,144 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
                         } else null,
                     ) { vm.playFound(hits.take(40), i) }
                 }
-                item(key = "close") {
+                item(key = "pin") {
                     Spacer(Modifier.height(6.dp))
+                    val pinned = vm.pinnedMatch?.id == match.id
+                    SheetOption(
+                        if (pinned) "Remove score from the corner" else "Pin score to the corner",
+                        focusKey = "find:pin",
+                        leading = { dark -> Icon(EmberIcons.Football, contentDescription = null, tint = if (dark) Color.Black else Ember.Accent, modifier = Modifier.size(20.dp)) },
+                    ) {
+                        if (pinned) vm.unpinMatch() else vm.pinMatch(match)
+                        close()
+                    }
+                }
+                item(key = "close") {
                     SheetOption("Close", focusKey = "find:close", autoFocus = isTv && done && hits.isEmpty(), onClick = close)
                 }
             }
         }
+    }
+}
+
+// ---------------- Live Sport Now ----------------
+
+/** A match on now, with where it's showing. OK plays it; holding OK pins its score to the corner. */
+@Composable
+fun SportCard(item: AppViewModel.LiveSport, width: Dp, focusKey: String, onClick: () -> Unit, onLongClick: () -> Unit) {
+    val m = item.match
+    val live = m.state == MatchState.LIVE
+    FocusBox(
+        modifier = Modifier.width(width).height(150.dp),
+        focusKey = focusKey,
+        shape = RoundedCornerShape(16.dp),
+        focusedScale = 1.06f,
+        color = if (live) Color(0x24FF5A50) else Ember.Card,
+        focusedColor = Color.White,
+        onClick = onClick,
+        onLongClick = onLongClick,
+    ) { focused ->
+        val text = if (focused) Color.Black else Ember.Text
+        val dim = if (focused) Color(0xFF55555C) else Ember.Faint
+        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(m.league.name, style = Txt.Caption, color = dim, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (live) {
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(Ember.Live))
+                    Spacer(Modifier.width(5.dp))
+                    Text(m.status, style = Txt.Caption, color = if (focused) Color.Black else Ember.Live)
+                } else {
+                    Text("Kick-off ${formatClock(m.kickoff / 1000)}", style = Txt.Caption, color = if (focused) Color.Black else Ember.Accent)
+                }
+            }
+            CardTeam(m.home, m.state, text)
+            CardTeam(m.away, m.state, text)
+            val channel = item.hits.firstOrNull()?.channel
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(if (channel != null) EmberIcons.Play else EmberIcons.Search, contentDescription = null, tint = if (focused) Color.Black else Ember.Accent, modifier = Modifier.size(13.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    channel?.let { "On ${it.name}" } ?: "Find the channel",
+                    style = Txt.Caption,
+                    color = if (focused) Color.Black else Ember.Accent,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/** "Watch them together": the live matches side by side in multi-view. */
+@Composable
+fun SportTogetherCard(count: Int, width: Dp, onClick: () -> Unit) {
+    FocusBox(
+        modifier = Modifier.width(width).height(150.dp),
+        focusKey = "home:sport:together",
+        shape = RoundedCornerShape(16.dp),
+        focusedScale = 1.06f,
+        color = Ember.Card,
+        focusedColor = Color.White,
+        onClick = onClick,
+    ) { focused ->
+        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(EmberIcons.MultiView, contentDescription = null, tint = if (focused) Color.Black else Ember.Accent, modifier = Modifier.size(34.dp))
+            Spacer(Modifier.height(10.dp))
+            Text("Watch $count together", style = Txt.Headline, color = if (focused) Color.Black else Ember.Text, textAlign = TextAlign.Center)
+            Text("Multi-view", style = Txt.Caption, color = if (focused) Color(0xFF55555C) else Ember.Faint)
+        }
+    }
+}
+
+// ---------------- Score bug ----------------
+
+/** A pinned match's score in the top corner, over whatever's on. It glows when the score changes. */
+@Composable
+fun BoxScope.ScoreBug(vm: AppViewModel) {
+    val m = vm.pinnedMatch ?: return
+    val isTv = LocalIsTv.current
+    var flashing by remember { mutableStateOf(false) }
+    val changedAt = vm.pinnedChangedAt
+    LaunchedEffect(changedAt) {
+        if (changedAt > 0 && System.currentTimeMillis() - changedAt < 10_000) {
+            flashing = true
+            delay(8_000)
+            flashing = false
+        }
+    }
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        Modifier
+            .align(Alignment.TopStart)
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .padding(start = if (isTv) 40.dp else 12.dp, top = if (isTv) 26.dp else 8.dp)
+            .glassSurface(shape, if (flashing) Ember.Accent.copy(alpha = 0.55f) else Color(0xB3101014))
+            .border(1.dp, if (flashing) Ember.Accent else Color(0x33FFFFFF), shape)
+            .then(if (!isTv) Modifier.clickable { vm.unpinMatch() } else Modifier)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(20.dp)) { NetImage(m.home.logo, Modifier.fillMaxSize(), ContentScale.Fit) }
+        Spacer(Modifier.width(7.dp))
+        Text(m.home.shortName.take(3).uppercase(), style = Txt.Label.copy(fontWeight = FontWeight.SemiBold))
+        Spacer(Modifier.width(10.dp))
+        Text(
+            if (m.state == MatchState.UPCOMING) "v" else "${m.home.score}–${m.away.score}",
+            style = Txt.Headline.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(m.away.shortName.take(3).uppercase(), style = Txt.Label.copy(fontWeight = FontWeight.SemiBold))
+        Spacer(Modifier.width(7.dp))
+        Box(Modifier.size(20.dp)) { NetImage(m.away.logo, Modifier.fillMaxSize(), ContentScale.Fit) }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            when (m.state) {
+                MatchState.LIVE -> m.status
+                MatchState.FINISHED -> "FT"
+                MatchState.UPCOMING -> formatClock(m.kickoff / 1000)
+            },
+            style = Txt.Caption,
+            color = if (m.state == MatchState.LIVE) Ember.Live else Ember.Dim,
+        )
     }
 }

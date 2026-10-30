@@ -49,6 +49,7 @@ import app.embertv.data.Category
 import app.embertv.data.Channel
 import app.embertv.data.ContentType
 import app.embertv.data.HistoryEntry
+import app.embertv.data.MatchState
 import app.embertv.data.Movie
 import app.embertv.data.Repository
 import app.embertv.data.Series
@@ -205,6 +206,33 @@ private fun LazyListScope.homeRows(
     gap: Dp,
 ) {
     val rowPadding = PaddingValues(horizontal = edge, vertical = 12.dp)
+    val sport = vm.liveSport
+    if (sport.isNotEmpty()) {
+        item(key = "row-sport") {
+            HomeRow("Live Sport Now", edge) {
+                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    val watchable = sport.filter { it.hits.isNotEmpty() && it.match.state == MatchState.LIVE }
+                    if (watchable.size >= 2) {
+                        item(key = "together") {
+                            SportTogetherCard(minOf(4, watchable.size), continueWidth) {
+                                val picks = watchable.take(4).map { it.hits.first().channel }
+                                vm.push(Screen.MultiView(picks, watchable.flatMap { s -> s.hits.map { it.channel } }))
+                            }
+                        }
+                    }
+                    items(sport, key = { it.match.id }) { s ->
+                        SportCard(
+                            s,
+                            continueWidth,
+                            "home:sport:${s.match.id}",
+                            onClick = { if (s.hits.isNotEmpty()) vm.playFound(s.hits, 0) else vm.findingMatch = s.match },
+                            onLongClick = { vm.pinMatch(s.match) },
+                        )
+                    }
+                }
+            }
+        }
+    }
     val matches = vm.teamMatches.take(8)
     if (matches.isNotEmpty()) {
         item(key = "row-teams") {
@@ -413,6 +441,11 @@ private fun BoxScope.HeroDots(count: Int, index: Int, modifier: Modifier = Modif
 
 @Composable
 fun HomeSection(vm: AppViewModel) {
+    // Live Sport Now keeps itself up to date while Home is on screen.
+    androidx.compose.runtime.DisposableEffect(vm.profile?.id) {
+        vm.watchLiveSport(true)
+        onDispose { vm.watchLiveSport(false) }
+    }
     val repo = vm.repo ?: return
     val feedState by rememberHomeFeed(vm, repo)
     when (val f = feedState) {
@@ -498,6 +531,11 @@ private fun TvHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
 
 @Composable
 fun PhoneHomeTab(vm: AppViewModel) {
+    // Live Sport Now keeps itself up to date while Home is on screen.
+    androidx.compose.runtime.DisposableEffect(vm.profile?.id) {
+        vm.watchLiveSport(true)
+        onDispose { vm.watchLiveSport(false) }
+    }
     val repo = vm.repo ?: return
     val feedState by rememberHomeFeed(vm, repo)
     val pad = LocalContentPadding.current

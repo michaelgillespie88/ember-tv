@@ -287,3 +287,14 @@ class ChipsSpec(
 )
 
 val LocalHeaderChips = compositionLocalOf<MutableState<ChipsSpec?>?> { null }
+
+/** A small grey capitals label over a group of choices, like tvOS settings panels. */
+@Composable
+fun SheetSection(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text.uppercase(),
+        style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.1.sp),
+        color = Ember.Dim,
+        modifier = modifier.padding(start = 4.dp, bottom = 10.dp),
+    )
+}

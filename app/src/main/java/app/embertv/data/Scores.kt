@@ -34,6 +34,9 @@ val LEAGUES = listOf(
     League("fra.1", "Ligue 1"),
 )
 
+/** The UK competitions plus the big European leagues: what "All" covers in scores and Live Sport Now. */
+val POPULAR_LEAGUES: List<League> = LEAGUES.take(8) + LEAGUES.filter { it.code in setOf("esp.1", "ita.1", "ger.1", "fra.1") }
+
 /** The leagues (not cups) teams can be followed from. */
 val TEAM_LEAGUES = LEAGUES.filter { it.code in setOf("eng.1", "eng.2", "eng.3", "eng.4", "sco.1", "esp.1", "ita.1", "ger.1", "fra.1") }
 

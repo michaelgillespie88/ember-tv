@@ -385,7 +385,7 @@ private fun ProfileEditor(vm: AppViewModel, initial: Profile?, onDone: () -> Uni
         Column(
             Modifier
                 .width(if (isTv) 560.dp else 520.dp)
-                .clip(RoundedCornerShape(22.dp))
+                .clip(RoundedCornerShape(28.dp))
                 .background(dialogPanelColor())
                 .verticalScroll(rememberScrollState())
                 .padding(if (isTv) 26.dp else 22.dp),
@@ -518,36 +518,26 @@ private fun ProfileEditor(vm: AppViewModel, initial: Profile?, onDone: () -> Uni
             DialogBackdropBlur()
             Column(
                 Modifier
-                    .width(480.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .width(if (isTv) 520.dp else 440.dp)
+                    .clip(RoundedCornerShape(28.dp))
                     .background(dialogPanelColor())
-                    .padding(if (isTv) 30.dp else 22.dp)
+                    .padding(if (isTv) 8.dp else 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("Delete ${initial.name}?", style = Txt.Title)
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "Their favourites, Continue Watching and resume points will be removed from this device.",
-                    style = Txt.Body,
-                    color = Ember.Dim,
+                ProfileAvatar(initial, 64.dp)
+                Spacer(Modifier.height(14.dp))
+                SheetTitle(
+                    "Delete ${initial.name}?",
+                    subtitle = "Their favourites, Up Next and resume points will be removed from this device.",
                 )
-                Spacer(Modifier.height(22.dp))
-                if (isTv) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        TvButton("Cancel", autoFocus = true, onClick = { confirmDelete = false })
-                        TvButton("Delete", onClick = {
-                            confirmDelete = false
-                            vm.deleteProfile(initial)
-                            onDone()
-                        })
-                    }
-                } else {
-                    PillButton("Delete", primary = true, modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.height(24.dp))
+                Column(Modifier.width(if (isTv) 340.dp else 400.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SheetOption("Cancel", focusKey = "profile:keep", autoFocus = isTv) { confirmDelete = false }
+                    SheetOption("Delete profile", focusKey = "profile:delete", primary = true) {
                         confirmDelete = false
                         vm.deleteProfile(initial)
                         onDone()
                     }
-                    Spacer(Modifier.height(10.dp))
-                    PillButton("Cancel", modifier = Modifier.fillMaxWidth()) { confirmDelete = false }
                 }
             }
         }

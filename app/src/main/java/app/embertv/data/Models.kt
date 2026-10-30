@@ -73,6 +73,10 @@ data class MovieInfo(
     val rating: String,
     val backdrop: String,
     val poster: String,
+    /** YouTube video id of the trailer, when the provider has one. */
+    val trailer: String = "",
+    /** The film's id on TMDB, when the provider says. */
+    val tmdbId: Int = 0,
 )
 
 data class Episode(
@@ -96,6 +100,8 @@ data class SeriesInfo(
     val cover: String,
     val seasons: List<Int>,
     val episodes: Map<Int, List<Episode>>,
+    val trailer: String = "",
+    val tmdbId: Int = 0,
 )
 
 /** A guide entry. Times are epoch seconds. */

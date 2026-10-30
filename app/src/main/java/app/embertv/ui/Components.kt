@@ -404,7 +404,7 @@ fun TvButton(
                 Text(icon, fontSize = 15.sp, color = if (focused) Color.Black else Ember.Text)
                 Spacer(Modifier.width(10.dp))
             }
-            Text(text, style = Txt.Label.copy(fontSize = 16.sp), color = if (focused) Color.Black else Ember.Text)
+            Text(text, style = Txt.Label.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold), color = if (focused) Color.Black else Ember.Text)
         }
     }
 }

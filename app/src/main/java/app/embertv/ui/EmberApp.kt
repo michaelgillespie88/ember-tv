@@ -72,6 +72,7 @@ fun EmberApp(vm: AppViewModel, isTv: Boolean) {
                         is Screen.PlayLive -> LivePlayerScreen(vm, screen.channels, screen.index)
                         is Screen.PlayVod -> VodPlayerScreen(vm, screen.items, screen.index, screen.startMs)
                         is Screen.Catchup -> CatchupScreen(vm, screen.channel)
+                        is Screen.MultiView -> MultiViewScreen(vm, screen.channels, screen.pool)
                     }
                 }
 
@@ -122,6 +123,18 @@ fun EmberApp(vm: AppViewModel, isTv: Boolean) {
                     ) { pkg -> vm.launchElsewhere(pending, pkg) }
                 }
 
+                // Play on TV: the code on the TV, and the phone's picker, code entry and remote
+                if (isTv) {
+                    TvPairingDialog(vm)
+                } else {
+                    if (vm.showCastSheet) CastSheet(vm)
+                    vm.pairingWith?.let { PairCodeDialog(vm, it) }
+                    if (vm.showRemote) RemoteScreen(vm)
+                }
+
+                // A pinned live score in the corner
+                if (vm.repo != null && !vm.pickingProfile) ScoreBug(vm)
+
                 // Followed teams: goal alerts, and "Where's it on?"
                 if (vm.repo != null && !vm.pickingProfile) {
                     TeamAlertBanner(vm)
@@ -154,8 +167,7 @@ private fun BoxScope.NoticeOverlay(vm: AppViewModel) {
     ) {
         Box(
             Modifier
-                .clip(RoundedCornerShape(22.dp))
-                .background(Color(0xEE24242B))
+                .glassSurface(RoundedCornerShape(22.dp), Color(0xE624242B))
                 .padding(horizontal = 22.dp, vertical = 12.dp)
         ) {
             Text(lastText[0], style = Txt.Label, color = Ember.Text)

@@ -170,6 +170,13 @@ fun PhoneHome(vm: AppViewModel) {
                         modifier = Modifier.weight(1f),
                     )
                 }
+                if (isHome || vm.castTarget != null) {
+                    IconCircleButton(
+                        if (vm.castTarget != null) EmberIcons.Remote else EmberIcons.Tv,
+                        if (vm.castTarget != null) "Playing on ${vm.castTarget?.tv?.name}" else "Play on TV",
+                        tint = if (vm.castTarget != null) Ember.Accent else Ember.Text,
+                    ) { vm.showCastSheet = true }
+                }
                 if (tab == TAB_LIVE) IconCircleButton(EmberIcons.Guide, "TV guide") { openOverlayTab(TAB_GUIDE) }
                 if (tab != TAB_SEARCH) IconCircleButton(EmberIcons.Search, "Search") { openOverlayTab(TAB_SEARCH) }
                 if (tab != TAB_SETTINGS) IconCircleButton(EmberIcons.Settings, "Settings") { openOverlayTab(TAB_SETTINGS) }

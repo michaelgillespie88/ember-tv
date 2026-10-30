@@ -26,6 +26,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -144,6 +147,9 @@ fun SeriesDetailScreen(vm: AppViewModel, series: Series) {
     var chosenSeason by remember { mutableStateOf<Int?>(null) }
     var focusedEpisode by remember { mutableStateOf<Episode?>(null) }
     LaunchedEffect(series.seriesId) { vm.loadVersions(series) }
+    val extras by produceState<app.embertv.data.Extras?>(null, series.seriesId, info, vm.tmdbKey) { value = vm.seriesExtras(series, info) }
+    val more by produceState<List<Series>>(emptyList(), series.seriesId, extras) { value = vm.moreLikeThis(series, extras) }
+    val trailer = info?.trailer?.takeIf { it.isNotBlank() } ?: extras?.trailer?.takeIf { it.isNotBlank() }
 
     val start = info?.let { startingEpisode(it, lastEpisodeId) }
     val season = chosenSeason ?: start?.season ?: info?.seasons?.firstOrNull()
@@ -152,7 +158,7 @@ fun SeriesDetailScreen(vm: AppViewModel, series: Series) {
 
     Box(Modifier.fillMaxSize().background(Ember.Bg)) {
         Backdrop(backdrop)
-        Column(Modifier.fillMaxSize().padding(start = 64.dp, top = 32.dp, bottom = 16.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 64.dp, top = 32.dp, bottom = 16.dp)) {
             Text(series.name, style = Txt.Hero, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(end = 64.dp))
             Spacer(Modifier.height(8.dp))
             val meta = listOfNotNull(
@@ -191,6 +197,9 @@ fun SeriesDetailScreen(vm: AppViewModel, series: Series) {
                             vm.playEpisodes(series, eps, eps.indexOfFirst { it.id == start.id }, fromStart = !resumed)
                         },
                     )
+                }
+                if (trailer != null) {
+                    TvButton("Trailer", icon = "▷", focusKey = "detail:trailer", onClick = { vm.playTrailer(trailer) })
                 }
                 TvButton(
                     if (isFav) "In favourites" else "Favourite",
@@ -238,6 +247,10 @@ fun SeriesDetailScreen(vm: AppViewModel, series: Series) {
                     }
                 }
             }
+            Spacer(Modifier.height(18.dp))
+            Box(Modifier.padding(start = 0.dp)) { CastRow(extras?.cast.orEmpty(), 0.dp) }
+            MoreSeriesRow(vm, more, 0.dp)
+            Spacer(Modifier.height(32.dp))
         }
     }
 }

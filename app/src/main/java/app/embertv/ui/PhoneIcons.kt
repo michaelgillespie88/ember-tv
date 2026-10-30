@@ -179,6 +179,29 @@ object EmberIcons {
         moveTo(4f, 7f); lineTo(4f, 12f); lineTo(9f, 12f)
     }
 
+    /** Multi-view: four pictures. */
+    val MultiView = outline("multiview") {
+        moveTo(3f, 5f); lineTo(11f, 5f); lineTo(11f, 11f); lineTo(3f, 11f); close()
+        moveTo(13f, 5f); lineTo(21f, 5f); lineTo(21f, 11f); lineTo(13f, 11f); close()
+        moveTo(3f, 13f); lineTo(11f, 13f); lineTo(11f, 19f); lineTo(3f, 19f); close()
+        moveTo(13f, 13f); lineTo(21f, 13f); lineTo(21f, 19f); lineTo(13f, 19f); close()
+    }
+
+    /** TV: a screen on a stand (Play on TV). */
+    val Tv = outline("tv") {
+        moveTo(3f, 5f); lineTo(21f, 5f); lineTo(21f, 16f); lineTo(3f, 16f); close()
+        moveTo(9f, 20f); lineTo(15f, 20f)
+        moveTo(12f, 16f); lineTo(12f, 20f)
+    }
+
+    /** Remote control. */
+    val Remote = outline("remote") {
+        moveTo(8f, 2.5f); lineTo(16f, 2.5f); lineTo(16f, 21.5f); lineTo(8f, 21.5f); close()
+        circle(12f, 8f, 2f)
+        moveTo(10.5f, 13f); lineTo(13.5f, 13f)
+        moveTo(10.5f, 16f); lineTo(13.5f, 16f)
+    }
+
     /** Open elsewhere: a box with an arrow leaving its corner. */
     val OpenExternal = outline("open-external") {
         moveTo(11f, 5f); lineTo(5f, 5f); lineTo(5f, 19f); lineTo(19f, 19f); lineTo(19f, 13f)

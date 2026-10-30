@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -21,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -146,11 +148,17 @@ fun MovieDetailScreen(vm: AppViewModel, movie: Movie) {
     val isFav = vm.isFavourite(ContentType.MOVIE, movie.streamId)
     val backdrop = info?.backdrop?.takeIf { it.isNotBlank() } ?: info?.poster?.takeIf { it.isNotBlank() } ?: movie.poster
     val poster = info?.poster?.takeIf { it.isNotBlank() } ?: movie.poster
+    // Cast photos, trailer and suggestions (TMDB when set up), then more like it from the library.
+    val extras by produceState<app.embertv.data.Extras?>(null, movie.streamId, info, vm.tmdbKey) { value = vm.movieExtras(movie, info) }
+    val more by produceState<List<Movie>>(emptyList(), movie.streamId, extras) { value = vm.moreLikeThis(movie, extras) }
+    val trailer = info?.trailer?.takeIf { it.isNotBlank() } ?: extras?.trailer?.takeIf { it.isNotBlank() }
 
     Box(Modifier.fillMaxSize().background(Ember.Bg)) {
         Backdrop(backdrop)
+        androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize()) {
+        item(key = "hero") {
         Row(
-            Modifier.fillMaxSize().padding(horizontal = 64.dp, vertical = 48.dp),
+            Modifier.fillParentMaxHeight().fillMaxWidth().padding(horizontal = 64.dp, vertical = 48.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -222,12 +230,19 @@ fun MovieDetailScreen(vm: AppViewModel, movie: Movie) {
                             onClick = { vm.playMovie(movie, fromStart = true) },
                         )
                     }
+                    if (trailer != null) {
+                        TvButton("Trailer", icon = "▷", focusKey = "detail:trailer", onClick = { vm.playTrailer(trailer) })
+                    }
                     TvButton(
                         if (isFav) "In favourites" else "Favourite",
                         icon = if (isFav) "★" else "☆",
                         focusKey = "detail:fav",
                         onClick = { vm.toggleFavourite(vm.favouriteOf(movie)) },
                     )
+                }
+                if (extras?.cast?.isNotEmpty() == true || more.isNotEmpty()) {
+                    Spacer(Modifier.height(18.dp))
+                    Text("▼  Cast and more like this", style = Txt.Caption, color = Ember.Faint)
                 }
             }
             Spacer(Modifier.width(48.dp))
@@ -240,6 +255,11 @@ fun MovieDetailScreen(vm: AppViewModel, movie: Movie) {
                 Placeholder(movie.name, Modifier.fillMaxSize(), fontSizeSp = 34)
                 NetImage(poster, Modifier.fillMaxSize())
             }
+        }
+        }
+        item(key = "cast") { CastRow(extras?.cast.orEmpty(), 64.dp) }
+        item(key = "more") { MoreMoviesRow(vm, more, 64.dp) }
+        item(key = "end") { Spacer(Modifier.height(48.dp)) }
         }
     }
 }
