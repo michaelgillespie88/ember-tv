@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.os.Build
 import android.view.ViewGroup
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -127,6 +128,93 @@ private fun PhoneFullscreen() {
 }
 
 private val ControlBg = Color(0x47000000)
+
+/** What's actually on screen: picture height and the measured frame rate. */
+private data class VideoStats(val width: Int, val height: Int, val fps: Float?) {
+    val label: String
+        get() {
+            val res = when {
+                height >= 2000 -> "4K"
+                height > 0 -> "${height}p"
+                else -> ""
+            }
+            val rate = fps?.let { f ->
+                // Show the familiar broadcast rates as people know them.
+                val known = listOf(23.976f to "23.98", 29.97f to "29.97", 59.94f to "59.94")
+                    .firstOrNull { (v, _) -> kotlin.math.abs(f - v) < 0.05f }?.second
+                (known ?: Math.round(f).toString()) + " fps"
+            }
+            return listOf(res, rate ?: "").filter { it.isNotEmpty() }.joinToString(" · ")
+        }
+}
+
+/**
+ * Measures the frame rate by counting decoded frames each second (rendered, skipped and dropped,
+ * so it's the station's rate rather than what this device managed), averaged over a few seconds.
+ * Falls back to the rate the stream declares until there's a measurement.
+ */
+@Composable
+private fun rememberVideoStats(exo: ExoPlayer, key: Any): VideoStats? {
+    val stats by produceState<VideoStats?>(null, exo, key) {
+        value = null
+        var lastFrames = -1L
+        var lastTime = 0L
+        val samples = ArrayDeque<Float>()
+        while (true) {
+            delay(1_000)
+            val format = exo.videoFormat
+            val counters = exo.videoDecoderCounters
+            val now = android.os.SystemClock.elapsedRealtime()
+            var measured: Float? = null
+            if (counters != null && exo.isPlaying) {
+                counters.ensureUpdated()
+                val frames = counters.renderedOutputBufferCount.toLong() + counters.skippedOutputBufferCount + counters.droppedBufferCount
+                if (lastFrames in 0..frames && now > lastTime) {
+                    samples.addLast((frames - lastFrames) * 1000f / (now - lastTime))
+                    while (samples.size > 4) samples.removeFirst()
+                    // The first second after starting or a stall is unreliable.
+                    if (samples.size >= 2) measured = samples.drop(1).average().toFloat()
+                } else {
+                    samples.clear()
+                }
+                lastFrames = frames
+                lastTime = now
+            } else {
+                lastFrames = -1L
+                samples.clear()
+            }
+            val declared = format?.frameRate?.takeIf { it > 0f }
+            val size = exo.videoSize
+            val w = if (size.width > 0) size.width else format?.width ?: 0
+            val h = if (size.height > 0) size.height else format?.height ?: 0
+            if (h > 0 || measured != null || declared != null) {
+                value = VideoStats(w, h, measured?.takeIf { it > 1f } ?: declared ?: value?.fps)
+            }
+        }
+    }
+    return stats
+}
+
+/** While a player is open on a phone, going home shrinks it into picture-in-picture (Android 12+). */
+@Composable
+private fun AutoPip() {
+    if (LocalIsTv.current) return
+    val activity = LocalContext.current.findActivity() ?: return
+    DisposableEffect(activity) {
+        val ok = app.embertv.Pip.supported(activity) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        if (ok) runCatching { activity.setPictureInPictureParams(app.embertv.Pip.params(autoEnter = true)) }
+        onDispose {
+            if (ok) runCatching { activity.setPictureInPictureParams(app.embertv.Pip.params(autoEnter = false)) }
+        }
+    }
+}
+
+@Composable
+private fun rememberPipAction(): (() -> Unit)? {
+    val activity = LocalContext.current.findActivity() ?: return null
+    if (LocalIsTv.current || !remember(activity) { app.embertv.Pip.supported(activity) }) return null
+    return { app.embertv.Pip.enter(activity) }
+}
 
 @Composable
 private fun rememberExoPlayer(
@@ -254,6 +342,8 @@ private fun BoxScope.ErrorCard(message: String, hint: String) {
 
 @Composable
 fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int) {
+    AutoPip()
+    val enterPip = rememberPipAction()
     if (vm.repo == null || channels.isEmpty()) return
     val isTv = LocalIsTv.current
     PhoneFullscreen()
@@ -278,6 +368,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     var okLong by remember { mutableStateOf(false) }
 
     val channel = channels[index]
+    val videoStats = rememberVideoStats(exo, channel.streamId)
     // So coming back from catch-up returns to this channel, not the one the player opened on.
     LaunchedEffect(index) { vm.noteLiveIndex(index) }
 
@@ -456,6 +547,8 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             }
     ) {
         VideoSurface(exo)
+        // In picture-in-picture the window is tiny: just the picture.
+        if (vm.inPip) return@Box
 
         val err = error
         if (err != null) {
@@ -486,6 +579,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             LiveInfoBar(
                 vm = vm,
                 channel = channel,
+                stats = videoStats,
                 isFavourite = vm.isFavourite(ContentType.LIVE, channel.streamId),
                 format = if (alternate) (if (vm.streamFormat == "m3u8") "TS" else "HLS") else (if (vm.streamFormat == "m3u8") "HLS" else "TS"),
                 isTv = isTv,
@@ -516,6 +610,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 ) {
                     IconCircleButton(EmberIcons.Back, "Back", background = ControlBg, glass = true) { vm.pop() }
                     Spacer(Modifier.weight(1f))
+                    if (enterPip != null) IconCircleButton(EmberIcons.Pip, "Picture in picture", background = ControlBg, glass = true) { enterPip() }
                     IconCircleButton(EmberIcons.Football, "Live scores", background = ControlBg, glass = true) { scoresOpen = true }
                     IconCircleButton(EmberIcons.Restart, "Previous channel", background = ControlBg, glass = true) { previousChannel() }
                     IconCircleButton(EmberIcons.ChevronUp, "Channel up", background = ControlBg, glass = true) { zap(upStep) }
@@ -571,7 +666,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
 }
 
 @Composable
-private fun LiveInfoBar(vm: AppViewModel, channel: Channel, isFavourite: Boolean, format: String, isTv: Boolean) {
+private fun LiveInfoBar(vm: AppViewModel, channel: Channel, stats: VideoStats?, isFavourite: Boolean, format: String, isTv: Boolean) {
     val repo = vm.repo ?: return
     val now = LocalNow.current
     val programmes = rememberProgrammes(repo, channel.streamId)
@@ -614,6 +709,18 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, isFavourite: Boolean
                         if (isFavourite) {
                             Spacer(Modifier.width(10.dp))
                             Text("★", color = Ember.Accent, fontSize = 20.sp)
+                        }
+                        val label = stats?.label.orEmpty()
+                        if (label.isNotEmpty()) {
+                            Spacer(Modifier.width(12.dp))
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0x33FFFFFF))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Text(label, style = Txt.Caption, color = Ember.Text, maxLines = 1)
+                            }
                         }
                     }
                     Spacer(Modifier.height(8.dp))
@@ -833,6 +940,8 @@ private fun trackOptions(exo: ExoPlayer, type: Int): List<TrackOption> {
 
 @Composable
 fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, startMs: Long) {
+    AutoPip()
+    val enterPip = rememberPipAction()
     if (items.isEmpty()) return
     val isTv = LocalIsTv.current
     PhoneFullscreen()
@@ -1042,6 +1151,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
             }
     ) {
         VideoSurface(exo)
+        if (vm.inPip) return@Box
 
         val err = error
         if (err != null) {
@@ -1095,6 +1205,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                     onScrubDone = { commitScrub() },
                     onTracks = { showTracks = true },
                     onNext = { if (exo.hasNextMediaItem()) exo.seekToNextMediaItem() },
+                    onPip = enterPip,
                 )
             }
         }
@@ -1182,6 +1293,7 @@ private fun VodTouchOverlay(
     onScrubDone: () -> Unit,
     onTracks: () -> Unit,
     onNext: () -> Unit,
+    onPip: (() -> Unit)? = null,
 ) {
     Box(Modifier.fillMaxSize().background(Color(0x59000000))) {
         Row(
@@ -1201,6 +1313,10 @@ private fun VodTouchOverlay(
                 }
             }
             Spacer(Modifier.width(10.dp))
+            if (onPip != null) {
+                IconCircleButton(EmberIcons.Pip, "Picture in picture", background = ControlBg, glass = true, onClick = onPip)
+                Spacer(Modifier.width(8.dp))
+            }
             IconCircleButton(EmberIcons.Subtitles, "Audio and subtitles", background = ControlBg, glass = true, onClick = onTracks)
         }
 

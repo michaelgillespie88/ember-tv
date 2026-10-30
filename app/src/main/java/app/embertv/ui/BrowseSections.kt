@@ -323,6 +323,14 @@ fun SettingsSection(vm: AppViewModel) {
                     focusKey = "set:zap",
                 ) { vm.toggleInvertZap() }
             }
+            if (isTv) {
+                SettingRow(
+                    "Screensaver",
+                    if (vm.screensaverMinutes == 0) "Off" else "After ${vm.screensaverMinutes} min",
+                    "Movie and series artwork when the remote is left alone",
+                    focusKey = "set:screensaver",
+                ) { vm.cycleScreensaver() }
+            }
             val sleepLeft = vm.sleepMinutesLeft()
             SettingRow(
                 "Sleep timer",

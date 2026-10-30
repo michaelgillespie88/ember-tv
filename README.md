@@ -17,6 +17,9 @@ The same app gives TVs a remote-friendly layout and phones a touch layout.
 - **Previous channel and Recently Watched** – ⏪ flips back, and Home shows the channels you watched last
 - **Sleep timer, subtitles and preferred audio** – in Settings and in the player
 - **Built-in updates** – the app tells you when a new version is out and installs it itself
+- **Picture quality and frame rate** – the live info bar shows the resolution and the measured frame rate, e.g. 1080p · 50 fps
+- **Picture-in-picture (phones)** – press Home while watching, or the picture-in-picture button, to keep watching in a small window
+- **Screensaver (TVs)** – after a few idle minutes, a slideshow of movie and series artwork with the time; any button returns (Settings → Screensaver)
 - **Search** – across everything your provider offers
 - **Settings** – account status and expiry, TS/HLS switch, channel up/down direction, player identity, sign out
 

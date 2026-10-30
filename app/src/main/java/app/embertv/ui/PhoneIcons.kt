@@ -179,6 +179,12 @@ object EmberIcons {
         moveTo(4f, 7f); lineTo(4f, 12f); lineTo(9f, 12f)
     }
 
+    /** Picture-in-picture: a screen with a small window in the corner. */
+    val Pip = outline("pip") {
+        moveTo(3f, 5f); lineTo(21f, 5f); lineTo(21f, 19f); lineTo(3f, 19f); close()
+        moveTo(12.5f, 12f); lineTo(18f, 12f); lineTo(18f, 16f); lineTo(12.5f, 16f); close()
+    }
+
     /** Catch-up: a clock with its hand turning back. */
     val Catchup = outline("catchup") {
         moveTo(4.6f, 9f)

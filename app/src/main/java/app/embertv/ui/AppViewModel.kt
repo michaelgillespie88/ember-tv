@@ -144,6 +144,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var invertZap by mutableStateOf(prefs.invertZap)
         private set
 
+    // Picture-in-picture (phones) and screensaver (TVs)
+    var inPip by mutableStateOf(false)
+    var screensaverMinutes by mutableIntStateOf(prefs.screensaverMinutes)
+        private set
+    var screensaver by mutableStateOf(false)
+        private set
+    private var lastActivity = android.os.SystemClock.uptimeMillis()
+
+    /** True while a video or channel is playing. */
+    val playerOpen: Boolean get() = stack.last().let { it is Screen.PlayLive || it is Screen.PlayVod }
+
     val favourites = mutableStateListOf<Favourite>()
     val favKeys: Set<String> by derivedStateOf<Set<String>> { favourites.mapTo(HashSet()) { it.key } }
 
@@ -489,6 +500,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val acc = account ?: return
         startSession(acc, accountInfo)
         reloadToken++
+    }
+
+    fun cycleScreensaver() {
+        val steps = listOf(3, 5, 10, 0)
+        val next = steps[(steps.indexOf(screensaverMinutes) + 1) % steps.size]
+        screensaverMinutes = next
+        prefs.screensaverMinutes = next
+    }
+
+    /** Records a button press. Returns true if it woke the screensaver (and should go no further). */
+    fun userActivity(wake: Boolean = true): Boolean {
+        lastActivity = android.os.SystemClock.uptimeMillis()
+        if (screensaver && wake) {
+            screensaver = false
+            return true
+        }
+        return false
+    }
+
+    /** Starts the screensaver after a while without button presses, except during playback and pop-ups. */
+    fun checkIdle() {
+        if (screensaver || screensaverMinutes == 0) return
+        val busy = repo == null || pickingProfile || playerOpen || dueReminder != null || update != null
+        if (busy) {
+            lastActivity = android.os.SystemClock.uptimeMillis()
+            return
+        }
+        if (android.os.SystemClock.uptimeMillis() - lastActivity >= screensaverMinutes * 60_000L) screensaver = true
     }
 
     fun toggleInvertZap() {

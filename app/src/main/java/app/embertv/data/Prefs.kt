@@ -163,6 +163,13 @@ class Prefs(context: Context) {
             sp.edit().putString("ua", value).apply()
         }
 
+    /** Minutes of no remote presses before the TV screensaver starts; 0 turns it off. */
+    var screensaverMinutes: Int
+        get() = sp.getInt("screensaver_min", 3)
+        set(value) {
+            sp.edit().putInt("screensaver_min", value).apply()
+        }
+
     var invertZap: Boolean
         get() = sp.getBoolean("invert_zap", false)
         set(value) {

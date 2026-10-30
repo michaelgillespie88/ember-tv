@@ -75,7 +75,7 @@ private suspend fun <T> orNull(block: suspend () -> T): T? = try {
 }
 
 /** Builds the Home rows from the provider's first few categories. Each piece is optional. */
-private suspend fun loadHomeFeed(repo: Repository): HomeFeed {
+internal suspend fun loadHomeFeed(repo: Repository): HomeFeed {
     val movieRows = ArrayList<Pair<Category, List<Movie>>>()
     for (c in orNull { repo.movieCategories() }.orEmpty().take(6)) {
         if (movieRows.size >= 3) break

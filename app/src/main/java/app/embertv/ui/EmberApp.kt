@@ -2,6 +2,7 @@ package app.embertv.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -82,6 +83,19 @@ fun EmberApp(vm: AppViewModel, isTv: Boolean) {
                     }
                 }
                 vm.dueReminder?.let { ReminderDialog(vm, it) }
+
+                // TV screensaver after a few idle minutes
+                if (isTv) {
+                    LaunchedEffect(Unit) {
+                        while (true) {
+                            delay(10_000)
+                            vm.checkIdle()
+                        }
+                    }
+                    AnimatedVisibility(visible = vm.screensaver, enter = fadeIn(tween(1200)), exit = fadeOut(tween(300))) {
+                        Screensaver(vm)
+                    }
+                }
 
                 // Sleep timer
                 val sleepAt = vm.sleepAt
