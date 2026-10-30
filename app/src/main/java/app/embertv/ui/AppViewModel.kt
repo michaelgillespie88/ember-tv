@@ -489,20 +489,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var pickerCancelable by mutableStateOf(false)
         private set
 
-    init {
-        profiles.addAll(prefs.profiles)
-        if (profiles.isEmpty()) {
-            profiles.add(Profile(MAIN_PROFILE, "Me", 0))
-            prefs.profiles = profiles.toList()
-        }
-        val last = prefs.lastProfile
-        val start = profiles.firstOrNull { it.id == last } ?: profiles.first()
-        activate(start)
-        pickingProfile = profiles.size > 1 || start.locked
-        val saved = prefs.account
-        if (saved != null) startSession(saved, null)
-    }
-
     // ---- Session ----
 
     private fun startSession(acc: Account, info: AccountInfo?) {
@@ -2009,5 +1995,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             )
             push(Screen.PlayVod(listOf(item), 0, prefs.position(entry.key)))
         }
+    }
+
+    // Runs last, so everything above is set up before the saved profile and sign-in are restored.
+    init {
+        profiles.addAll(prefs.profiles)
+        if (profiles.isEmpty()) {
+            profiles.add(Profile(MAIN_PROFILE, "Me", 0))
+            prefs.profiles = profiles.toList()
+        }
+        val last = prefs.lastProfile
+        val start = profiles.firstOrNull { it.id == last } ?: profiles.first()
+        activate(start)
+        pickingProfile = profiles.size > 1 || start.locked
+        val saved = prefs.account
+        if (saved != null) startSession(saved, null)
     }
 }
