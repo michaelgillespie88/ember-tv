@@ -6,6 +6,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -64,6 +72,17 @@ fun EmberApp(vm: AppViewModel, isTv: Boolean) {
                     }
                 }
 
+                // Sleep timer
+                val sleepAt = vm.sleepAt
+                LaunchedEffect(sleepAt) {
+                    if (sleepAt != null) {
+                        delay((sleepAt - System.currentTimeMillis()).coerceAtLeast(0L))
+                        vm.sleepNow()
+                    }
+                }
+
+                if (vm.update != null && vm.repo != null) UpdateDialog(vm)
+
                 NoticeOverlay(vm)
             }
         }
@@ -95,6 +114,47 @@ private fun BoxScope.NoticeOverlay(vm: AppViewModel) {
                 .padding(horizontal = 22.dp, vertical = 12.dp)
         ) {
             Text(lastText[0], style = Txt.Label, color = Ember.Text)
+        }
+    }
+}
+
+@Composable
+private fun UpdateDialog(vm: AppViewModel) {
+    val info = vm.update ?: return
+    val isTv = LocalIsTv.current
+    val progress = vm.updateProgress
+    Dialog(onDismissRequest = { if (progress == null) vm.dismissUpdate() }) {
+        DialogBackdropBlur()
+        Column(
+            Modifier
+                .width(480.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(dialogPanelColor())
+                .padding(if (isTv) 30.dp else 22.dp)
+        ) {
+            Text("Update available", style = Txt.Title)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Version ${info.versionName} is ready (you have ${app.embertv.BuildConfig.VERSION_NAME}). " +
+                    "Your login, profiles and favourites are kept.",
+                style = Txt.Body,
+                color = Ember.Dim,
+            )
+            Spacer(Modifier.height(22.dp))
+            if (progress != null) {
+                Text("Downloading… ${(progress * 100).toInt()}%", style = Txt.Label)
+                Spacer(Modifier.height(10.dp))
+                ProgressBar(progress, Modifier.fillMaxWidth())
+            } else if (isTv) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    TvButton("Install now", icon = "↓", autoFocus = true, onClick = { vm.installUpdate() })
+                    TvButton("Later", onClick = { vm.dismissUpdate() })
+                }
+            } else {
+                PillButton("Install now", primary = true, modifier = Modifier.fillMaxWidth()) { vm.installUpdate() }
+                Spacer(Modifier.height(10.dp))
+                PillButton("Later", modifier = Modifier.fillMaxWidth()) { vm.dismissUpdate() }
+            }
         }
     }
 }

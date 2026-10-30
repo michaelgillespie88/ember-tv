@@ -53,6 +53,31 @@ object EmberIcons {
         moveTo(10f, 20f); lineTo(10f, 14f); lineTo(14f, 14f); lineTo(14f, 20f)
     }
 
+    val Football = outline("football") {
+        circle(12f, 12f, 9f)
+        moveTo(12f, 8.2f); lineTo(15.4f, 10.6f); lineTo(14.1f, 14.6f); lineTo(9.9f, 14.6f); lineTo(8.6f, 10.6f); close()
+        moveTo(12f, 8.2f); lineTo(12f, 3f)
+        moveTo(15.4f, 10.6f); lineTo(20.6f, 9.4f)
+        moveTo(14.1f, 14.6f); lineTo(17.2f, 19.3f)
+        moveTo(9.9f, 14.6f); lineTo(6.8f, 19.3f)
+        moveTo(8.6f, 10.6f); lineTo(3.4f, 9.4f)
+    }
+
+    val Close = outline("close") { moveTo(6f, 6f); lineTo(18f, 18f); moveTo(18f, 6f); lineTo(6f, 18f) }
+
+    val More = solid("more") {
+        circle(5.5f, 12f, 1.8f)
+        circle(12f, 12f, 1.8f)
+        circle(18.5f, 12f, 1.8f)
+    }
+
+    val Moon = outline("moon") {
+        moveTo(20f, 14.5f)
+        arcTo(8.5f, 8.5f, 0f, true, true, 9.5f, 4f)
+        arcTo(6.8f, 6.8f, 0f, false, false, 20f, 14.5f)
+        close()
+    }
+
     val Live = outline("live") {
         moveTo(3f, 7f); lineTo(21f, 7f); lineTo(21f, 19f); lineTo(3f, 19f); close()
         moveTo(8f, 3f); lineTo(12f, 7f); lineTo(16f, 3f)

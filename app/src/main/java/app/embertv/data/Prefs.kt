@@ -56,7 +56,8 @@ class Prefs(context: Context) {
         val e = sp.edit()
         for (key in sp.all.keys) {
             val belongs = if (id == MAIN_PROFILE) {
-                key == "favourites" || key == "history" || key.startsWith("pos_") || key.startsWith("last_ep_")
+                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules") ||
+                    key.startsWith("pos_") || key.startsWith("last_ep_")
             } else {
                 key.startsWith("p_${id}_")
             }
@@ -103,46 +104,70 @@ class Prefs(context: Context) {
         }
 
     var favourites: List<Favourite>
-        get() {
-            val raw = sp.getString(pk("favourites"), "[]") ?: "[]"
-            return try {
-                val arr = JSONArray(raw)
-                val out = ArrayList<Favourite>()
-                for (i in 0 until arr.length()) {
-                    val o = arr.optJSONObject(i) ?: continue
-                    val type = ContentType.entries.firstOrNull { it.name == o.optString("type") } ?: continue
-                    out.add(
-                        Favourite(
-                            type = type,
-                            id = o.optInt("id"),
-                            name = o.optString("name"),
-                            image = o.optString("image"),
-                            categoryId = o.optString("cat"),
-                            ext = o.optString("ext"),
-                            num = o.optInt("num"),
-                        )
-                    )
-                }
-                out
-            } catch (e: Exception) {
-                emptyList()
-            }
-        }
+        get() = decodeFavourites(sp.getString(pk("favourites"), "[]"))
         set(value) {
-            val arr = JSONArray()
-            for (f in value) {
-                val o = JSONObject()
-                o.put("type", f.type.name)
-                o.put("id", f.id)
-                o.put("name", f.name)
-                o.put("image", f.image)
-                o.put("cat", f.categoryId)
-                o.put("ext", f.ext)
-                o.put("num", f.num)
-                arr.put(o)
-            }
-            sp.edit().putString(pk("favourites"), arr.toString()).apply()
+            sp.edit().putString(pk("favourites"), encodeFavourites(value)).apply()
         }
+
+    /** Channels this profile watched recently, newest first. */
+    var recentChannels: List<Favourite>
+        get() = decodeFavourites(sp.getString(pk("recent_channels"), "[]"))
+        set(value) {
+            sp.edit().putString(pk("recent_channels"), encodeFavourites(value)).apply()
+        }
+
+    /** Preferred audio language code, or "" for the stream's default. */
+    var audioLanguage: String
+        get() = sp.getString(pk("audio_lang"), "") ?: ""
+        set(value) {
+            sp.edit().putString(pk("audio_lang"), value).apply()
+        }
+
+    /** "off", or a language code such as "en" to switch subtitles on in that language. */
+    var subtitleMode: String
+        get() = sp.getString(pk("subs"), "off") ?: "off"
+        set(value) {
+            sp.edit().putString(pk("subs"), value).apply()
+        }
+
+    private fun decodeFavourites(raw: String?): List<Favourite> = try {
+        val arr = JSONArray(raw ?: "[]")
+        val out = ArrayList<Favourite>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val type = ContentType.entries.firstOrNull { it.name == o.optString("type") } ?: continue
+            out.add(
+                Favourite(
+                    type = type,
+                    id = o.optInt("id"),
+                    name = o.optString("name"),
+                    image = o.optString("image"),
+                    categoryId = o.optString("cat"),
+                    ext = o.optString("ext"),
+                    num = o.optInt("num"),
+                )
+            )
+        }
+        out
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    private fun encodeFavourites(list: List<Favourite>): String {
+        val arr = JSONArray()
+        for (f in list) {
+            val o = JSONObject()
+            o.put("type", f.type.name)
+            o.put("id", f.id)
+            o.put("name", f.name)
+            o.put("image", f.image)
+            o.put("cat", f.categoryId)
+            o.put("ext", f.ext)
+            o.put("num", f.num)
+            arr.put(o)
+        }
+        return arr.toString()
+    }
 
     var history: List<HistoryEntry>
         get() {

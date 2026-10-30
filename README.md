@@ -9,6 +9,10 @@ The same app gives TVs a remote-friendly layout and phones a touch layout.
 - **Guide** – a programme grid for any category (on phones, open it from Live TV)
 - **Movies and Series** – posters, details, seasons and episodes, resume where you left off, auto-play next episode
 - **Favourites** – hold OK on any channel, movie or series
+- **Live scores** – while watching, press ▶ on the remote (or the football button on a phone) for today's football scores; matches on the current channel are pinned to the top
+- **Previous channel and Recently Watched** – ⏪ flips back, and Home shows the channels you watched last
+- **Sleep timer, subtitles and preferred audio** – in Settings and in the player
+- **Built-in updates** – the app tells you when a new version is out and installs it itself
 - **Search** – across everything your provider offers
 - **Settings** – account status and expiry, TS/HLS switch, channel up/down direction, player identity, sign out
 

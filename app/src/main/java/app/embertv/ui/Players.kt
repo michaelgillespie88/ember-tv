@@ -128,7 +128,12 @@ private fun PhoneFullscreen() {
 private val ControlBg = Color(0x47000000)
 
 @Composable
-private fun rememberExoPlayer(userAgent: String, onStop: (ExoPlayer) -> Unit): ExoPlayer {
+private fun rememberExoPlayer(
+    userAgent: String,
+    audioLanguage: String = "",
+    subtitleMode: String = "off",
+    onStop: (ExoPlayer) -> Unit,
+): ExoPlayer {
     val context = LocalContext.current
     val exo = remember {
         val http = DefaultHttpDataSource.Factory()
@@ -143,6 +148,17 @@ private fun rememberExoPlayer(userAgent: String, onStop: (ExoPlayer) -> Unit): E
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(context, http)))
             .setLoadControl(loadControl)
             .build()
+            .also { player ->
+                // The profile's preferred audio language and subtitle choice.
+                val params = player.trackSelectionParameters.buildUpon()
+                if (audioLanguage.isNotEmpty()) params.setPreferredAudioLanguage(audioLanguage)
+                if (subtitleMode == "off") {
+                    params.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                } else {
+                    params.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).setPreferredTextLanguage(subtitleMode)
+                }
+                player.trackSelectionParameters = params.build()
+            }
     }
     val latestOnStop by rememberUpdatedState(onStop)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -240,9 +256,12 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     if (vm.repo == null || channels.isEmpty()) return
     val isTv = LocalIsTv.current
     PhoneFullscreen()
-    val exo = rememberExoPlayer(vm.userAgent) { }
+    val exo = rememberExoPlayer(vm.userAgent, vm.audioLanguage, vm.subtitleMode) { }
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
+    var previousIndex by remember { mutableStateOf<Int?>(null) }
+    var scoresOpen by remember { mutableStateOf(false) }
+    var optionsOpen by remember { mutableStateOf(false) }
 
     var index by remember { mutableIntStateOf(startIndex.coerceIn(0, channels.lastIndex)) }
     var alternate by remember { mutableStateOf(false) }
@@ -266,6 +285,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
 
     fun zapTo(i: Int) {
         if (i == index) return
+        previousIndex = index
         index = i
         alternate = false
         retries = 0
@@ -276,6 +296,17 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     fun zap(delta: Int) {
         val n = channels.size
         zapTo(((index + delta) % n + n) % n)
+    }
+
+    fun previousChannel() {
+        val p = previousIndex
+        if (p == null || p !in channels.indices) vm.notify("No previous channel yet") else zapTo(p)
+    }
+
+    // Count a channel as watched once it has been on for a few seconds.
+    LaunchedEffect(index) {
+        delay(5_000)
+        vm.recordChannel(channels[index])
     }
 
     LaunchedEffect(overlayToken) {
@@ -341,17 +372,18 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         if (i >= 0) zapTo(i) else vm.notify("Channel $wanted isn't in this list")
     }
 
-    LaunchedEffect(listOpen) {
-        if (!listOpen) {
+    BackHandler(enabled = listOpen) { listOpen = false }
+    BackHandler(enabled = scoresOpen) { scoresOpen = false }
+
+    LaunchedEffect(listOpen, scoresOpen) {
+        if (!listOpen && !scoresOpen) {
             delay(60)
             runCatching { focus.requestFocus() }
         }
     }
 
-    BackHandler(enabled = listOpen) { listOpen = false }
-
     fun onKey(ev: KeyEvent): Boolean {
-        if (listOpen) return false
+        if (listOpen || scoresOpen) return false
         val native = ev.nativeKeyEvent
         val code = native.keyCode
         if (ev.type == KeyEventType.KeyUp) {
@@ -371,7 +403,9 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_CHANNEL_UP -> zap(up)
             AndroidKeyEvent.KEYCODE_DPAD_DOWN, AndroidKeyEvent.KEYCODE_CHANNEL_DOWN -> zap(-up)
             AndroidKeyEvent.KEYCODE_DPAD_LEFT -> listOpen = true
-            AndroidKeyEvent.KEYCODE_DPAD_RIGHT, AndroidKeyEvent.KEYCODE_INFO -> showOverlay()
+            AndroidKeyEvent.KEYCODE_DPAD_RIGHT, AndroidKeyEvent.KEYCODE_MENU -> scoresOpen = true
+            AndroidKeyEvent.KEYCODE_INFO -> showOverlay()
+            AndroidKeyEvent.KEYCODE_MEDIA_REWIND, AndroidKeyEvent.KEYCODE_LAST_CHANNEL -> previousChannel()
             AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> {
                 if (native.repeatCount == 0) {
                     okDown = true
@@ -455,9 +489,14 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             )
         }
 
+        val sleepLeft = vm.sleepMinutesLeft(LocalNow.current * 1000)
+        if (sleepLeft != null && overlayVisible) {
+            SleepBadge(sleepLeft, Modifier.align(Alignment.TopEnd).padding(top = if (isTv) 30.dp else 76.dp, end = if (isTv) 40.dp else 24.dp))
+        }
+
         if (!isTv) {
             AnimatedVisibility(
-                visible = overlayVisible && !listOpen,
+                visible = overlayVisible && !listOpen && !scoresOpen,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier.align(Alignment.TopCenter),
@@ -474,6 +513,8 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 ) {
                     IconCircleButton(EmberIcons.Back, "Back", background = ControlBg, glass = true) { vm.pop() }
                     Spacer(Modifier.weight(1f))
+                    IconCircleButton(EmberIcons.Football, "Live scores", background = ControlBg, glass = true) { scoresOpen = true }
+                    IconCircleButton(EmberIcons.Restart, "Previous channel", background = ControlBg, glass = true) { previousChannel() }
                     IconCircleButton(EmberIcons.ChevronUp, "Channel up", background = ControlBg, glass = true) { zap(upStep) }
                     IconCircleButton(EmberIcons.ChevronDown, "Channel down", background = ControlBg, glass = true) { zap(-upStep) }
                     IconCircleButton(EmberIcons.ChannelList, "Channel list", background = ControlBg, glass = true) { listOpen = true }
@@ -486,6 +527,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                         vm.toggleFavourite(vm.favouriteOf(channel))
                         showOverlay()
                     }
+                    IconCircleButton(EmberIcons.More, "More options", background = ControlBg, glass = true) { optionsOpen = true }
                 }
             }
         }
@@ -496,14 +538,31 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 Box(Modifier.fillMaxSize().clickable { listOpen = false })
             }
             ZapList(
+                vm = vm,
                 channels = channels,
                 current = index,
+                hasPrevious = previousIndex != null,
+                onPrevious = {
+                    listOpen = false
+                    previousChannel()
+                },
                 onPick = { i ->
                     listOpen = false
                     zapTo(i)
                 },
             )
         }
+
+        if (scoresOpen) {
+            if (!isTv) Box(Modifier.fillMaxSize().clickable { scoresOpen = false })
+            val now = LocalNow.current
+            val title = rememberProgrammes(vm.repo!!, channel.streamId)?.firstOrNull { it.isLive(now) }?.title
+            ScoresPanel(programmeTitle = listOfNotNull(title, channel.name).joinToString(" "), onClose = { scoresOpen = false })
+        }
+    }
+
+    if (optionsOpen) {
+        LiveOptionsDialog(vm) { optionsOpen = false }
     }
 }
 
@@ -529,7 +588,7 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, isFavourite: Boolean
     ) {
         Column {
             Text(
-                if (isTv) "▲▼ Channels    ◀ Channel list    Hold OK Favourite" else "Swipe up or down to change channel",
+                if (isTv) "▲▼ Channels    ◀ Channel list    ▶ Live scores    Hold OK Favourite" else "Swipe up or down to change channel",
                 style = Txt.Caption,
                 color = Ember.Faint,
             )
@@ -588,7 +647,14 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, isFavourite: Boolean
 }
 
 @Composable
-private fun BoxScope.ZapList(channels: List<Channel>, current: Int, onPick: (Int) -> Unit) {
+private fun BoxScope.ZapList(
+    vm: AppViewModel,
+    channels: List<Channel>,
+    current: Int,
+    hasPrevious: Boolean,
+    onPrevious: () -> Unit,
+    onPick: (Int) -> Unit,
+) {
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (current - 3).coerceAtLeast(0))
     Box(
         Modifier
@@ -602,6 +668,14 @@ private fun BoxScope.ZapList(channels: List<Channel>, current: Int, onPick: (Int
             contentPadding = PaddingValues(vertical = 32.dp, horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            item(key = "zap-actions") {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 10.dp)) {
+                    if (hasPrevious) ZapAction(EmberIcons.Restart, "Previous channel", "", onPrevious)
+                    val left = vm.sleepMinutesLeft()
+                    ZapAction(EmberIcons.Moon, "Sleep timer", if (left == null) "Off" else "$left min") { vm.cycleSleepTimer() }
+                    ZapAction(EmberIcons.Subtitles, "Subtitles", if (vm.subtitleMode == "off") "Off" else "English") { vm.cycleSubtitles() }
+                }
+            }
             itemsIndexed(channels, key = { _, c -> c.streamId }) { i, c ->
                 FocusBox(
                     modifier = Modifier.fillMaxWidth().height(58.dp),
@@ -631,6 +705,65 @@ private fun BoxScope.ZapList(channels: List<Channel>, current: Int, onPick: (Int
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ZapAction(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, value: String, onClick: () -> Unit) {
+    FocusBox(
+        modifier = Modifier.fillMaxWidth().height(50.dp),
+        shape = RoundedCornerShape(12.dp),
+        focusedScale = 1.03f,
+        color = Color(0x14FFFFFF),
+        focusedColor = Color.White,
+        onClick = onClick,
+    ) { focused ->
+        Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Icon(icon, contentDescription = null, tint = if (focused) Color.Black else Ember.Text, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            Text(title, style = Txt.Label, color = if (focused) Color.Black else Ember.Text, modifier = Modifier.weight(1f))
+            if (value.isNotEmpty()) Text(value, style = Txt.Label, color = if (focused) Color(0xFF444448) else Ember.Dim)
+        }
+    }
+}
+
+@Composable
+private fun SleepBadge(minutes: Int, modifier: Modifier = Modifier) {
+    Row(
+        modifier.glassSurface(RoundedCornerShape(16.dp), Color(0x59000000)).padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.Icon(EmberIcons.Moon, contentDescription = null, tint = Ember.Text, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(6.dp))
+        Text("Sleep in $minutes min", style = Txt.Caption, color = Ember.Text)
+    }
+}
+
+/** Phone "more" sheet for the live player: sleep timer, audio and subtitles. */
+@Composable
+private fun LiveOptionsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        DialogBackdropBlur()
+        Column(
+            Modifier
+                .width(420.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(dialogPanelColor())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Options", style = Txt.Headline, modifier = Modifier.padding(bottom = 6.dp))
+            val left = vm.sleepMinutesLeft()
+            ZapAction(EmberIcons.Moon, "Sleep timer", if (left == null) "Off" else "$left min") { vm.cycleSleepTimer() }
+            ZapAction(EmberIcons.Subtitles, "Subtitles", if (vm.subtitleMode == "off") "Off" else "English") { vm.cycleSubtitles() }
+            ZapAction(EmberIcons.Series, "Preferred audio", if (vm.audioLanguage.isEmpty()) "Default" else "English") { vm.cycleAudioLanguage() }
+            Text(
+                "Subtitle and audio changes apply from the next channel or video.",
+                style = Txt.Caption,
+                color = Ember.Faint,
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
     }
 }
@@ -684,7 +817,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
         vm.saveProgress(item, p.currentPosition, if (duration > 0) duration else 0L)
     }
 
-    val exo = rememberExoPlayer(vm.userAgent) { p -> save(p) }
+    val exo = rememberExoPlayer(vm.userAgent, vm.audioLanguage, vm.subtitleMode) { p -> save(p) }
     val focus = remember { FocusRequester() }
 
     var current by remember { mutableIntStateOf(startIndex.coerceIn(0, items.lastIndex)) }
@@ -938,10 +1071,15 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                 )
             }
         }
+
+        val sleepLeft = vm.sleepMinutesLeft(LocalNow.current * 1000)
+        if (sleepLeft != null && overlayVisible) {
+            SleepBadge(sleepLeft, Modifier.align(Alignment.TopEnd).padding(top = if (isTv) 34.dp else 76.dp, end = if (isTv) 56.dp else 24.dp))
+        }
     }
 
     if (showTracks) {
-        TracksDialog(exo = exo, onDismiss = { showTracks = false })
+        TracksDialog(vm = vm, exo = exo, onDismiss = { showTracks = false })
     }
 }
 
@@ -1102,7 +1240,7 @@ private fun SkipButton(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun TracksDialog(exo: ExoPlayer, onDismiss: () -> Unit) {
+private fun TracksDialog(vm: AppViewModel, exo: ExoPlayer, onDismiss: () -> Unit) {
     val audio = remember { trackOptions(exo, C.TRACK_TYPE_AUDIO) }
     val subs = remember { trackOptions(exo, C.TRACK_TYPE_TEXT) }
     val subtitlesOff = remember { subs.none { it.selected } }
@@ -1154,6 +1292,11 @@ private fun TracksDialog(exo: ExoPlayer, onDismiss: () -> Unit) {
                 subs.forEach { o ->
                     TrackRow(o.label, o.selected && !subtitlesOff, autoFocus = false) { selectSubtitle(o) }
                 }
+                Spacer(Modifier.height(18.dp))
+                Text("Sleep timer", style = Txt.Headline)
+                Spacer(Modifier.height(10.dp))
+                val left = vm.sleepMinutesLeft()
+                ZapAction(EmberIcons.Moon, if (left == null) "Off" else "Stops in $left min", "Change") { vm.cycleSleepTimer() }
             }
         }
     }

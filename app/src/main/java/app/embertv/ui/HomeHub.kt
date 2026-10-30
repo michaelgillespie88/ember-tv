@@ -192,6 +192,24 @@ private fun LazyListScope.homeRows(
             }
         }
     }
+    val recent = vm.recentChannels.map { it.toChannel() }
+    if (recent.isNotEmpty()) {
+        item(key = "row-recent") {
+            HomeRow("Recently Watched", edge) {
+                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    itemsIndexed(recent, key = { _, c -> c.streamId }) { i, c ->
+                        ChannelCard(
+                            name = c.name,
+                            logo = c.icon,
+                            focusKey = "home:recent:${c.streamId}",
+                            onClick = { vm.push(Screen.PlayLive(recent, i)) },
+                            onLongClick = { vm.toggleFavourite(vm.favouriteOf(c)) },
+                        )
+                    }
+                }
+            }
+        }
+    }
     val favChannels = vm.favourites.filter { it.type == ContentType.LIVE }.map { it.toChannel() }
     if (favChannels.isNotEmpty()) {
         item(key = "row-favchannels") {

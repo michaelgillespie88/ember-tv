@@ -311,12 +311,37 @@ fun SettingsSection(vm: AppViewModel) {
                     focusKey = "set:zap",
                 ) { vm.toggleInvertZap() }
             }
+            val sleepLeft = vm.sleepMinutesLeft()
+            SettingRow(
+                "Sleep timer",
+                if (sleepLeft == null) "Off" else "Stops in $sleepLeft min",
+                "Stop playback after a while",
+                focusKey = "set:sleep",
+            ) { vm.cycleSleepTimer() }
+            SettingRow(
+                "Subtitles",
+                if (vm.subtitleMode == "off") "Off" else "English",
+                "Switch subtitles on automatically when available",
+                focusKey = "set:subs",
+            ) { vm.cycleSubtitles() }
+            SettingRow(
+                "Preferred audio",
+                if (vm.audioLanguage.isEmpty()) "Stream default" else "English",
+                "Pick English audio when a stream has several",
+                focusKey = "set:audio",
+            ) { vm.cycleAudioLanguage() }
             SettingRow(
                 "Player identity",
                 if (vm.userAgent == DEFAULT_USER_AGENT) "Ember TV" else "VLC compatible",
                 "Some providers only accept certain players",
                 focusKey = "set:ua",
             ) { vm.toggleUserAgent() }
+            SettingRow(
+                "Check for updates",
+                "Version ${app.embertv.BuildConfig.VERSION_NAME}",
+                "Updates install straight from the app",
+                focusKey = "set:update",
+            ) { vm.checkForUpdates(manual = true) }
             SettingRow("Refresh channels and guide", "", "Reloads everything from your provider", focusKey = "set:refresh") {
                 vm.reload()
                 vm.refreshAccountInfo()

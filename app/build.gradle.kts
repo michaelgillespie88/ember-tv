@@ -16,6 +16,9 @@ android {
         val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = build
         versionName = "1.0.$build"
+        // Where built-in updates are fetched from (this repository's releases).
+        val repo = System.getenv("GITHUB_REPOSITORY") ?: "michaelgillespie88/ember-tv"
+        buildConfigField("String", "UPDATE_REPO", "\"$repo\"")
     }
 
     // A fixed key so each new build installs over the previous one on the TV.

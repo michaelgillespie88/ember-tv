@@ -1,6 +1,13 @@
 package app.embertv.ui
 
 import android.app.Application
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.derivedStateOf
@@ -21,6 +28,8 @@ import app.embertv.data.Favourite
 import app.embertv.data.HistoryEntry
 import app.embertv.data.MAIN_PROFILE
 import app.embertv.data.Profile
+import app.embertv.data.UpdateInfo
+import app.embertv.data.Updates
 import app.embertv.data.Movie
 import app.embertv.data.Prefs
 import app.embertv.data.Repository
@@ -130,6 +139,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Part-watched movies and episodes, most recent first. */
     val history = mutableStateListOf<HistoryEntry>()
 
+    /** Channels watched recently on this profile, newest first. */
+    val recentChannels = mutableStateListOf<Favourite>()
+
+    var audioLanguage by mutableStateOf("")
+        private set
+    var subtitleMode by mutableStateOf("off")
+        private set
+
+    /** When the sleep timer stops playback (epoch ms), or null when it's off. */
+    var sleepAt by mutableStateOf<Long?>(null)
+        private set
+
+    // Updates
+    var update by mutableStateOf<UpdateInfo?>(null)
+        private set
+    var updateProgress by mutableStateOf<Float?>(null)
+        private set
+    private var checkedForUpdates = false
+
     // ---- Profiles ----
 
     val profiles = mutableStateListOf<Profile>()
@@ -162,6 +190,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         repo = Repository(XtreamClient(acc, userAgent))
         accountInfo = info
         if (info == null) refreshAccountInfo()
+        if (!checkedForUpdates) {
+            checkedForUpdates = true
+            checkForUpdates(manual = false)
+        }
     }
 
     fun refreshAccountInfo() {
@@ -233,6 +265,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         favourites.addAll(prefs.favourites)
         history.clear()
         history.addAll(prefs.history)
+        recentChannels.clear()
+        recentChannels.addAll(prefs.recentChannels)
+        audioLanguage = prefs.audioLanguage
+        subtitleMode = prefs.subtitleMode
     }
 
     fun chooseProfile(p: Profile) {
@@ -349,6 +385,109 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleInvertZap() {
         invertZap = !invertZap
         prefs.invertZap = invertZap
+    }
+
+    // ---- Watching ----
+
+    fun recordChannel(c: Channel) {
+        val f = favouriteOf(c)
+        recentChannels.removeAll { it.id == f.id }
+        recentChannels.add(0, f)
+        while (recentChannels.size > 15) recentChannels.removeAt(recentChannels.lastIndex)
+        prefs.recentChannels = recentChannels.toList()
+    }
+
+    fun cycleAudioLanguage() {
+        val next = if (audioLanguage.isEmpty()) "en" else ""
+        audioLanguage = next
+        prefs.audioLanguage = next
+    }
+
+    fun cycleSubtitles() {
+        val next = if (subtitleMode == "off") "en" else "off"
+        subtitleMode = next
+        prefs.subtitleMode = next
+    }
+
+    private val sleepSteps = listOf(0, 15, 30, 60, 90, 120)
+
+    /** Off → 15 → 30 → 60 → 90 → 120 minutes → off. */
+    fun cycleSleepTimer() {
+        val remaining = sleepAt?.let { ((it - System.currentTimeMillis()) / 60_000L).toInt() } ?: 0
+        val next = sleepSteps.firstOrNull { it > remaining + 1 } ?: 0
+        sleepAt = if (next == 0) null else System.currentTimeMillis() + next * 60_000L
+        notify(if (next == 0) "Sleep timer off" else "Sleep timer: $next minutes")
+    }
+
+    fun sleepMinutesLeft(now: Long = System.currentTimeMillis()): Int? =
+        sleepAt?.let { ((it - now + 59_999L) / 60_000L).toInt().coerceAtLeast(0) }
+
+    /** Called when the sleep timer runs out: stop anything that's playing. */
+    fun sleepNow() {
+        sleepAt = null
+        var stopped = false
+        while (stack.size > 1 && (stack.last() is Screen.PlayLive || stack.last() is Screen.PlayVod)) {
+            pop()
+            stopped = true
+        }
+        if (stopped) notify("Sleep timer: playback stopped")
+    }
+
+    // ---- Updates ----
+
+    fun checkForUpdates(manual: Boolean) {
+        viewModelScope.launch {
+            val latest = Updates.latest(app.embertv.BuildConfig.UPDATE_REPO)
+            when {
+                latest == null -> if (manual) notify("Couldn't check for updates")
+                latest.versionCode > app.embertv.BuildConfig.VERSION_CODE -> update = latest
+                manual -> notify("You're up to date (version ${app.embertv.BuildConfig.VERSION_NAME})")
+            }
+        }
+    }
+
+    fun dismissUpdate() {
+        update = null
+        updateProgress = null
+    }
+
+    fun installUpdate() {
+        val info = update ?: return
+        if (updateProgress != null) return
+        val context = getApplication<Application>()
+        if (Build.VERSION.SDK_INT >= 26 && !context.packageManager.canRequestPackageInstalls()) {
+            try {
+                context.startActivity(
+                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.packageName))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+                notify("Allow Ember TV to install apps, then choose Install again")
+            } catch (e: ActivityNotFoundException) {
+                notify("Allow Ember TV under Settings → Install unknown apps, then try again")
+            }
+            return
+        }
+        updateProgress = 0f
+        viewModelScope.launch {
+            try {
+                val file = Updates.download(info, File(context.cacheDir, "updates")) { p ->
+                    viewModelScope.launch { updateProgress = p }
+                }
+                val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW)
+                        .setDataAndType(uri, "application/vnd.android.package-archive")
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+                update = null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                notify(e.message ?: "The update couldn't be downloaded")
+            } finally {
+                updateProgress = null
+            }
+        }
     }
 
     // ---- Playback ----
