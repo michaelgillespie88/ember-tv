@@ -1,5 +1,12 @@
 package app.embertv.ui
 
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.AnimatedVisibility
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -56,9 +63,19 @@ fun HomeScreen(vm: AppViewModel) {
     var focusedTab by remember { mutableIntStateOf(-1) }
     val focusManager = LocalFocusManager.current
 
+    val scope = rememberCoroutineScope()
     // Back from the content jumps up to the tab bar; back from the tab bar leaves the app.
     BackHandler(enabled = focusedTab < 0) {
-        runCatching { tabRequesters[vm.tab].requestFocus() }
+        if (vm.guideFullScreen) {
+            // The full-screen guide hides the tabs; show them before moving up to them.
+            vm.guideFullScreen = false
+            scope.launch {
+                delay(60)
+                runCatching { tabRequesters[vm.tab].requestFocus() }
+            }
+        } else {
+            runCatching { tabRequesters[vm.tab].requestFocus() }
+        }
     }
     // Back on the tab bar returns to Home before leaving the app.
     BackHandler(enabled = focusedTab >= 0 && vm.tab != Tabs.HOME) {
@@ -80,7 +97,9 @@ fun HomeScreen(vm: AppViewModel) {
         runCatching { tabRequesters[vm.tab].requestFocus() }
     }
 
+    val hideBar = vm.tab == Tabs.GUIDE && vm.guideFullScreen && focusedTab < 0
     Column(Modifier.fillMaxSize().background(Ember.Bg)) {
+        AnimatedVisibility(visible = !hideBar, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
         Row(
             Modifier.fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 22.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -113,6 +132,7 @@ fun HomeScreen(vm: AppViewModel) {
             ProfileButton(vm)
             Spacer(Modifier.width(16.dp))
             Text(formatClock(LocalNow.current), style = Txt.Label, color = Ember.Dim)
+        }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (vm.tab) {

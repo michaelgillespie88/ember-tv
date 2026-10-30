@@ -170,6 +170,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var guide = SectionState()
         private set
+    /** True while the TV guide's grid has the highlight, so the tab bar tucks away. */
+    var guideFullScreen by mutableStateOf(false)
     var movies = SectionState()
         private set
     var series = SectionState()

@@ -389,8 +389,9 @@ fun SettingsSection(vm: AppViewModel) {
                 SettingsHeader("TV")
                 SettingRow(
                     "Guide and channel list",
-                    if (vm.compactLists) "Compact · 8 channels" else "Comfortable · 5 channels",
-                    "How many channels fit on screen at once",
+                    if (vm.compactLists) "Compact" else "Comfortable",
+                    if (vm.compactLists) "About 10 channels in the guide and 8 in the channel list"
+                    else "About 7 channels in the guide, with times on each programme",
                     focusKey = "set:compact",
                 ) { vm.toggleCompactLists() }
                 SettingRow(

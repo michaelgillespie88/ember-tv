@@ -1,6 +1,18 @@
 package app.embertv.ui
 
 import androidx.compose.foundation.background
+import android.view.KeyEvent as AndroidKeyEvent
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.key
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -47,16 +59,24 @@ import app.embertv.data.catchupAvailable
 import app.embertv.data.toChannel
 import kotlinx.coroutines.delay
 
-private const val WINDOW_MINUTES = 120
-/** How far the guide goes back and forward, in two-hour steps: a week each way. */
-private const val MAX_STEPS = 84
-private val CHANNEL_COLUMN = 170.dp
-private val ROW_HEIGHT = 62.dp
-/** Compact rows fit about eight channels on a TV instead of five. */
-private val COMPACT_ROW_HEIGHT = 38.dp
+/** How much of the day is on screen at once: two and a half hours, like TiviMate. */
+private const val WINDOW_MINUTES = 150
+/** How far the guide goes back and forward, in half-hour steps: a week each way. */
+private const val MAX_STEPS = 7 * 48
+private val CHANNEL_COLUMN = 214.dp
+private val INFO_HEIGHT = 140.dp
+private val ROW_HEIGHT = 48.dp
+/** Compact rows fit about ten channels on a TV instead of seven. */
+private val COMPACT_ROW_HEIGHT = 31.dp
+private val ROW_GAP = 3.dp
 
 internal data class GuideFocus(val channel: Channel, val programme: Programme?)
 
+/**
+ * The TV guide, laid out like TiviMate's: full screen, the highlighted programme's details and a
+ * live picture across the top, and a tight grid of channels underneath that scrolls through the
+ * day as you move left and right.
+ */
 @Composable
 fun GuideSection(vm: AppViewModel) {
     val repo = vm.repo ?: return
@@ -70,21 +90,18 @@ fun GuideSection(vm: AppViewModel) {
                 listOf(Category(FAVOURITES, "★  Favourites"), Category(ALL, "All channels")) + c.value
             }
             val selectedId = section.categoryId ?: c.value.firstOrNull()?.id ?: ALL
-            val select = rememberCategorySelector(section)
-            // Two-hour steps away from now: negative is earlier (catch-up), positive is later.
+            // Half-hour steps away from now: negative is earlier (catch-up), positive is later.
             var step by remember { mutableIntStateOf(0) }
-            Row(Modifier.fillMaxSize().padding(start = 44.dp, end = 48.dp, top = 6.dp)) {
-                CategoryRail(
-                    categories = categories,
-                    selectedId = selectedId,
-                    state = section.rail,
-                    keyPrefix = "guide",
-                    onFocusCategory = { select(it.id, false) },
-                    onSelectCategory = { select(it.id, true) },
-                )
-                Spacer(Modifier.width(20.dp))
-                GuideGrid(vm, repo, selectedId, step, { step = it.coerceIn(-MAX_STEPS, MAX_STEPS) }, Modifier.weight(1f))
-            }
+            GuideGrid(
+                vm = vm,
+                repo = repo,
+                categories = categories,
+                categoryId = selectedId,
+                onCategory = { section.categoryId = it },
+                step = step,
+                onStep = { step = it.coerceIn(-MAX_STEPS, MAX_STEPS) },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
@@ -93,7 +110,9 @@ fun GuideSection(vm: AppViewModel) {
 private fun GuideGrid(
     vm: AppViewModel,
     repo: Repository,
+    categories: List<Category>,
     categoryId: String,
+    onCategory: (String) -> Unit,
     step: Int,
     onStep: (Int) -> Unit,
     modifier: Modifier,
@@ -104,117 +123,221 @@ private fun GuideGrid(
     }
     var focus by remember { mutableStateOf<GuideFocus?>(null) }
     var details by remember { mutableStateOf<GuideFocus?>(null) }
+    var pickingGroup by remember { mutableStateOf(false) }
+    var pickingDay by remember { mutableStateOf(false) }
+    val now = LocalNow.current
+    val windowStart = (now / 1800) * 1800 + step * 1800L
+    val windowEnd = windowStart + WINDOW_MINUTES * 60
+    val groupName = categories.firstOrNull { it.id == categoryId }?.name?.removePrefix("★  ") ?: "Channels"
 
-    when (val r = load) {
-        is LoadResult.Loading -> LoadingView(modifier)
-        is LoadResult.Err -> ErrorView(r.message, modifier) { vm.reload() }
-        is LoadResult.Ok -> {
-            val channels = r.value
-            if (channels.isEmpty()) {
-                EmptyView(
-                    if (categoryId == FAVOURITES) "${holdPrompt()} any channel to add it to your favourites."
-                    else "No channels in this category.",
-                    modifier,
-                )
-                return
-            }
-            val now = LocalNow.current
-            val windowStart = (now / 1800) * 1800 + step * WINDOW_MINUTES * 60L
-            val windowEnd = windowStart + WINDOW_MINUTES * 60
+    // Leaving the guide (or a pop-up opening) brings the tab bar back.
+    DisposableEffect(Unit) { onDispose { vm.guideFullScreen = false } }
+    // Back from a later or earlier time returns to now before going up to the tabs.
+    BackHandler(enabled = step != 0 && vm.guideFullScreen) { onStep(0) }
 
-            val compact = vm.compactLists
-            val rowHeight = if (compact) COMPACT_ROW_HEIGHT else ROW_HEIGHT
-            Column(modifier.fillMaxHeight()) {
-                Row(verticalAlignment = Alignment.Top) {
-                    if (vm.livePreview) {
-                        // The highlighted channel, live, like TiviMate's guide.
-                        LivePreview(vm, focus?.channel ?: channels.firstOrNull(), Modifier.height(if (compact) 92.dp else 86.dp).padding(top = 2.dp, end = 14.dp))
-                    }
-                    Box(Modifier.weight(1f)) { FocusStrip(focus, now) }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp)) {
-                        TvButton("Earlier", icon = "◀", focusKey = "guide:earlier", onClick = { onStep(step - 1) })
-                        TvButton("Now", focusKey = "guide:now", onClick = { onStep(0) })
-                        TvButton("Later ▶", focusKey = "guide:later", onClick = { onStep(step + 1) })
+    Box(
+        modifier
+            .background(Ember.Bg)
+            .background(Brush.verticalGradient(listOf(Color(0xFF1C130E), Color.Transparent), endY = 520f))
+    ) {
+        Column(Modifier.fillMaxSize().padding(start = 40.dp, end = 40.dp, top = if (vm.guideFullScreen) 18.dp else 4.dp)) {
+            // ---- What's highlighted, with the channel playing live beside it ----
+            Row(Modifier.fillMaxWidth().height(INFO_HEIGHT), verticalAlignment = Alignment.Top) {
+                Box(Modifier.weight(1f).fillMaxHeight()) { GuideInfo(focus, now) }
+                Spacer(Modifier.width(24.dp))
+                val ch = focus?.channel ?: (load as? LoadResult.Ok)?.value?.firstOrNull()
+                if (vm.livePreview) {
+                    LivePreview(vm, ch, Modifier.height(INFO_HEIGHT - 12.dp))
+                } else if (ch != null) {
+                    Box(
+                        Modifier.height(INFO_HEIGHT - 12.dp).aspectRatio(16f / 9f).glassSurface(RoundedCornerShape(14.dp), Color(0x14FFFFFF)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ChannelLogo(ch.icon, ch.name, Modifier.size(width = 120.dp, height = 72.dp))
                     }
                 }
-                BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-                    val gridWidth = maxWidth - CHANNEL_COLUMN
-                    val dpPerMinute = gridWidth / WINDOW_MINUTES
-                    Column(Modifier.fillMaxSize()) {
-                        TimeHeader(windowStart, dpPerMinute, now, if (compact) 24.dp else 30.dp)
-                        LazyColumn(
-                            state = vm.guide.list(categoryId),
-                            contentPadding = PaddingValues(top = 4.dp, bottom = 40.dp),
-                            verticalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 4.dp),
-                            modifier = Modifier.fillMaxSize(),
-                        ) {
-                            itemsIndexed(channels, key = { _, ch -> ch.streamId }) { index, ch ->
-                                GuideRow(
-                                    repo = repo,
-                                    channel = ch,
-                                    rowHeight = rowHeight,
-                                    compact = compact,
-                                    full = step != 0,
-                                    windowStart = windowStart,
-                                    windowEnd = windowEnd,
-                                    dpPerMinute = dpPerMinute,
-                                    gridWidth = gridWidth,
-                                    now = now,
-                                    onFocus = { p -> focus = GuideFocus(ch, p) },
-                                    onPick = { p ->
-                                        if (p == null || p.isLive(now)) {
-                                            vm.push(Screen.PlayLive(channels, index))
-                                        } else {
-                                            details = GuideFocus(ch, p)
-                                        }
-                                    },
-                                    onLongPick = { p -> if (p != null) details = GuideFocus(ch, p) },
+            }
+            Spacer(Modifier.height(8.dp))
+
+            when (val r = load) {
+                is LoadResult.Loading -> LoadingView(Modifier.weight(1f))
+                is LoadResult.Err -> ErrorView(r.message, Modifier.weight(1f)) { vm.reload() }
+                is LoadResult.Ok -> {
+                    val channels = r.value
+                    val compact = vm.compactLists
+                    val rowHeight = if (compact) COMPACT_ROW_HEIGHT else ROW_HEIGHT
+                    BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+                        val gridWidth = maxWidth - CHANNEL_COLUMN
+                        val dpPerMinute = gridWidth / WINDOW_MINUTES
+                        Column(Modifier.fillMaxSize()) {
+                            TimeHeader(
+                                windowStart = windowStart,
+                                dpPerMinute = dpPerMinute,
+                                now = now,
+                                groupName = groupName,
+                                onGroup = { pickingGroup = true },
+                                onDay = { pickingDay = true },
+                                onFocusHeader = { vm.guideFullScreen = false },
+                            )
+                            if (channels.isEmpty()) {
+                                EmptyView(
+                                    if (categoryId == FAVOURITES) "${holdPrompt()} any channel to add it to your favourites."
+                                    else "No channels in this group.",
+                                    Modifier.weight(1f),
                                 )
+                            } else {
+                                LazyColumn(
+                                    state = vm.guide.list(categoryId),
+                                    contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp),
+                                    verticalArrangement = Arrangement.spacedBy(ROW_GAP),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .onPreviewKeyEvent { ev ->
+                                            if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                            val p = focus?.programme
+                                            when (ev.nativeKeyEvent.keyCode) {
+                                                // At the edge of the screen, move the times along instead of the highlight.
+                                                AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> if (p != null && p.end >= windowEnd && step < MAX_STEPS) {
+                                                    onStep(step + 1)
+                                                    true
+                                                } else false
+                                                AndroidKeyEvent.KEYCODE_DPAD_LEFT -> if (p != null && p.start <= windowStart && step > -MAX_STEPS) {
+                                                    onStep(step - 1)
+                                                    true
+                                                } else false
+                                                AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                                                    onStep(step + 4)
+                                                    true
+                                                }
+                                                AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> {
+                                                    onStep(step - 4)
+                                                    true
+                                                }
+                                                else -> false
+                                            }
+                                        },
+                                ) {
+                                    itemsIndexed(channels, key = { _, ch -> ch.streamId }) { index, ch ->
+                                        GuideRow(
+                                            repo = repo,
+                                            channel = ch,
+                                            rowHeight = rowHeight,
+                                            compact = compact,
+                                            wantFull = step != 0,
+                                            windowStart = windowStart,
+                                            windowEnd = windowEnd,
+                                            dpPerMinute = dpPerMinute,
+                                            gridWidth = gridWidth,
+                                            now = now,
+                                            onFocus = { p ->
+                                                focus = GuideFocus(ch, p)
+                                                vm.guideFullScreen = true
+                                            },
+                                            onPick = { p ->
+                                                if (p == null || p.isLive(now)) {
+                                                    vm.push(Screen.PlayLive(channels, index))
+                                                } else {
+                                                    details = GuideFocus(ch, p)
+                                                }
+                                            },
+                                            onLongPick = { p -> if (p != null) details = GuideFocus(ch, p) },
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
+
+                    val d = details
+                    if (d != null) {
+                        ProgrammeDialog(vm, d, channels) { details = null }
+                    }
                 }
             }
+        }
+    }
 
-            val d = details
-            if (d != null) {
-                ProgrammeDialog(vm, d, channels) { details = null }
-            }
+    if (pickingGroup) {
+        GroupPicker(categories, categoryId, onDismiss = { pickingGroup = false }) {
+            pickingGroup = false
+            onCategory(it)
+        }
+    }
+    if (pickingDay) {
+        DayPicker(now, windowStart, onDismiss = { pickingDay = false }) { days ->
+            pickingDay = false
+            onStep(days * 48)
         }
     }
 }
 
+/** The top of the guide: the highlighted programme, big, with its time and how far through it is. */
 @Composable
-private fun FocusStrip(focus: GuideFocus?, now: Long) {
-    Column(Modifier.fillMaxWidth().height(92.dp).padding(start = 6.dp, top = 4.dp)) {
+private fun GuideInfo(focus: GuideFocus?, now: Long) {
+    Column(Modifier.fillMaxSize().padding(top = 6.dp)) {
         if (focus == null) {
-            Text("TV guide", style = Txt.Title)
+            Text("TV GUIDE", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Accent)
+            Spacer(Modifier.height(4.dp))
+            Text("What's on", style = Txt.LargeTitle)
+            Spacer(Modifier.height(6.dp))
             Text(
-                "OK on anything airing now starts the channel. Pick an earlier programme to catch up, or a later one for a reminder.",
+                "OK on anything airing now starts the channel. Earlier programmes play from catch-up, later ones can remind you.",
                 style = Txt.Body,
                 color = Ember.Dim,
                 maxLines = 2,
             )
-        } else {
-            val p = focus.programme
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    p?.title ?: focus.channel.name,
-                    style = Txt.Title,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (p != null && p.isLive(now)) {
-                    Spacer(Modifier.width(12.dp))
-                    LiveTag()
-                }
+            return
+        }
+        val p = focus.programme
+        val ch = focus.channel
+        Text(
+            (if (ch.num > 0) "${ch.num}  ·  " else "") + ch.name.uppercase(),
+            style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp),
+            color = Ember.Accent,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                p?.title ?: ch.name,
+                style = Txt.LargeTitle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (p != null && p.isLive(now)) {
+                Spacer(Modifier.width(12.dp))
+                LiveTag()
             }
-            val sub = if (p == null) "No guide information" else "${focus.channel.name}  ·  ${formatDay(p.start, now)}  ${formatClock(p.start)} – ${formatClock(p.end)}"
-            Text(sub, style = Txt.Label, color = Ember.Dim, maxLines = 1)
-            if (p != null && p.description.isNotBlank()) {
-                Text(p.description, style = Txt.Caption, color = Ember.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.height(6.dp))
+        if (p == null) {
+            Text("No guide information for this channel", style = Txt.Label, color = Ember.Dim)
+            return
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val left = ((p.end - now) / 60).toInt()
+            val timing = when {
+                p.isLive(now) -> "${formatClock(p.start)} – ${formatClock(p.end)}  ·  $left min left"
+                p.end <= now -> "${formatDay(p.start, now)}  ${formatClock(p.start)} – ${formatClock(p.end)}"
+                else -> "${formatDay(p.start, now)}  ${formatClock(p.start)} – ${formatClock(p.end)}  ·  ${((p.end - p.start) / 60)} min"
             }
+            Text(timing, style = Txt.Label, color = Ember.Dim, maxLines = 1)
+            if (p.isLive(now)) {
+                Spacer(Modifier.width(12.dp))
+                ProgressBar(((now - p.start).toFloat() / (p.end - p.start).coerceAtLeast(1)).coerceIn(0f, 1f), Modifier.width(120.dp))
+            }
+        }
+        if (p.description.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                p.description,
+                style = Txt.Body.copy(fontSize = 14.sp, lineHeight = 19.sp),
+                color = Ember.Faint,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -228,32 +351,87 @@ fun LiveTag() {
     }
 }
 
+/** Times along the top, with the group and day you're looking at as two small buttons on the left. */
 @Composable
-private fun TimeHeader(windowStart: Long, dpPerMinute: Dp, now: Long, height: Dp = 30.dp) {
-    Box(Modifier.fillMaxWidth().height(height)) {
-        Text(
-            formatDay(windowStart, now),
-            style = Txt.Label,
-            color = if (startOfDay(windowStart) == startOfDay(now)) Ember.Dim else Ember.Accent,
-            modifier = Modifier.offset(y = 4.dp),
-        )
-        for (slot in 0 until WINDOW_MINUTES / 30) {
-            val t = windowStart + slot * 1800L
-            Text(
-                formatClock(t),
-                style = Txt.Caption,
-                color = Ember.Dim,
-                modifier = Modifier.offset(x = CHANNEL_COLUMN + dpPerMinute * (slot * 30).toFloat() + 6.dp, y = 6.dp),
-            )
+private fun TimeHeader(
+    windowStart: Long,
+    dpPerMinute: Dp,
+    now: Long,
+    groupName: String,
+    onGroup: () -> Unit,
+    onDay: () -> Unit,
+    onFocusHeader: () -> Unit,
+) {
+    Box(Modifier.fillMaxWidth().height(34.dp)) {
+        Row(
+            Modifier.width(CHANNEL_COLUMN - 10.dp).fillMaxHeight(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            HeaderChip(groupName, "guide:group", Modifier.weight(1f, fill = false), onFocus = onFocusHeader, onClick = onGroup)
+            val today = startOfDay(windowStart) == startOfDay(now)
+            HeaderChip(if (today) "Today" else formatDay(windowStart, now), "guide:day", accent = !today, onFocus = onFocusHeader, onClick = onDay)
         }
         val nowOffset = dpPerMinute * ((now - windowStart) / 60f)
-        if (now in windowStart until windowStart + WINDOW_MINUTES * 60) Box(
-            Modifier
-                .offset(x = CHANNEL_COLUMN + nowOffset - 4.dp, y = 22.dp)
-                .size(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(Ember.Accent)
-        )
+        val showNow = now in windowStart until windowStart + WINDOW_MINUTES * 60
+        for (slot in 0 until WINDOW_MINUTES / 30) {
+            val t = windowStart + slot * 1800L
+            val x = dpPerMinute * (slot * 30).toFloat()
+            // Leave room for the orange "now" time rather than printing over it.
+            if (showNow && x > nowOffset - 56.dp && x < nowOffset + 30.dp) continue
+            Row(
+                Modifier.offset(x = CHANNEL_COLUMN + dpPerMinute * (slot * 30).toFloat()).fillMaxHeight(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.width(1.dp).height(12.dp).background(Color(0x33FFFFFF)))
+                Spacer(Modifier.width(6.dp))
+                Text(formatClock(t), style = Txt.Caption.copy(fontSize = 13.sp), color = Ember.Dim)
+            }
+        }
+        if (showNow) {
+            Box(
+                Modifier
+                    .offset(x = CHANNEL_COLUMN + nowOffset - 22.dp, y = 7.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Ember.Accent)
+                    .padding(horizontal = 5.dp, vertical = 2.dp)
+            ) {
+                Text(formatClock(now), style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold), color = Color.Black)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeaderChip(
+    text: String,
+    focusKey: String,
+    modifier: Modifier = Modifier,
+    accent: Boolean = false,
+    onFocus: () -> Unit,
+    onClick: () -> Unit,
+) {
+    FocusBox(
+        modifier = modifier.height(28.dp),
+        focusKey = focusKey,
+        shape = RoundedCornerShape(14.dp),
+        focusedScale = 1.06f,
+        color = Color(0x1FFFFFFF),
+        focusedColor = Color.White,
+        onFocusChange = { if (it) onFocus() },
+        onClick = onClick,
+    ) { focused ->
+        Row(Modifier.fillMaxHeight().padding(horizontal = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text,
+                style = Txt.Caption.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                color = if (focused) Color.Black else if (accent) Ember.Accent else Ember.Text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Text(" ▾", style = Txt.Caption.copy(fontSize = 10.sp), color = if (focused) Color.Black else Ember.Dim)
+        }
     }
 }
 
@@ -263,7 +441,7 @@ private fun GuideRow(
     channel: Channel,
     rowHeight: Dp,
     compact: Boolean,
-    full: Boolean,
+    wantFull: Boolean,
     windowStart: Long,
     windowEnd: Long,
     dpPerMinute: Dp,
@@ -273,22 +451,39 @@ private fun GuideRow(
     onPick: (Programme?) -> Unit,
     onLongPick: (Programme?) -> Unit,
 ) {
-    val programmes = if (full) rememberFullProgrammes(repo, channel.streamId) else rememberProgrammes(repo, channel.streamId)
+    // Once a row has needed the whole guide it keeps it, so scrolling back doesn't reload it.
+    var full by remember { mutableStateOf(false) }
+    if (wantFull) full = true
+    val short = rememberProgrammes(repo, channel.streamId)
+    val programmes = if (full) rememberFullProgrammes(repo, channel.streamId) ?: short else short
     Row(Modifier.fillMaxWidth().height(rowHeight)) {
         Row(
-            Modifier.width(CHANNEL_COLUMN).fillMaxHeight().padding(end = 8.dp),
+            Modifier
+                .width(CHANNEL_COLUMN)
+                .fillMaxHeight()
+                .padding(end = 6.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0x0FFFFFFF))
+                .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Text(
+                if (channel.num > 0) channel.num.toString() else "",
+                style = Txt.Caption.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                color = Ember.Faint,
+                maxLines = 1,
+                modifier = Modifier.width(32.dp),
+            )
             ChannelLogo(
                 channel.icon,
                 channel.name,
-                if (compact) Modifier.size(width = 44.dp, height = 28.dp) else Modifier.size(width = 52.dp, height = 36.dp),
+                if (compact) Modifier.size(width = 38.dp, height = 24.dp) else Modifier.size(width = 50.dp, height = 32.dp),
             )
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(8.dp))
             Text(
                 channel.name,
-                style = if (compact) Txt.Label.copy(fontSize = 14.sp) else Txt.Label,
-                maxLines = if (compact) 1 else 2,
+                style = Txt.Label.copy(fontSize = if (compact) 13.sp else 14.sp),
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -296,9 +491,10 @@ private fun GuideRow(
             val visible = programmes.orEmpty().filter { it.end > windowStart && it.start < windowEnd }
             if (visible.isEmpty()) {
                 ProgrammeBlock(
-                    title = if (programmes == null) "Loading…" else if (compact) "No guide information" else channel.name,
-                    time = if (programmes == null || compact) "" else "No guide information",
+                    title = if (programmes == null) "Loading…" else "No guide information",
+                    time = "",
                     live = true,
+                    compact = compact,
                     focusKey = "guide:${channel.streamId}:none",
                     modifier = Modifier.fillMaxSize(),
                     onFocus = { onFocus(null) },
@@ -306,28 +502,32 @@ private fun GuideRow(
                 )
             } else {
                 for (p in visible) {
-                    val start = maxOf(p.start, windowStart)
-                    val end = minOf(p.end, windowEnd)
-                    val x = dpPerMinute * ((start - windowStart) / 60f)
-                    val w = dpPerMinute * ((end - start) / 60f)
-                    ProgrammeBlock(
-                        title = p.title,
-                        // Compact rows have room for the title only; the strip above shows the times.
-                        time = if (compact) "" else "${formatClock(p.start)} – ${formatClock(p.end)}",
-                        live = p.isLive(now),
-                        past = p.end <= now,
-                        catchup = p.end <= now && catchupAvailable(channel, p, now),
-                        focusKey = "guide:${channel.streamId}:${p.start}",
-                        modifier = Modifier.offset(x = x).width(w.coerceAtLeast(6.dp)).fillMaxHeight(),
-                        onFocus = { onFocus(p) },
-                        onClick = { onPick(p) },
-                        onLongClick = { onLongPick(p) },
-                    )
+                    // Keyed by start time, so the highlighted programme keeps its highlight as the times move along.
+                    key(p.start) {
+                        val start = maxOf(p.start, windowStart)
+                        val end = minOf(p.end, windowEnd)
+                        val x = dpPerMinute * ((start - windowStart) / 60f)
+                        val w = dpPerMinute * ((end - start) / 60f)
+                        ProgrammeBlock(
+                            title = p.title,
+                            time = if (compact) "" else "${formatClock(p.start)} – ${formatClock(p.end)}",
+                            live = p.isLive(now),
+                            compact = compact,
+                            past = p.end <= now,
+                            catchup = p.end <= now && catchupAvailable(channel, p, now),
+                            progress = if (p.isLive(now)) ((now - p.start).toFloat() / (p.end - p.start).coerceAtLeast(1)) else null,
+                            focusKey = "guide:${channel.streamId}:${p.start}",
+                            modifier = Modifier.offset(x = x).width(w.coerceAtLeast(6.dp)).fillMaxHeight(),
+                            onFocus = { onFocus(p) },
+                            onClick = { onPick(p) },
+                            onLongClick = { onLongPick(p) },
+                        )
+                    }
                 }
             }
             if (now in windowStart until windowEnd) {
                 val nowOffset = dpPerMinute * ((now - windowStart) / 60f)
-                Box(Modifier.offset(x = nowOffset).width(2.dp).fillMaxHeight().background(Ember.Accent.copy(alpha = 0.7f)))
+                Box(Modifier.offset(x = nowOffset).width(1.5.dp).fillMaxHeight().background(Ember.Accent.copy(alpha = 0.5f)))
             }
         }
     }
@@ -338,24 +538,26 @@ private fun ProgrammeBlock(
     title: String,
     time: String,
     live: Boolean,
+    compact: Boolean,
     focusKey: String,
     modifier: Modifier,
     onFocus: () -> Unit,
     onClick: () -> Unit,
     past: Boolean = false,
     catchup: Boolean = false,
+    progress: Float? = null,
     onLongClick: (() -> Unit)? = null,
 ) {
-    Box(modifier.padding(end = 3.dp)) {
+    Box(modifier.padding(end = 2.dp)) {
         FocusBox(
             modifier = Modifier.fillMaxSize(),
             focusKey = focusKey,
-            shape = RoundedCornerShape(8.dp),
+            shape = RoundedCornerShape(if (compact) 7.dp else 9.dp),
             focusedScale = 1f,
             color = when {
-                live -> Ember.CardHi
-                past -> Ember.Card.copy(alpha = 0.55f)
-                else -> Ember.Card
+                live -> Color(0xFF2C2C35)
+                past -> Color(0xFF141418)
+                else -> Color(0xFF1D1D23)
             },
             focusedColor = Color.White,
             onFocusChange = { if (it) onFocus() },
@@ -363,7 +565,7 @@ private fun ProgrammeBlock(
             onLongClick = onLongClick,
         ) { focused ->
             Column(
-                Modifier.fillMaxSize().padding(horizontal = 10.dp),
+                Modifier.fillMaxSize().padding(horizontal = if (compact) 8.dp else 10.dp),
                 verticalArrangement = Arrangement.Center,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -372,17 +574,18 @@ private fun ProgrammeBlock(
                             EmberIcons.Catchup,
                             contentDescription = "On catch-up",
                             tint = if (focused) Color.Black else Ember.Accent,
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(if (compact) 12.dp else 14.dp),
                         )
                         Spacer(Modifier.width(5.dp))
                     }
                     Text(
                         title,
-                        style = Txt.Label,
+                        style = Txt.Label.copy(fontSize = if (compact) 13.sp else 15.sp, fontWeight = if (live) FontWeight.SemiBold else FontWeight.Medium),
                         color = when {
                             focused -> Color.Black
-                            past && !catchup -> Ember.Dim
-                            else -> Ember.Text
+                            past && !catchup -> Ember.Faint
+                            live -> Ember.Text
+                            else -> Ember.Dim
                         },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -395,6 +598,92 @@ private fun ProgrammeBlock(
                         color = if (focused) Color(0xFF444448) else Ember.Faint,
                         maxLines = 1,
                     )
+                }
+            }
+            // How far through the programme on now is, along the bottom edge.
+            if (progress != null && !focused) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(progress.coerceIn(0f, 1f))
+                        .height(2.dp)
+                        .background(Ember.Accent.copy(alpha = 0.85f))
+                )
+            }
+        }
+    }
+}
+
+/** Choosing which channel group the guide shows. */
+@Composable
+private fun GroupPicker(categories: List<Category>, selectedId: String, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        DialogBackdropBlur()
+        Column(
+            Modifier
+                .width(520.dp)
+                .heightIn(max = 500.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(dialogPanelColor())
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            SheetTitle("Channel group", eyebrow = "TV guide")
+            Spacer(Modifier.height(16.dp))
+            LazyColumn(
+                Modifier.width(380.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(vertical = 6.dp),
+            ) {
+                items(categories, key = { it.id }) { c ->
+                    SheetOption(
+                        c.name.removePrefix("★  "),
+                        focusKey = "guide:pick:${c.id}",
+                        autoFocus = c.id == selectedId,
+                        trailing = if (c.id == selectedId) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Accent) } else null,
+                    ) { onPick(c.id) }
+                }
+            }
+        }
+    }
+}
+
+/** Jumping the guide to another day, at the same time of day. */
+@Composable
+private fun DayPicker(now: Long, showing: Long, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
+    val today = startOfDay(now)
+    val current = ((startOfDay(showing) - today) / 86_400L).toInt()
+    Dialog(onDismissRequest = onDismiss) {
+        DialogBackdropBlur()
+        Column(
+            Modifier
+                .width(520.dp)
+                .heightIn(max = 500.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(dialogPanelColor())
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            SheetTitle("Go to day", eyebrow = "TV guide", subtitle = "Earlier days play from catch-up where your provider keeps it")
+            Spacer(Modifier.height(16.dp))
+            LazyColumn(
+                Modifier.width(380.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(vertical = 6.dp),
+            ) {
+                items((-7..7).toList(), key = { it }) { d ->
+                    val label = when (d) {
+                        0 -> "Today"
+                        -1 -> "Yesterday"
+                        1 -> "Tomorrow"
+                        else -> formatDay(today + d * 86_400L + 43_200L, now)
+                    }
+                    SheetOption(
+                        label,
+                        focusKey = "guide:day:$d",
+                        autoFocus = d == current,
+                        trailing = if (d == current) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Accent) } else null,
+                    ) { onPick(d) }
                 }
             }
         }
