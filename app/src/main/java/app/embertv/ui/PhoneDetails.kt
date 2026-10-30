@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,7 +89,8 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
     val repo = vm.repo ?: return
     val load by rememberLoad(repo, movie.streamId) { repo.movieInfo(movie.streamId) }
     val info = (load as? LoadResult.Ok)?.value
-    val resume = remember(movie.streamId, vm.stack.size) { vm.prefs.position("movie:${movie.streamId}") }
+    val resume = remember(movie.streamId, vm.stack.size, vm.versionsOf(movie).size) { vm.moviePosition(movie) }
+    LaunchedEffect(movie.streamId) { vm.loadVersions(movie) }
     val isFav = vm.isFavourite(ContentType.MOVIE, movie.streamId)
     val backdrop = info?.backdrop?.takeIf { it.isNotBlank() } ?: info?.poster?.takeIf { it.isNotBlank() } ?: movie.poster
 
@@ -110,6 +112,11 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
                         info?.genre,
                     )
                 )
+                val movieQualities = movie.copy(versions = vm.versionsOf(movie)).qualities()
+                if (movieQualities.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    QualityChips(movieQualities)
+                }
                 Spacer(Modifier.height(18.dp))
                 if (resume > 0) {
                     PillButton("Resume from ${formatMs(resume)}", icon = EmberIcons.Play, primary = true, modifier = Modifier.fillMaxWidth()) {
@@ -157,6 +164,7 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
     val lastEpisodeId = remember(series.seriesId, vm.stack.size) { vm.prefs.lastEpisode(series.seriesId) }
     val isFav = vm.isFavourite(ContentType.SERIES, series.seriesId)
     var chosenSeason by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(series.seriesId) { vm.loadVersions(series) }
 
     val start = info?.let { startingEpisode(it, lastEpisodeId) }
     val season = chosenSeason ?: start?.season ?: info?.seasons?.firstOrNull()
@@ -181,6 +189,11 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
                         info?.genre ?: series.genre,
                     )
                 )
+                val seriesQualities = series.copy(versions = vm.versionsOf(series)).qualities()
+                if (seriesQualities.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    QualityChips(seriesQualities)
+                }
                 Spacer(Modifier.height(18.dp))
                 if (start != null && info != null) {
                     val resumed = lastEpisodeId == start.id

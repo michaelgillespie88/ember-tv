@@ -41,6 +41,10 @@ data class Movie(
     val rating: String,
     val ext: String,
     val added: Long,
+    /** Its quality, when known (from the title or its category). */
+    val quality: Quality = Quality.UNKNOWN,
+    /** The other copies of this film in other qualities, best first (empty if there's only one). */
+    val versions: List<Movie> = emptyList(),
 )
 
 data class Series(
@@ -52,6 +56,9 @@ data class Series(
     val genre: String,
     val rating: String,
     val year: String,
+    val quality: Quality = Quality.UNKNOWN,
+    /** The same show in other qualities, best first (empty if there's only one). */
+    val versions: List<Series> = emptyList(),
 )
 
 data class MovieInfo(

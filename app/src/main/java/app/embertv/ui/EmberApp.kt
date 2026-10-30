@@ -108,6 +108,9 @@ fun EmberApp(vm: AppViewModel, isTv: Boolean) {
 
                 if (vm.update != null && vm.repo != null) UpdateDialog(vm)
 
+                // Choosing HD / FHD / 4K
+                vm.choosingVersion?.let { VersionPickerDialog(vm, it) }
+
                 // "Open in another player" from inside a player
                 vm.pickingOtherPlayer?.let { pending ->
                     PlayerPickerDialog(

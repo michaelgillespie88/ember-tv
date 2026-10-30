@@ -285,6 +285,8 @@ fun PosterCard(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     favourite: Boolean = false,
+    /** Shown on the poster's corner, e.g. "4K · FHD". */
+    badge: String? = null,
     onFocused: (() -> Unit)? = null,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
@@ -305,6 +307,7 @@ fun PosterCard(
             Placeholder(title, Modifier.fillMaxSize())
             NetImage(image, Modifier.fillMaxSize())
             if (favourite) FavBadge(Modifier.align(Alignment.TopEnd).padding(8.dp))
+            if (badge != null) PosterBadge(badge, Modifier.align(Alignment.BottomStart).padding(6.dp))
         }
         Spacer(Modifier.height(10.dp))
         Text(

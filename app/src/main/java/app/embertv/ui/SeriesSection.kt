@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -110,6 +111,7 @@ private fun SeriesGrid(vm: AppViewModel, repo: Repository, categoryId: String, m
                             subtitle = listOfNotNull(s.year.takeIf { it.isNotBlank() }, ratingLabel(s.rating))
                                 .joinToString("  ")
                                 .ifEmpty { null },
+                            badge = badgeText(s.qualities()),
                             favourite = vm.favKeys.contains(favouriteKey(ContentType.SERIES, s.seriesId)),
                             onClick = { vm.push(Screen.SeriesDetail(s)) },
                             onLongClick = { vm.toggleFavourite(vm.favouriteOf(s)) },
@@ -141,6 +143,7 @@ fun SeriesDetailScreen(vm: AppViewModel, series: Series) {
     val isFav = vm.isFavourite(ContentType.SERIES, series.seriesId)
     var chosenSeason by remember { mutableStateOf<Int?>(null) }
     var focusedEpisode by remember { mutableStateOf<Episode?>(null) }
+    LaunchedEffect(series.seriesId) { vm.loadVersions(series) }
 
     val start = info?.let { startingEpisode(it, lastEpisodeId) }
     val season = chosenSeason ?: start?.season ?: info?.seasons?.firstOrNull()
@@ -159,6 +162,11 @@ fun SeriesDetailScreen(vm: AppViewModel, series: Series) {
                 (info?.genre ?: series.genre).takeIf { it.isNotBlank() },
             ).joinToString("   ·   ")
             if (meta.isNotEmpty()) Text(meta, style = Txt.Label, color = Ember.Dim)
+            val seriesQualities = series.copy(versions = vm.versionsOf(series)).qualities()
+            if (seriesQualities.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                QualityChips(seriesQualities)
+            }
             Spacer(Modifier.height(10.dp))
             val plot = focusedEpisode?.plot?.takeIf { it.isNotBlank() } ?: info?.plot ?: series.plot
             Text(

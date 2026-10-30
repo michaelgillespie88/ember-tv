@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -99,6 +100,7 @@ private fun MovieGrid(vm: AppViewModel, repo: Repository, categoryId: String, mo
                             image = m.poster,
                             focusKey = "movie:$categoryId:${m.streamId}",
                             subtitle = ratingLabel(m.rating),
+                            badge = badgeText(m.qualities()),
                             favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, m.streamId)),
                             onClick = { vm.push(Screen.MovieDetail(m)) },
                             onLongClick = { vm.toggleFavourite(vm.favouriteOf(m)) },
@@ -138,7 +140,8 @@ fun MovieDetailScreen(vm: AppViewModel, movie: Movie) {
     val load by rememberLoad(repo, movie.streamId) { repo.movieInfo(movie.streamId) }
     val info = (load as? LoadResult.Ok)?.value
     val key = "movie:${movie.streamId}"
-    val resume = remember(key, vm.stack.size) { vm.prefs.position(key) }
+    val resume = remember(key, vm.stack.size, vm.versionsOf(movie).size) { vm.moviePosition(movie) }
+    LaunchedEffect(movie.streamId) { vm.loadVersions(movie) }
     val isFav = vm.isFavourite(ContentType.MOVIE, movie.streamId)
     val backdrop = info?.backdrop?.takeIf { it.isNotBlank() } ?: info?.poster?.takeIf { it.isNotBlank() } ?: movie.poster
     val poster = info?.poster?.takeIf { it.isNotBlank() } ?: movie.poster
@@ -159,6 +162,11 @@ fun MovieDetailScreen(vm: AppViewModel, movie: Movie) {
                     info?.genre?.takeIf { it.isNotBlank() },
                 ).joinToString("   ·   ")
                 if (meta.isNotEmpty()) Text(meta, style = Txt.Label, color = Ember.Dim)
+                val movieQualities = movie.copy(versions = vm.versionsOf(movie)).qualities()
+                if (movieQualities.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    QualityChips(movieQualities)
+                }
                 Spacer(Modifier.height(18.dp))
                 when {
                     load is LoadResult.Loading -> Text("Loading details…", style = Txt.Body, color = Ember.Faint)

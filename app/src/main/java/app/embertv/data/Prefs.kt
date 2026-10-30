@@ -196,6 +196,20 @@ class Prefs(context: Context) {
             sp.edit().putString("external_player", value).apply()
         }
 
+    /** Show each film or show once with its HD/FHD/4K copies as versions. */
+    var mergeVersions: Boolean
+        get() = sp.getBoolean("merge_versions", true)
+        set(value) {
+            sp.edit().putBoolean("merge_versions", value).apply()
+        }
+
+    /** Which version to play: "ask", "best", "FHD" or "HD". */
+    var qualityChoice: String
+        get() = sp.getString("quality_choice", "ask") ?: "ask"
+        set(value) {
+            sp.edit().putString("quality_choice", value).apply()
+        }
+
     /** Switch the TV's refresh rate to match what's playing. */
     var matchFrameRate: Boolean
         get() = sp.getBoolean("match_frame_rate", true)

@@ -292,6 +292,7 @@ private fun LazyListScope.homeRows(
                             focusKey = "home:m:${cat.id}:${m.streamId}",
                             modifier = Modifier.width(posterWidth),
                             subtitle = ratingLabel(m.rating),
+                            badge = badgeText(m.qualities()),
                             favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, m.streamId)),
                             onClick = { vm.push(Screen.MovieDetail(m)) },
                             onLongClick = { vm.toggleFavourite(vm.favouriteOf(m)) },
@@ -311,6 +312,7 @@ private fun LazyListScope.homeRows(
                             image = s.cover,
                             focusKey = "home:s:${cat.id}:${s.seriesId}",
                             modifier = Modifier.width(posterWidth),
+                            badge = badgeText(s.qualities()),
                             favourite = vm.favKeys.contains(favouriteKey(ContentType.SERIES, s.seriesId)),
                             onClick = { vm.push(Screen.SeriesDetail(s)) },
                             onLongClick = { vm.toggleFavourite(vm.favouriteOf(s)) },
@@ -376,7 +378,7 @@ private fun TvHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
     val (index, setIndex) = rememberHeroIndex(heroes.size, paused = focused)
     val movie = heroes[index]
     val info = (rememberLoad(movie.streamId) { repo.movieInfo(movie.streamId) }.value as? LoadResult.Ok)?.value
-    val resume = vm.prefs.position("movie:${movie.streamId}")
+    val resume = vm.moviePosition(movie)
 
     Box(Modifier.fillMaxWidth().height(300.dp)) {
         Crossfade(targetState = movie, label = "hero") { m ->
@@ -465,7 +467,7 @@ private fun PhoneHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
     val latestSetIndex by rememberUpdatedState(setIndex)
     val movie = heroes[index]
     val info = (rememberLoad(movie.streamId) { repo.movieInfo(movie.streamId) }.value as? LoadResult.Ok)?.value
-    val resume = vm.prefs.position("movie:${movie.streamId}")
+    val resume = vm.moviePosition(movie)
     val isFav = vm.isFavourite(ContentType.MOVIE, movie.streamId)
 
     Box(

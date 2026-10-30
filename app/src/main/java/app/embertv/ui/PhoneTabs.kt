@@ -324,6 +324,7 @@ fun PhoneMoviesTab(vm: AppViewModel) {
                                 image = m.poster,
                                 focusKey = "movie:$categoryId:${m.streamId}",
                                 subtitle = ratingLabel(m.rating),
+                                badge = badgeText(m.qualities()),
                                 favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, m.streamId)),
                                 onClick = { vm.push(Screen.MovieDetail(m)) },
                                 onLongClick = { vm.toggleFavourite(vm.favouriteOf(m)) },
@@ -370,6 +371,7 @@ fun PhoneSeriesTab(vm: AppViewModel) {
                                 subtitle = listOfNotNull(s.year.takeIf { it.isNotBlank() }, ratingLabel(s.rating))
                                     .joinToString("  ")
                                     .ifEmpty { null },
+                                badge = badgeText(s.qualities()),
                                 favourite = vm.favKeys.contains(favouriteKey(ContentType.SERIES, s.seriesId)),
                                 onClick = { vm.push(Screen.SeriesDetail(s)) },
                                 onLongClick = { vm.toggleFavourite(vm.favouriteOf(s)) },

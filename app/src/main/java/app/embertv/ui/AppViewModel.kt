@@ -29,6 +29,8 @@ import app.embertv.data.pinHash
 import app.embertv.data.ContentType
 import app.embertv.data.DEFAULT_USER_AGENT
 import app.embertv.data.Episode
+import app.embertv.data.Quality
+import app.embertv.data.Versions
 import app.embertv.data.Favourite
 import app.embertv.data.HistoryEntry
 import app.embertv.data.MAIN_PROFILE
@@ -64,6 +66,30 @@ sealed interface Screen {
 }
 
 const val CATCHUP_PREFIX = "catchup:"
+
+/** A title with several qualities, waiting for one to be picked. */
+sealed interface VersionChoice {
+    val title: String
+    val qualities: List<app.embertv.data.Quality>
+    val names: List<String>
+
+    data class ForMovie(override val title: String, val versions: List<Movie>, val startAt: Long) : VersionChoice {
+        override val qualities get() = versions.map { it.quality }
+        override val names get() = versions.map { it.name }
+    }
+
+    data class ForEpisode(
+        override val title: String,
+        val versions: List<Series>,
+        val from: Series,
+        val episodes: List<Episode>,
+        val index: Int,
+        val fromStart: Boolean,
+    ) : VersionChoice {
+        override val qualities get() = versions.map { it.quality }
+        override val names get() = versions.map { it.name }
+    }
+}
 
 /** Something happening in a followed team's match. [good] is true when it's our team who scored. */
 data class TeamAlert(val kind: Kind, val match: app.embertv.data.Match, val good: Boolean?, val id: Long = System.nanoTime()) {
@@ -157,6 +183,84 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     var matchFrameRate by mutableStateOf(prefs.matchFrameRate)
         private set
+
+    // ---- HD / FHD / 4K versions ----
+
+    var mergeVersions by mutableStateOf(prefs.mergeVersions)
+        private set
+    /** "ask", "best", "FHD" or "HD". */
+    var qualityChoice by mutableStateOf(prefs.qualityChoice)
+        private set
+    /** Waiting for someone to pick a quality. */
+    var choosingVersion by mutableStateOf<VersionChoice?>(null)
+    // Every version found for a title, by "m:<id>" or "s:<id>" of the one shown.
+    private val foundVersions = androidx.compose.runtime.mutableStateMapOf<String, List<Any>>()
+
+    fun toggleMergeVersions() {
+        mergeVersions = !mergeVersions
+        prefs.mergeVersions = mergeVersions
+        repo?.mergeVersions = mergeVersions
+        foundVersions.clear()
+        resetSections()
+        reloadToken++
+    }
+
+    fun cycleQualityChoice() {
+        val steps = listOf("ask", "best", "FHD", "HD")
+        qualityChoice = steps[(steps.indexOf(qualityChoice) + 1) % steps.size]
+        prefs.qualityChoice = qualityChoice
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    fun versionsOf(m: Movie): List<Movie> =
+        (foundVersions["m:${m.streamId}"] as? List<Movie>)?.takeIf { it.size >= m.versions.size } ?: m.versions
+
+    @Suppress("UNCHECKED_CAST")
+    fun versionsOf(s: Series): List<Series> =
+        (foundVersions["s:${s.seriesId}"] as? List<Series>)?.takeIf { it.size >= s.versions.size } ?: s.versions
+
+    /** Looks for other qualities of a title (detail screens call this when they open). */
+    suspend fun loadVersions(m: Movie) {
+        val r = repo ?: return
+        if (!mergeVersions) return
+        val found = try {
+            r.movieVersions(m)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return
+        }
+        if (found.size > 1) foundVersions["m:${m.streamId}"] = found
+    }
+
+    suspend fun loadVersions(s: Series) {
+        val r = repo ?: return
+        if (!mergeVersions) return
+        val found = try {
+            r.seriesVersions(s)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return
+        }
+        if (found.size > 1) foundVersions["s:${s.seriesId}"] = found
+    }
+
+    /** Where to resume a film: the furthest point reached in any of its versions. */
+    fun moviePosition(m: Movie): Long =
+        (versionsOf(m).map { it.streamId } + m.streamId).distinct().maxOf { prefs.position("movie:$it") }
+
+    /** The version to play without asking, or null to ask. [versions] are best first. */
+    private fun autoVersion(qualities: List<Quality>): Int? = when (qualityChoice) {
+        "best" -> 0
+        "FHD", "HD" -> {
+            val want = if (qualityChoice == "FHD") Quality.FHD.rank else Quality.HD.rank
+            qualities.indexOfFirst { it.rank == want }.takeIf { it >= 0 }
+                ?: qualities.indexOfFirst { it.rank in 1 until want }.takeIf { it >= 0 }
+                ?: 0
+        }
+        else -> null
+    }
 
     // ---- Other video players (VLC, MX Player…) ----
 
@@ -304,7 +408,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun startSession(acc: Account, info: AccountInfo?) {
         account = acc
-        repo = Repository(XtreamClient(acc, userAgent))
+        repo = Repository(XtreamClient(acc, userAgent)).also { it.mergeVersions = mergeVersions }
         applyCategoryFilter()
         accountInfo = info
         if (info == null) refreshAccountInfo()
@@ -784,14 +888,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return repo?.client?.liveUrl(c.streamId, format) ?: ""
     }
 
+    /** Plays a film, asking which quality first when there's more than one (unless set in Settings). */
     fun playMovie(m: Movie, fromStart: Boolean) {
+        val versions = versionsOf(m)
+        val startAt = if (fromStart) 0L else moviePosition(m)
+        if (versions.size > 1) {
+            val auto = autoVersion(versions.map { it.quality })
+            if (auto == null) {
+                choosingVersion = VersionChoice.ForMovie(Versions.cleanTitle(m.name), versions, startAt)
+            } else {
+                playMovieVersion(versions[auto], startAt)
+            }
+            return
+        }
+        playMovieVersion(m, startAt)
+    }
+
+    fun playMovieVersion(m: Movie, startAt: Long) {
+        choosingVersion = null
         val r = repo ?: return
         val key = "movie:${m.streamId}"
-        val start = if (fromStart) 0L else prefs.position(key)
+        val start = startAt
         val art = r.peekMovieInfo(m.streamId)?.backdrop?.takeIf { it.isNotBlank() } ?: m.poster
         val item = VodItem(
             key = key,
-            title = m.name,
+            title = if (mergeVersions) Versions.cleanTitle(m.name) else m.name,
             subtitle = "",
             url = r.client.movieUrl(m.streamId, m.ext),
             contentId = m.streamId,
@@ -802,7 +923,52 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         push(Screen.PlayVod(listOf(item), 0, start))
     }
 
+    /** Plays episodes, asking which quality first when the show comes in more than one. */
     fun playEpisodes(s: Series, episodes: List<Episode>, index: Int, fromStart: Boolean) {
+        if (index !in episodes.indices) return
+        val versions = versionsOf(s)
+        if (versions.size > 1) {
+            val auto = autoVersion(versions.map { it.quality })
+            if (auto == null) {
+                choosingVersion = VersionChoice.ForEpisode(Versions.cleanTitle(s.name), versions, s, episodes, index, fromStart)
+            } else {
+                playEpisodeVersion(versions[auto], s, episodes, index, fromStart)
+            }
+            return
+        }
+        playEpisodesIn(s, episodes, index, fromStart, null)
+    }
+
+    /** Plays the same episode from another version of the show, matched by season and episode number. */
+    fun playEpisodeVersion(target: Series, from: Series, episodes: List<Episode>, index: Int, fromStart: Boolean) {
+        choosingVersion = null
+        val r = repo ?: return
+        if (target.seriesId == from.seriesId) {
+            playEpisodesIn(from, episodes, index, fromStart, null)
+            return
+        }
+        val ep = episodes[index]
+        viewModelScope.launch {
+            val info = try {
+                r.seriesInfo(target.seriesId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            val season = info?.episodes?.get(ep.season).orEmpty()
+            val i = season.indexOfFirst { it.number == ep.number }
+            if (i >= 0) {
+                playEpisodesIn(target.copy(name = from.name), season, i, fromStart, "ep:${ep.id}")
+            } else {
+                notify("That episode isn't in ${target.quality.badge.ifEmpty { "that version" }}, so playing this one")
+                playEpisodesIn(from, episodes, index, fromStart, null)
+            }
+        }
+    }
+
+    /** [fallbackKey]: resume from there if this exact episode has no saved position (same episode, other quality). */
+    private fun playEpisodesIn(s: Series, episodes: List<Episode>, index: Int, fromStart: Boolean, fallbackKey: String?) {
         val r = repo ?: return
         if (index !in episodes.indices) return
         val items = episodes.map { e ->
@@ -819,7 +985,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 ext = e.ext,
             )
         }
-        val start = if (fromStart) 0L else prefs.position(items[index].key)
+        val start = when {
+            fromStart -> 0L
+            else -> prefs.position(items[index].key).takeIf { it > 0 } ?: fallbackKey?.let { prefs.position(it) } ?: 0L
+        }
         push(Screen.PlayVod(items, index, start))
     }
 
@@ -1055,7 +1224,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun resume(entry: HistoryEntry) {
         val r = repo ?: return
         if (entry.type == ContentType.MOVIE) {
-            playMovie(Movie(entry.id, entry.title, entry.seriesCover, "", "", entry.ext.ifBlank { "mp4" }, 0L), fromStart = false)
+            // Carry on in the same version that was being watched.
+            playMovieVersion(Movie(entry.id, entry.title, entry.seriesCover, "", "", entry.ext.ifBlank { "mp4" }, 0L), prefs.position(entry.key))
             return
         }
         val series = Series(entry.seriesId, entry.title, entry.seriesCover, "", "", "", "", "")
@@ -1064,7 +1234,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val info = r.seriesInfo(entry.seriesId)
                 val season = info.episodes.values.firstOrNull { eps -> eps.any { it.id == entry.id } }
                 if (season != null) {
-                    playEpisodes(series, season, season.indexOfFirst { it.id == entry.id }, fromStart = false)
+                    playEpisodesIn(series, season, season.indexOfFirst { it.id == entry.id }, fromStart = false, fallbackKey = null)
                     return@launch
                 }
             } catch (e: CancellationException) {

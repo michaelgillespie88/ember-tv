@@ -121,6 +121,7 @@ private fun MovieShelf(vm: AppViewModel, title: String, movies: List<Movie>, key
                     image = m.poster,
                     focusKey = "$keyPrefix:mv:${m.streamId}",
                     modifier = Modifier.width(140.dp),
+                    badge = badgeText(m.qualities()),
                     favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, m.streamId)),
                     onClick = { vm.push(Screen.MovieDetail(m)) },
                     onLongClick = { vm.toggleFavourite(vm.favouriteOf(m)) },
@@ -144,6 +145,7 @@ private fun SeriesShelf(vm: AppViewModel, title: String, series: List<Series>, k
                     image = s.cover,
                     focusKey = "$keyPrefix:sr:${s.seriesId}",
                     modifier = Modifier.width(140.dp),
+                    badge = badgeText(s.qualities()),
                     favourite = vm.favKeys.contains(favouriteKey(ContentType.SERIES, s.seriesId)),
                     onClick = { vm.push(Screen.SeriesDetail(s)) },
                     onLongClick = { vm.toggleFavourite(vm.favouriteOf(s)) },
@@ -322,6 +324,23 @@ fun SettingsSection(vm: AppViewModel) {
                 "Use VLC or another app if something won't play",
                 focusKey = "set:player",
             ) { choosingPlayer = true }
+            SettingRow(
+                "Quality to play",
+                when (vm.qualityChoice) {
+                    "best" -> "Best available"
+                    "FHD" -> "Full HD"
+                    "HD" -> "HD"
+                    else -> "Ask each time"
+                },
+                "For films and shows that come in HD, FHD and 4K",
+                focusKey = "set:quality",
+            ) { vm.cycleQualityChoice() }
+            SettingRow(
+                "Combine versions",
+                if (vm.mergeVersions) "On" else "Off",
+                "Show each film or show once instead of once per quality",
+                focusKey = "set:merge",
+            ) { vm.toggleMergeVersions() }
             SettingRow(
                 "Subtitles",
                 if (vm.subtitleMode == "off") "Off" else "English",

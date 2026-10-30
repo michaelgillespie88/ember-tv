@@ -1,6 +1,8 @@
 package app.embertv.data
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
@@ -11,6 +13,21 @@ import kotlinx.coroutines.sync.withPermit
 class Repository(val client: XtreamClient) {
     /** Hides categories the current profile shouldn't see. Lists are cached unfiltered. */
     var filter: (ContentType, String) -> Boolean = { _, _ -> true }
+        set(value) {
+            field = value
+            mergedMovies.clear()
+            mergedSeries.clear()
+        }
+
+    /** Show each film or show once, with its HD/FHD/4K copies as versions. */
+    var mergeVersions: Boolean = true
+        set(value) {
+            field = value
+            mergedMovies.clear()
+            mergedSeries.clear()
+        }
+    private val mergedMovies = HashMap<String, List<Movie>>()
+    private val mergedSeries = HashMap<String, List<Series>>()
 
     private var liveCats: List<Category>? = null
     private var movieCats: List<Category>? = null
@@ -45,6 +62,8 @@ class Repository(val client: XtreamClient) {
         allSeries = null
         movieInfos.clear()
         seriesInfos.clear()
+        mergedMovies.clear()
+        mergedSeries.clear()
         epg.clear()
         fullEpg.clear()
     }
@@ -64,8 +83,8 @@ class Repository(val client: XtreamClient) {
     private suspend fun rawAllSeries(): List<Series> = allSeries ?: client.series(null).also { allSeries = it }
 
     suspend fun allChannels(): List<Channel> = rawAllChannels().filter { filter(ContentType.LIVE, it.categoryId) }
-    suspend fun allMovies(): List<Movie> = rawAllMovies().filter { filter(ContentType.MOVIE, it.categoryId) }
-    suspend fun allSeries(): List<Series> = rawAllSeries().filter { filter(ContentType.SERIES, it.categoryId) }
+    suspend fun allMovies(): List<Movie> = movies(ALL)
+    suspend fun allSeries(): List<Series> = series(ALL)
 
     suspend fun channels(categoryId: String): List<Channel> {
         if (categoryId == ALL) return allChannels()
@@ -81,8 +100,86 @@ class Repository(val client: XtreamClient) {
         return result
     }
 
+    private suspend fun movieCategoryNames(): Map<String, String> =
+        try {
+            rawMovieCategories().associate { it.id to it.name }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyMap()
+        }
+
+    private suspend fun seriesCategoryNames(): Map<String, String> =
+        try {
+            rawSeriesCategories().associate { it.id to it.name }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyMap()
+        }
+
+    /** Movies in a category, each film once with its other qualities as [Movie.versions]. */
     suspend fun movies(categoryId: String): List<Movie> {
-        if (categoryId == ALL) return allMovies()
+        val raw = rawMovies(categoryId)
+        if (!mergeVersions) return raw
+        mergedMovies[categoryId]?.let { return it }
+        val names = movieCategoryNames()
+        val merged = withContext(Dispatchers.Default) { Versions.mergeMovies(raw, names) }
+        mergedMovies[categoryId] = merged
+        return merged
+    }
+
+    suspend fun series(categoryId: String): List<Series> {
+        val raw = rawSeries(categoryId)
+        if (!mergeVersions) return raw
+        mergedSeries[categoryId]?.let { return it }
+        val names = seriesCategoryNames()
+        val merged = withContext(Dispatchers.Default) { Versions.mergeSeries(raw, names) }
+        mergedSeries[categoryId] = merged
+        return merged
+    }
+
+    /** Every quality of [m] that can be found: in lists already loaded, and in categories named for a quality. */
+    suspend fun movieVersions(m: Movie): List<Movie> {
+        val pool = ArrayList<Movie>()
+        pool += m.versions.ifEmpty { listOf(m) }
+        allMovies?.let { pool += it }
+        moviesByCat.values.forEach { pool += it }
+        val names = movieCategoryNames()
+        for (c in movieCategories().filter { Versions.categoryQuality(it.name) != null }.take(8)) {
+            try {
+                pool += rawMovies(c.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Skip that category.
+            }
+        }
+        val visible = pool.filter { filter(ContentType.MOVIE, it.categoryId) || it.streamId == m.streamId }
+        return withContext(Dispatchers.Default) { Versions.movieCopies(m.name, visible, names) }
+    }
+
+    suspend fun seriesVersions(s: Series): List<Series> {
+        val pool = ArrayList<Series>()
+        pool += s.versions.ifEmpty { listOf(s) }
+        allSeries?.let { pool += it }
+        seriesByCat.values.forEach { pool += it }
+        val names = seriesCategoryNames()
+        for (c in seriesCategories().filter { Versions.categoryQuality(it.name) != null }.take(8)) {
+            try {
+                pool += rawSeries(c.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Skip that category.
+            }
+        }
+        val visible = pool.filter { filter(ContentType.SERIES, it.categoryId) || it.seriesId == s.seriesId }
+        return withContext(Dispatchers.Default) { Versions.seriesCopies(s.name, visible, names) }
+    }
+
+    private suspend fun rawMovies(categoryId: String): List<Movie> {
+        if (categoryId == ALL) return rawAllMovies().filter { filter(ContentType.MOVIE, it.categoryId) }
         if (!filter(ContentType.MOVIE, categoryId)) return emptyList()
         moviesByCat[categoryId]?.let { return it }
         val everything = allMovies
@@ -95,8 +192,8 @@ class Repository(val client: XtreamClient) {
         return result
     }
 
-    suspend fun series(categoryId: String): List<Series> {
-        if (categoryId == ALL) return allSeries()
+    private suspend fun rawSeries(categoryId: String): List<Series> {
+        if (categoryId == ALL) return rawAllSeries().filter { filter(ContentType.SERIES, it.categoryId) }
         if (!filter(ContentType.SERIES, categoryId)) return emptyList()
         seriesByCat[categoryId]?.let { return it }
         val everything = allSeries
