@@ -470,9 +470,18 @@ fun BoxScope.ScoreBug(vm: AppViewModel) {
     val shape = RoundedCornerShape(14.dp)
     Row(
         Modifier
-            .align(Alignment.TopStart)
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(start = if (isTv) 40.dp else 12.dp, top = if (isTv) 26.dp else 8.dp)
+            // Over a video it sits top left like a broadcaster's score; in the menus it moves to the
+            // bottom right on TVs so it never covers the logo and tabs.
+            .then(
+                if (isTv && !vm.playerOpen) {
+                    Modifier.align(Alignment.BottomEnd).padding(end = 40.dp, bottom = 26.dp)
+                } else {
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(start = if (isTv) 40.dp else 12.dp, top = if (isTv) 26.dp else 8.dp)
+                }
+            )
             .glassSurface(shape, if (flashing) Ember.Accent.copy(alpha = 0.55f) else Color(0xB3101014))
             .border(1.dp, if (flashing) Ember.Accent else Color(0x33FFFFFF), shape)
             .then(if (!isTv) Modifier.clickable { vm.unpinMatch() } else Modifier)

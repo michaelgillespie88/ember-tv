@@ -107,7 +107,7 @@ fun MultiViewScreen(vm: AppViewModel, start: List<Channel>, pool: List<Channel>)
                 }
             }
             Text(
-                if (isTv) "OK  Full screen     Hold OK  Change channel     Back  Leave multi-view"
+                if (isTv) "OK  Full screen   ·   Hold OK  Change channel   ·   Back  Leave multi-view"
                 else "Tap a picture for full screen · press and hold to change it",
                 style = Txt.Caption,
                 color = Ember.Faint,
