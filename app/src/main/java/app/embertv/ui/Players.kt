@@ -419,8 +419,8 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     var tsTick by remember { mutableIntStateOf(0) }
 
     val channel = channels[index]
+    // Live TV keeps the screen's own refresh rate (switching blanked the picture on every channel change).
     val videoStats = rememberVideoStats(exo, channel.streamId)
-    MatchFrameRate(videoStats)
     // So coming back from catch-up returns to this channel, not the one the player opened on.
     LaunchedEffect(index) { vm.noteLiveIndex(index) }
 

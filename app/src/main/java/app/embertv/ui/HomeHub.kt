@@ -211,15 +211,6 @@ private fun LazyListScope.homeRows(
         item(key = "row-sport") {
             HomeRow("Live Sport Now", edge) {
                 LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    val watchable = sport.filter { it.hits.isNotEmpty() && it.match.state == MatchState.LIVE }
-                    if (watchable.size >= 2) {
-                        item(key = "together") {
-                            SportTogetherCard(minOf(4, watchable.size), continueWidth) {
-                                val picks = watchable.take(4).map { it.hits.first().channel }
-                                vm.push(Screen.MultiView(picks, watchable.flatMap { s -> s.hits.map { it.channel } }))
-                            }
-                        }
-                    }
                     items(sport, key = { it.match.id }) { s ->
                         SportCard(
                             s,

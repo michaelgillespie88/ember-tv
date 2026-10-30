@@ -319,6 +319,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         (foundVersions["s:${s.seriesId}"] as? List<Series>)?.takeIf { it.size >= s.versions.size } ?: s.versions
 
     /** Looks for other qualities of a title (detail screens call this when they open). */
+    /** Films whose other qualities have been looked for already. */
+    private val checkedMovies = HashSet<Int>()
+
     suspend fun loadVersions(m: Movie) {
         val r = repo ?: return
         if (!mergeVersions) return
@@ -329,6 +332,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) {
             return
         }
+        checkedMovies += m.streamId
         if (found.size > 1) foundVersions["m:${m.streamId}"] = found
     }
 
@@ -1381,6 +1385,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Plays a film, asking which quality first when there's more than one (unless set in Settings). */
     fun playMovie(m: Movie, fromStart: Boolean) {
+        // Still looking for other qualities: finish that first, so the choice is always offered.
+        if (mergeVersions && m.streamId !in checkedMovies) {
+            notify("Checking for other qualities…")
+            viewModelScope.launch {
+                loadVersions(m)
+                checkedMovies += m.streamId
+                playMovie(m, fromStart)
+            }
+            return
+        }
         val versions = versionsOf(m)
         val startAt = if (fromStart) 0L else moviePosition(m)
         if (versions.size > 1) {

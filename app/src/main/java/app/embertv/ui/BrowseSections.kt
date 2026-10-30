@@ -548,7 +548,7 @@ fun SettingsSection(vm: AppViewModel) {
                 SettingRow(
                     "Match frame rate",
                     if (vm.matchFrameRate) "On" else "Off",
-                    "50Hz for UK channels, 24Hz for films. The screen may blink as it switches",
+                    "Films and series only: switches to 24Hz and back. The screen may blink as it switches",
                     focusKey = "set:afr",
                 ) { vm.toggleMatchFrameRate() }
                 SettingRow(

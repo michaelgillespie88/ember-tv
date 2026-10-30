@@ -64,6 +64,8 @@ class Repository(val client: XtreamClient) {
         seriesInfos.clear()
         mergedMovies.clear()
         mergedSeries.clear()
+        movieIndex = null
+        seriesIndex = null
         epg.clear()
         fullEpg.clear()
     }
@@ -161,43 +163,58 @@ class Repository(val client: XtreamClient) {
     fun loadedSeries(): List<Series> =
         ((allSeries ?: emptyList()) + seriesByCat.values.flatten()).filter { filter(ContentType.SERIES, it.categoryId) }
 
-    /** Every quality of [m] that can be found: in lists already loaded, and in categories named for a quality. */
-    suspend fun movieVersions(m: Movie): List<Movie> {
-        val pool = ArrayList<Movie>()
-        pool += m.versions.ifEmpty { listOf(m) }
-        allMovies?.let { pool += it }
-        moviesByCat.values.forEach { pool += it }
-        val names = movieCategoryNames()
-        for (c in movieCategories().filter { Versions.categoryQuality(it.name) != null }.take(8)) {
-            try {
-                pool += rawMovies(c.id)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Skip that category.
-            }
+    // Every title in the library grouped by its title key, built once in the background, so other
+    // qualities can be found wherever the provider keeps them (not only in groups named "4K" etc.).
+    @Volatile private var movieIndex: Map<String, List<Movie>>? = null
+    @Volatile private var seriesIndex: Map<String, List<Series>>? = null
+
+    private suspend fun movieIndex(): Map<String, List<Movie>> {
+        movieIndex?.let { return it }
+        val all = try {
+            rawAllMovies()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return emptyMap()
         }
-        val visible = pool.filter { filter(ContentType.MOVIE, it.categoryId) || it.streamId == m.streamId }
-        return withContext(Dispatchers.Default) { Versions.movieCopies(m.name, visible, names) }
+        return withContext(Dispatchers.Default) { all.groupBy { Versions.key(it.name) } }.also { movieIndex = it }
+    }
+
+    private suspend fun seriesIndex(): Map<String, List<Series>> {
+        seriesIndex?.let { return it }
+        val all = try {
+            rawAllSeries()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return emptyMap()
+        }
+        return withContext(Dispatchers.Default) { all.groupBy { Versions.key(it.name) } }.also { seriesIndex = it }
+    }
+
+    /** Every quality of [m] the provider has, wherever it's filed. */
+    suspend fun movieVersions(m: Movie): List<Movie> {
+        val names = movieCategoryNames()
+        val index = movieIndex()
+        return withContext(Dispatchers.Default) {
+            val pool = ArrayList<Movie>()
+            pool += m.versions.ifEmpty { listOf(m) }
+            pool += index[Versions.key(m.name)].orEmpty()
+            val visible = pool.filter { filter(ContentType.MOVIE, it.categoryId) || it.streamId == m.streamId }
+            Versions.movieCopies(m.name, visible, names)
+        }
     }
 
     suspend fun seriesVersions(s: Series): List<Series> {
-        val pool = ArrayList<Series>()
-        pool += s.versions.ifEmpty { listOf(s) }
-        allSeries?.let { pool += it }
-        seriesByCat.values.forEach { pool += it }
         val names = seriesCategoryNames()
-        for (c in seriesCategories().filter { Versions.categoryQuality(it.name) != null }.take(8)) {
-            try {
-                pool += rawSeries(c.id)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Skip that category.
-            }
+        val index = seriesIndex()
+        return withContext(Dispatchers.Default) {
+            val pool = ArrayList<Series>()
+            pool += s.versions.ifEmpty { listOf(s) }
+            pool += index[Versions.key(s.name)].orEmpty()
+            val visible = pool.filter { filter(ContentType.SERIES, it.categoryId) || it.seriesId == s.seriesId }
+            Versions.seriesCopies(s.name, visible, names)
         }
-        val visible = pool.filter { filter(ContentType.SERIES, it.categoryId) || it.seriesId == s.seriesId }
-        return withContext(Dispatchers.Default) { Versions.seriesCopies(s.name, visible, names) }
     }
 
     private suspend fun rawMovies(categoryId: String): List<Movie> {
