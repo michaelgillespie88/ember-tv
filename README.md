@@ -13,13 +13,22 @@ A clean, Apple TV-style IPTV player for Android TV and Google TV (built for a TC
 
 Every push to `main` builds a new APK automatically (see the **Actions** tab) and publishes it as the latest release.
 
-1. On the TV, install **Downloader** (by AFTVnews) from the Play Store.
+**Fire TV Stick**
+1. Install **Downloader** (by AFTVnews) from the Amazon Appstore.
+2. Allow it to install apps: **Settings → My Fire TV → Developer options → Install unknown apps → Downloader → On**.
+   (If Developer options is missing: **Settings → My Fire TV → About**, press OK on the device name 7 times.)
+
+**Google TV / Android TV**
+1. Install **Downloader** (by AFTVnews) from the Play Store.
 2. Allow it to install apps: **Settings → Apps → Security & restrictions → Unknown sources → Downloader → On**.
-3. Open Downloader and enter:
+
+**Then, on either**
+1. Open Downloader and enter:
    `https://github.com/michaelgillespie88/ember-tv/releases/latest/download/EmberTV.apk`
-4. Choose **Install**, then open **Ember TV** and sign in with your provider's server address, username and password.
+2. Choose **Install**, then open **Ember TV** and sign in with your provider's server address, username and password.
 
 Updating works the same way: download the latest APK again and install over the top. Your login and favourites are kept.
+The version number is shown on the sign-in screen and in Settings.
 
 ## Remote controls
 

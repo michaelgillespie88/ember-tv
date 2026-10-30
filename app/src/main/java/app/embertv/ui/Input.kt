@@ -151,7 +151,10 @@ fun TextEntryDialog(
                         .focusRequester(requester)
                         .onPreviewKeyEvent { ev ->
                             when (ev.nativeKeyEvent.keyCode) {
-                                AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                                // Enter, Tab or an arrow press (once the keyboard is hidden) all mean "done".
+                                AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_NUMPAD_ENTER,
+                                AndroidKeyEvent.KEYCODE_TAB,
+                                AndroidKeyEvent.KEYCODE_DPAD_DOWN, AndroidKeyEvent.KEYCODE_DPAD_UP -> {
                                     if (ev.type == KeyEventType.KeyUp) close()
                                     true
                                 }
@@ -182,7 +185,7 @@ fun TextEntryDialog(
                 )
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    "When you've finished, press Done on the keyboard, or press Back.",
+                    "When you've finished, press Next or Done on the keyboard, or press Back.",
                     style = Txt.Caption,
                     color = Ember.Faint,
                 )

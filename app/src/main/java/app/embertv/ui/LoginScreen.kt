@@ -85,6 +85,8 @@ fun LoginScreen(vm: AppViewModel) {
                     style = Txt.Body,
                     color = Ember.Faint,
                 )
+                Spacer(Modifier.height(28.dp))
+                Text("Version ${app.embertv.BuildConfig.VERSION_NAME}", style = Txt.Caption, color = Ember.Faint)
             }
             Spacer(Modifier.width(64.dp))
             Column(Modifier.width(440.dp)) {
