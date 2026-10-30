@@ -19,7 +19,10 @@ import javax.net.ssl.SSLException
 
 class XtreamException(message: String) : Exception(message)
 
-const val DEFAULT_USER_AGENT = "EmberTV/1.0 (Linux; Android TV)"
+const val DEFAULT_USER_AGENT = "Streammania/1.0 (Linux; Android TV)"
+
+/** What the default identity was called before the rename; saved settings may still hold it. */
+const val OLD_DEFAULT_USER_AGENT = "EmberTV/1.0 (Linux; Android TV)"
 const val VLC_USER_AGENT = "VLC/3.0.21 LibVLC/3.0.21"
 
 /** Turns whatever the user typed into "http(s)://host:port" with no trailing path. */

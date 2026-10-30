@@ -22,9 +22,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import app.embertv.data.Profile
 
 /** Avatar colours: each is a top-left to bottom-right gradient. */
@@ -107,11 +110,53 @@ private sealed interface Editing {
     data class Existing(val profile: Profile) : Editing
 }
 
+/** A PIN to ask for before [onSuccess]. [check] decides whether the digits are right. */
+private class PinAsk(val title: String, val subtitle: String?, val check: (String) -> Boolean, val onSuccess: () -> Unit)
+
 @Composable
 fun ProfilePicker(vm: AppViewModel) {
     val isTv = LocalIsTv.current
     var editMode by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Editing?>(null) }
+    var pinAsk by remember { mutableStateOf<PinAsk?>(null) }
+    // Profiles whose PIN has been typed since this screen opened.
+    val unlocked = remember { mutableStateListOf<String>() }
+    var grownUp by remember { mutableStateOf(false) }
+
+    fun isOpen(p: Profile): Boolean =
+        !p.locked || p.id in unlocked || (vm.pickerCancelable && p.id == vm.profile?.id)
+
+    /** Runs [action] for the profile's owner, asking for its PIN first if it has one. */
+    fun withPin(p: Profile, action: () -> Unit) {
+        if (isOpen(p)) {
+            action()
+        } else {
+            pinAsk = PinAsk("Enter ${p.name}'s PIN", null, { vm.checkPin(p, it) }) {
+                unlocked.add(p.id)
+                action()
+            }
+        }
+    }
+
+    /**
+     * Adding and editing profiles is for grown-ups: once a grown-up profile has a PIN, it's needed
+     * here unless you came from a grown-up profile.
+     */
+    fun asGrownUp(action: () -> Unit) {
+        val trusted = grownUp || !vm.parentPinSet || (vm.pickerCancelable && vm.profile?.kids == false)
+        if (trusted) {
+            action()
+        } else {
+            pinAsk = PinAsk("Grown-ups only", "Enter the PIN of a grown-up's profile", { pin ->
+                val owner = vm.parentForPin(pin)
+                if (owner != null) unlocked.add(owner.id)
+                owner != null
+            }) {
+                grownUp = true
+                action()
+            }
+        }
+    }
 
     BackHandler(enabled = editMode || vm.pickerCancelable) {
         if (editMode) editMode = false else vm.closeProfilePicker()
@@ -150,7 +195,7 @@ fun ProfilePicker(vm: AppViewModel) {
                                 name = "Add profile",
                                 avatarSize = avatarSize,
                                 focusKey = "profile:add",
-                                onClick = { editing = Editing.New },
+                                onClick = { asGrownUp { editing = Editing.New } },
                             ) {
                                 Box(
                                     Modifier.fillMaxSize().glassSurface(CircleShape, Color(0x14FFFFFF)),
@@ -166,7 +211,15 @@ fun ProfilePicker(vm: AppViewModel) {
                                 focusKey = "profile:${p.id}",
                                 autoFocus = isTv && !editMode && p.id == vm.profile?.id,
                                 current = p.id == vm.profile?.id && vm.pickerCancelable,
-                                onClick = { if (editMode) editing = Editing.Existing(p) else vm.chooseProfile(p) },
+                                locked = p.locked,
+                                kids = p.kids,
+                                onClick = {
+                                    if (editMode) {
+                                        withPin(p) { editing = Editing.Existing(p) }
+                                    } else {
+                                        withPin(p) { vm.chooseProfile(p) }
+                                    }
+                                },
                             ) {
                                 ProfileAvatar(p, avatarSize)
                                 if (editMode) {
@@ -182,7 +235,9 @@ fun ProfilePicker(vm: AppViewModel) {
             }
 
             Spacer(Modifier.height(12.dp))
-            ActionButton(if (editMode) "Done" else "Edit profiles", primary = false) { editMode = !editMode }
+            ActionButton(if (editMode) "Done" else "Edit profiles", primary = false) {
+                if (editMode) editMode = false else asGrownUp { editMode = true }
+            }
         }
     }
 
@@ -195,9 +250,20 @@ fun ProfilePicker(vm: AppViewModel) {
         )
         is Editing.Existing -> ProfileEditor(
             vm = vm,
-            initial = e.profile,
+            initial = vm.profiles.firstOrNull { it.id == e.profile.id } ?: e.profile,
             onDone = { editing = null },
         )
+    }
+
+    pinAsk?.let { ask ->
+        PinDialog(title = ask.title, subtitle = ask.subtitle, onDismiss = { pinAsk = null }) { pin ->
+            val ok = ask.check(pin)
+            if (ok) {
+                pinAsk = null
+                ask.onSuccess()
+            }
+            ok
+        }
     }
 }
 
@@ -208,6 +274,8 @@ private fun ProfileTile(
     focusKey: String,
     autoFocus: Boolean = false,
     current: Boolean = false,
+    locked: Boolean = false,
+    kids: Boolean = false,
     onClick: () -> Unit,
     avatar: @Composable () -> Unit,
 ) {
@@ -227,15 +295,51 @@ private fun ProfileTile(
             avatar()
         }
         Spacer(Modifier.height(12.dp))
-        Text(
-            name,
-            style = Txt.Label.copy(fontWeight = if (focused || current) FontWeight.SemiBold else FontWeight.Medium),
-            color = if (focused || current || !LocalIsTv.current) Ember.Text else Ember.Dim,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-        )
+        val color = if (focused || current || !LocalIsTv.current) Ember.Text else Ember.Dim
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                name,
+                style = Txt.Label.copy(fontWeight = if (focused || current) FontWeight.SemiBold else FontWeight.Medium),
+                color = color,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (locked) {
+                Spacer(Modifier.width(5.dp))
+                Icon(EmberIcons.Lock, contentDescription = "PIN locked", tint = Ember.Dim, modifier = Modifier.size(14.dp))
+            }
+        }
+        if (kids) {
+            Spacer(Modifier.height(4.dp))
+            Text("KIDS", style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp), color = Ember.Accent)
+        }
     }
+}
+
+/** A row in the profile editor: a title and hint on the left, the current value on the right. */
+@Composable
+private fun OptionRow(title: String, value: String, hint: String, focusKey: String, onClick: () -> Unit) {
+    FocusBox(
+        modifier = Modifier.fillMaxWidth().height(58.dp),
+        focusKey = focusKey,
+        shape = RoundedCornerShape(12.dp),
+        focusedScale = 1.03f,
+        color = Ember.Card,
+        focusedColor = Color.White,
+        onClick = onClick,
+    ) { focused ->
+        Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = Txt.Label, color = if (focused) Color.Black else Ember.Text)
+                Text(hint, style = Txt.Caption, color = if (focused) Color(0xFF55555C) else Ember.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(value, style = Txt.Label, color = if (focused) Color(0xFF333338) else Ember.Accent)
+        }
+    }
+    Spacer(Modifier.height(8.dp))
 }
 
 /** A TV button on TVs, a pill button on phones. */
@@ -257,32 +361,50 @@ private fun ProfileEditor(vm: AppViewModel, initial: Profile?, onDone: () -> Uni
     var color by remember { mutableIntStateOf(initial?.color ?: (vm.profiles.size % PALETTE.size)) }
     var typing by remember { mutableStateOf(initial == null) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var kids by remember { mutableStateOf(initial?.kids ?: false) }
+    // null: keep the current PIN; "": remove it; four digits: the new PIN.
+    var pin by remember { mutableStateOf<String?>(null) }
+    var settingPin by remember { mutableStateOf(false) }
+    var choosingCategories by remember { mutableStateOf(false) }
+    val newPin = pin
+    val locked = if (newPin == null) initial?.locked == true else newPin.isNotEmpty()
     val preview = Profile(initial?.id ?: "new", name.ifBlank { "?" }, color)
 
     fun save() {
         if (initial == null) {
-            val p = vm.addProfile(name, color)
-            vm.notify("Added ${p.name}")
+            vm.addProfile(name, color, kids, pin?.takeIf { it.isNotEmpty() })
         } else {
-            vm.updateProfile(initial.copy(name = name, color = color))
+            vm.updateProfile(initial.copy(name = name, color = color, kids = kids), pin)
         }
         onDone()
     }
 
-    Dialog(onDismissRequest = onDone) {
+    Dialog(onDismissRequest = onDone, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         DialogBackdropBlur()
+        Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
         Column(
             Modifier
-                .width(520.dp)
+                .width(if (isTv) 560.dp else 520.dp)
                 .clip(RoundedCornerShape(22.dp))
                 .background(dialogPanelColor())
-                .padding(if (isTv) 30.dp else 22.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(if (isTv) 26.dp else 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(if (initial == null) "New profile" else "Edit profile", style = Txt.Title)
-            Spacer(Modifier.height(18.dp))
-            ProfileAvatar(preview, if (isTv) 96.dp else 84.dp)
-            Spacer(Modifier.height(18.dp))
+            if (isTv) {
+                // Wide and short, because TV screens are only about 540dp tall.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ProfileAvatar(preview, 64.dp)
+                    Spacer(Modifier.width(18.dp))
+                    Text(if (initial == null) "New profile" else "Edit profile", style = Txt.Title, modifier = Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(16.dp))
+            } else {
+                Text(if (initial == null) "New profile" else "Edit profile", style = Txt.Title)
+                Spacer(Modifier.height(18.dp))
+                ProfileAvatar(preview, 84.dp)
+                Spacer(Modifier.height(18.dp))
+            }
             EntryRow(
                 label = "Name",
                 value = name,
@@ -314,7 +436,40 @@ private fun ProfileEditor(vm: AppViewModel, initial: Profile?, onDone: () -> Uni
                     }
                 }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(18.dp))
+            OptionRow(
+                "Kids profile",
+                if (kids) "On" else "Off",
+                "Only shows the categories you choose",
+                focusKey = "profile:kids",
+            ) { kids = !kids }
+            OptionRow(
+                "PIN lock",
+                if (locked) "On" else "Off",
+                "Ask for a 4-digit PIN to open this profile",
+                focusKey = "profile:pin",
+            ) { settingPin = true }
+            if (kids && initial?.kids == true) {
+                OptionRow("Categories", "Choose", "What this profile can watch", focusKey = "profile:cats") {
+                    choosingCategories = true
+                }
+            } else if (kids) {
+                Text(
+                    "Child-friendly categories are picked for you when you save. You can change them afterwards.",
+                    style = Txt.Caption,
+                    color = Ember.Dim,
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp),
+                )
+            }
+            if (kids && !vm.parentPinSet) {
+                Text(
+                    "Tip: give the grown-ups' profiles a PIN so kids can't switch into them.",
+                    style = Txt.Caption,
+                    color = Ember.Accent,
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp),
+                )
+            }
+            Spacer(Modifier.height(16.dp))
             if (isTv) {
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     TvButton("Save", icon = "✓", onClick = { save() })
@@ -331,6 +486,21 @@ private fun ProfileEditor(vm: AppViewModel, initial: Profile?, onDone: () -> Uni
                 PillButton("Cancel", modifier = Modifier.fillMaxWidth(), onClick = onDone)
             }
         }
+        }
+    }
+
+    if (settingPin) {
+        SetPinDialog(
+            onDismiss = { settingPin = false },
+            onTurnOff = if (locked) ({ pin = ""; settingPin = false }) else null,
+        ) {
+            pin = it
+            settingPin = false
+        }
+    }
+
+    if (choosingCategories && initial != null) {
+        CategoryManager(vm, initial) { choosingCategories = false }
     }
 
     if (typing) {

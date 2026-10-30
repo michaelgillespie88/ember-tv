@@ -65,6 +65,20 @@ object EmberIcons {
 
     val Close = outline("close") { moveTo(6f, 6f); lineTo(18f, 18f); moveTo(18f, 6f); lineTo(6f, 18f) }
 
+    val Lock = outline("lock") {
+        moveTo(6.5f, 11f); lineTo(17.5f, 11f); lineTo(17.5f, 20f); lineTo(6.5f, 20f); close()
+        moveTo(8.8f, 11f); lineTo(8.8f, 8f)
+        arcTo(3.2f, 3.2f, 0f, false, true, 15.2f, 8f)
+        lineTo(15.2f, 11f)
+    }
+
+    val Backspace = outline("backspace") {
+        moveTo(9f, 6f); lineTo(20f, 6f); lineTo(20f, 18f); lineTo(9f, 18f); lineTo(3.5f, 12f); close()
+        moveTo(12f, 9.5f); lineTo(17f, 14.5f); moveTo(17f, 9.5f); lineTo(12f, 14.5f)
+    }
+
+    val Check = outline("check") { moveTo(5f, 12.5f); lineTo(10f, 17.5f); lineTo(19f, 7f) }
+
     val More = solid("more") {
         circle(5.5f, 12f, 1.8f)
         circle(12f, 12f, 1.8f)

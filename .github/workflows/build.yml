@@ -1,4 +1,4 @@
-name: Build Ember TV
+name: Build Streammania
 
 on:
   push:
@@ -35,16 +35,21 @@ jobs:
           msg=$(grep -E "^e: |error:|What went wrong|Could not (find|resolve)" -A2 build.log | head -60 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
           echo "::error title=Build failed::${msg:-See the build log}"
 
+      # Streammania.apk is the new name; EmberTV.apk keeps old Downloader links working.
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk EmberTV.apk
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk Streammania.apk
+          cp app/build/outputs/apk/release/app-release.apk EmberTV.apk
 
       - name: Publish APK
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Ember TV build ${{ github.run_number }}
+          name: Streammania build ${{ github.run_number }}
           body: |
             Install on your TV with the Downloader app using:
-            https://github.com/${{ github.repository }}/releases/latest/download/EmberTV.apk
-          files: EmberTV.apk
+            https://github.com/${{ github.repository }}/releases/latest/download/Streammania.apk
+          files: |
+            Streammania.apk
+            EmberTV.apk
           make_latest: true

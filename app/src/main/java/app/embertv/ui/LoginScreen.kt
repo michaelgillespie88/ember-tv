@@ -24,7 +24,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -166,16 +169,19 @@ fun LoginScreen(vm: AppViewModel) {
 @Composable
 fun Wordmark(large: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier
-                .size(if (large) 22.dp else 14.dp)
-                .clip(CircleShape)
-                .background(Brush.radialGradient(listOf(Color(0xFFFFC27A), Ember.Accent, Ember.AccentDeep)))
+        androidx.compose.material3.Icon(
+            EmberIcons.Play,
+            contentDescription = null,
+            tint = Ember.Accent,
+            modifier = Modifier.size(if (large) 28.dp else 20.dp),
         )
-        Spacer(Modifier.width(if (large) 12.dp else 9.dp))
+        Spacer(Modifier.width(if (large) 8.dp else 5.dp))
         Text(
-            "ember",
-            fontSize = if (large) 34.sp else 22.sp,
+            buildAnnotatedString {
+                append("stream")
+                withStyle(SpanStyle(color = Ember.Accent)) { append("mania") }
+            },
+            fontSize = if (large) 30.sp else 21.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.5).sp,
             color = Ember.Text,

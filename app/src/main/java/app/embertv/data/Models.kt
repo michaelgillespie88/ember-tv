@@ -137,5 +137,47 @@ data class HistoryEntry(
 /** The first profile. It keeps the data saved before profiles existed. */
 const val MAIN_PROFILE = "main"
 
-/** A person using the app: their own favourites, Continue Watching and resume points. */
-data class Profile(val id: String, val name: String, val color: Int)
+/**
+ * A person using the app: their own favourites, Continue Watching and resume points.
+ * Kids profiles only see the categories chosen for them; [pinHash] locks a profile behind a PIN.
+ */
+data class Profile(
+    val id: String,
+    val name: String,
+    val color: Int,
+    val kids: Boolean = false,
+    val pinHash: String = "",
+) {
+    val locked: Boolean get() = pinHash.isNotEmpty()
+}
+
+/**
+ * Which categories a profile sees. Normal profiles list the ones they've hidden; kids profiles
+ * list the ones they're allowed, so anything new from the provider stays hidden from children.
+ */
+data class CategoryRules(val allowMode: Boolean, val keys: Set<String>) {
+    fun visible(type: ContentType, categoryId: String): Boolean {
+        val key = categoryRuleKey(type, categoryId)
+        return if (allowMode) key in keys else key !in keys
+    }
+}
+
+fun categoryRuleKey(type: ContentType, categoryId: String): String = "${type.name}:$categoryId"
+
+private val KIDS_WORDS = listOf(
+    "kid", "child", "cartoon", "family", "junior", "jr", "animation", "animated", "anime", "disney", "pixar",
+    "dreamworks", "nick", "boomerang", "cbeebies", "cbbc", "baby", "toon", "pop", "tiny", "school",
+)
+
+/** PINs are never saved as typed, only as a salted SHA-256 of the digits. */
+fun pinHash(profileId: String, pin: String): String {
+    val digest = java.security.MessageDigest.getInstance("SHA-256").digest("ember:$profileId:$pin".toByteArray())
+    return digest.joinToString("") { "%02x".format(it) }
+}
+
+/** A sensible starting point for a kids profile: categories whose names sound child-friendly. */
+fun looksKidsFriendly(name: String): Boolean {
+    val n = name.lowercase()
+    if (listOf("adult", "xxx", "18+", "+18", "porn", "erotic").any { n.contains(it) }) return false
+    return KIDS_WORDS.any { w -> Regex("\\b" + Regex.escape(w)).containsMatchIn(n) }
+}

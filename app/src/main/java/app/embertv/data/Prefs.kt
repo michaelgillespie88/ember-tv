@@ -15,7 +15,31 @@ class Prefs(context: Context) {
     var profileId: String = MAIN_PROFILE
 
     // The main profile uses the original key names, so data from before profiles carries over.
-    private fun pk(base: String): String = if (profileId == MAIN_PROFILE) base else "p_${profileId}_$base"
+    private fun pk(base: String): String = pkFor(profileId, base)
+
+    private fun pkFor(id: String, base: String): String = if (id == MAIN_PROFILE) base else "p_${id}_$base"
+
+    fun categoryRules(id: String): CategoryRules {
+        val raw = sp.getString(pkFor(id, "category_rules"), null) ?: return CategoryRules(false, emptySet())
+        return try {
+            val o = JSONObject(raw)
+            val arr = o.optJSONArray("keys") ?: JSONArray()
+            val keys = HashSet<String>()
+            for (i in 0 until arr.length()) keys.add(arr.optString(i))
+            CategoryRules(o.optBoolean("allow"), keys)
+        } catch (e: Exception) {
+            CategoryRules(false, emptySet())
+        }
+    }
+
+    fun setCategoryRules(id: String, rules: CategoryRules) {
+        val o = JSONObject()
+        o.put("allow", rules.allowMode)
+        val arr = JSONArray()
+        for (k in rules.keys) arr.put(k)
+        o.put("keys", arr)
+        sp.edit().putString(pkFor(id, "category_rules"), o.toString()).apply()
+    }
 
     var profiles: List<Profile>
         get() {
@@ -26,7 +50,9 @@ class Prefs(context: Context) {
                 for (i in 0 until arr.length()) {
                     val o = arr.optJSONObject(i) ?: continue
                     val id = o.optString("id")
-                    if (id.isNotEmpty()) out.add(Profile(id, o.optString("name"), o.optInt("color")))
+                    if (id.isNotEmpty()) {
+                        out.add(Profile(id, o.optString("name"), o.optInt("color"), o.optBoolean("kids"), o.optString("pin")))
+                    }
                 }
                 out
             } catch (e: Exception) {
@@ -40,6 +66,8 @@ class Prefs(context: Context) {
                 o.put("id", p.id)
                 o.put("name", p.name)
                 o.put("color", p.color)
+                o.put("kids", p.kids)
+                o.put("pin", p.pinHash)
                 arr.put(o)
             }
             sp.edit().putString("profiles", arr.toString()).apply()
@@ -92,7 +120,8 @@ class Prefs(context: Context) {
         }
 
     var userAgent: String
-        get() = sp.getString("ua", DEFAULT_USER_AGENT) ?: DEFAULT_USER_AGENT
+        get() = (sp.getString("ua", DEFAULT_USER_AGENT) ?: DEFAULT_USER_AGENT)
+            .let { if (it == OLD_DEFAULT_USER_AGENT) DEFAULT_USER_AGENT else it }
         set(value) {
             sp.edit().putString("ua", value).apply()
         }

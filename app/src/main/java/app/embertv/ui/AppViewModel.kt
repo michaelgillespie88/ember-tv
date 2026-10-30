@@ -20,7 +20,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.embertv.data.Account
 import app.embertv.data.AccountInfo
+import app.embertv.data.Category
+import app.embertv.data.CategoryRules
 import app.embertv.data.Channel
+import app.embertv.data.categoryRuleKey
+import app.embertv.data.looksKidsFriendly
+import app.embertv.data.pinHash
 import app.embertv.data.ContentType
 import app.embertv.data.DEFAULT_USER_AGENT
 import app.embertv.data.Episode
@@ -177,8 +182,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             prefs.profiles = profiles.toList()
         }
         val last = prefs.lastProfile
-        activate(profiles.firstOrNull { it.id == last } ?: profiles.first())
-        pickingProfile = profiles.size > 1
+        val start = profiles.firstOrNull { it.id == last } ?: profiles.first()
+        activate(start)
+        pickingProfile = profiles.size > 1 || start.locked
         val saved = prefs.account
         if (saved != null) startSession(saved, null)
     }
@@ -188,6 +194,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun startSession(acc: Account, info: AccountInfo?) {
         account = acc
         repo = Repository(XtreamClient(acc, userAgent))
+        applyCategoryFilter()
         accountInfo = info
         if (info == null) refreshAccountInfo()
         if (!checkedForUpdates) {
@@ -246,13 +253,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         stack.add(Screen.Home)
         returnKeys.clear()
         restoreFocusKey = null
+        resetSections()
+        searchQuery = ""
+        tab = Tabs.HOME
+    }
+
+    private fun resetSections() {
         home = SectionState()
         live = SectionState()
         guide = SectionState()
         movies = SectionState()
         series = SectionState()
-        searchQuery = ""
-        tab = Tabs.HOME
     }
 
     // ---- Profiles ----
@@ -269,6 +280,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         recentChannels.addAll(prefs.recentChannels)
         audioLanguage = prefs.audioLanguage
         subtitleMode = prefs.subtitleMode
+        applyCategoryFilter()
+        reloadToken++
     }
 
     fun chooseProfile(p: Profile) {
@@ -288,21 +301,102 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (pickerCancelable) pickingProfile = false
     }
 
-    fun addProfile(name: String, color: Int): Profile {
+    /** [pin]: four digits to lock the profile, or null for no PIN. */
+    fun addProfile(name: String, color: Int, kids: Boolean = false, pin: String? = null): Profile {
         val id = "p" + java.lang.Long.toString(System.currentTimeMillis(), 36)
-        val p = Profile(id, name.trim().ifEmpty { "Profile ${profiles.size + 1}" }, color)
+        val p = Profile(
+            id = id,
+            name = name.trim().ifEmpty { "Profile ${profiles.size + 1}" },
+            color = color,
+            kids = kids,
+            pinHash = if (pin.isNullOrEmpty()) "" else pinHash(id, pin),
+        )
         profiles.add(p)
         prefs.profiles = profiles.toList()
+        if (kids) seedKidsCategories(p) else notify("Added ${p.name}")
         return p
     }
 
-    fun updateProfile(p: Profile) {
+    /** [pin]: null keeps the current PIN, "" removes it, four digits sets a new one. */
+    fun updateProfile(p: Profile, pin: String? = null) {
         val i = profiles.indexOfFirst { it.id == p.id }
         if (i < 0) return
-        val fixed = p.copy(name = p.name.trim().ifEmpty { profiles[i].name })
+        val old = profiles[i]
+        var fixed = p.copy(name = p.name.trim().ifEmpty { old.name })
+        if (pin != null) fixed = fixed.copy(pinHash = if (pin.isEmpty()) "" else pinHash(fixed.id, pin))
         profiles[i] = fixed
         prefs.profiles = profiles.toList()
         if (profile?.id == fixed.id) profile = fixed
+        if (old.kids != fixed.kids) {
+            if (fixed.kids) seedKidsCategories(fixed) else setCategoryRules(fixed, CategoryRules(false, emptySet()))
+        }
+    }
+
+    // ---- PINs ----
+
+    fun checkPin(p: Profile, pin: String): Boolean = p.locked && p.pinHash == pinHash(p.id, pin)
+
+    /** True when at least one grown-up profile is locked, so kids can't get into it or edit profiles. */
+    val parentPinSet: Boolean get() = profiles.any { !it.kids && it.locked }
+
+    /** The grown-up profile whose PIN this is, if any. */
+    fun parentForPin(pin: String): Profile? = profiles.firstOrNull { !it.kids && checkPin(it, pin) }
+
+    // ---- Categories ----
+
+    /** The categories [p] sees. Rules saved for the other kind of profile don't apply. */
+    fun categoryRules(p: Profile): CategoryRules {
+        val saved = prefs.categoryRules(p.id)
+        return if (saved.allowMode == p.kids) saved else CategoryRules(p.kids, emptySet())
+    }
+
+    fun setCategoryRules(p: Profile, rules: CategoryRules) {
+        prefs.setCategoryRules(p.id, rules)
+        if (profile?.id == p.id) {
+            applyCategoryFilter()
+            resetSections()
+            reloadToken++
+        }
+    }
+
+    private fun applyCategoryFilter() {
+        val r = repo ?: return
+        val p = profile ?: return
+        val rules = categoryRules(p)
+        r.filter = if (!rules.allowMode && rules.keys.isEmpty()) {
+            { _, _ -> true }
+        } else {
+            { type, id -> rules.visible(type, id) }
+        }
+    }
+
+    /** Starts a kids profile off with the categories whose names sound child-friendly. */
+    private fun seedKidsCategories(p: Profile) {
+        val r = repo
+        if (r == null) {
+            setCategoryRules(p, CategoryRules(true, emptySet()))
+            return
+        }
+        viewModelScope.launch {
+            val keys = HashSet<String>()
+            suspend fun add(type: ContentType, load: suspend () -> List<Category>) {
+                try {
+                    for (c in load()) if (looksKidsFriendly(c.name)) keys.add(categoryRuleKey(type, c.id))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Leave that type empty; it can be filled in by hand.
+                }
+            }
+            add(ContentType.LIVE) { r.rawLiveCategories() }
+            add(ContentType.MOVIE) { r.rawMovieCategories() }
+            add(ContentType.SERIES) { r.rawSeriesCategories() }
+            setCategoryRules(p, CategoryRules(true, keys))
+            notify(
+                if (keys.isEmpty()) "${p.name} is a kids profile. Choose their categories in Edit profiles."
+                else "${p.name} can see ${keys.size} kids categories. Change them in Edit profiles."
+            )
+        }
     }
 
     /** Removes a profile and everything saved for it. The last profile can't be deleted. */
@@ -461,9 +555,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.packageName))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
-                notify("Allow Ember TV to install apps, then choose Install again")
+                notify("Allow Streammania to install apps, then choose Install again")
             } catch (e: ActivityNotFoundException) {
-                notify("Allow Ember TV under Settings → Install unknown apps, then try again")
+                notify("Allow Streammania under Settings → Install unknown apps, then try again")
             }
             return
         }

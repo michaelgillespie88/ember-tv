@@ -9,6 +9,9 @@ import kotlinx.coroutines.sync.withPermit
  * the client does its network work on the IO dispatcher and hands results back.
  */
 class Repository(val client: XtreamClient) {
+    /** Hides categories the current profile shouldn't see. Lists are cached unfiltered. */
+    var filter: (ContentType, String) -> Boolean = { _, _ -> true }
+
     private var liveCats: List<Category>? = null
     private var movieCats: List<Category>? = null
     private var seriesCats: List<Category>? = null
@@ -44,16 +47,27 @@ class Repository(val client: XtreamClient) {
         epg.clear()
     }
 
-    suspend fun liveCategories(): List<Category> = liveCats ?: client.liveCategories().also { liveCats = it }
-    suspend fun movieCategories(): List<Category> = movieCats ?: client.movieCategories().also { movieCats = it }
-    suspend fun seriesCategories(): List<Category> = seriesCats ?: client.seriesCategories().also { seriesCats = it }
+    // Everything the provider offers, for managing categories.
+    suspend fun rawLiveCategories(): List<Category> = liveCats ?: client.liveCategories().also { liveCats = it }
+    suspend fun rawMovieCategories(): List<Category> = movieCats ?: client.movieCategories().also { movieCats = it }
+    suspend fun rawSeriesCategories(): List<Category> = seriesCats ?: client.seriesCategories().also { seriesCats = it }
 
-    suspend fun allChannels(): List<Channel> = allLive ?: client.channels(null).also { allLive = it }
-    suspend fun allMovies(): List<Movie> = allMovies ?: client.movies(null).also { allMovies = it }
-    suspend fun allSeries(): List<Series> = allSeries ?: client.series(null).also { allSeries = it }
+    // What the current profile is allowed to see.
+    suspend fun liveCategories(): List<Category> = rawLiveCategories().filter { filter(ContentType.LIVE, it.id) }
+    suspend fun movieCategories(): List<Category> = rawMovieCategories().filter { filter(ContentType.MOVIE, it.id) }
+    suspend fun seriesCategories(): List<Category> = rawSeriesCategories().filter { filter(ContentType.SERIES, it.id) }
+
+    private suspend fun rawAllChannels(): List<Channel> = allLive ?: client.channels(null).also { allLive = it }
+    private suspend fun rawAllMovies(): List<Movie> = allMovies ?: client.movies(null).also { allMovies = it }
+    private suspend fun rawAllSeries(): List<Series> = allSeries ?: client.series(null).also { allSeries = it }
+
+    suspend fun allChannels(): List<Channel> = rawAllChannels().filter { filter(ContentType.LIVE, it.categoryId) }
+    suspend fun allMovies(): List<Movie> = rawAllMovies().filter { filter(ContentType.MOVIE, it.categoryId) }
+    suspend fun allSeries(): List<Series> = rawAllSeries().filter { filter(ContentType.SERIES, it.categoryId) }
 
     suspend fun channels(categoryId: String): List<Channel> {
         if (categoryId == ALL) return allChannels()
+        if (!filter(ContentType.LIVE, categoryId)) return emptyList()
         liveByCat[categoryId]?.let { return it }
         val everything = allLive
         val result = if (everything != null) {
@@ -67,6 +81,7 @@ class Repository(val client: XtreamClient) {
 
     suspend fun movies(categoryId: String): List<Movie> {
         if (categoryId == ALL) return allMovies()
+        if (!filter(ContentType.MOVIE, categoryId)) return emptyList()
         moviesByCat[categoryId]?.let { return it }
         val everything = allMovies
         val result = if (everything != null) {
@@ -80,6 +95,7 @@ class Repository(val client: XtreamClient) {
 
     suspend fun series(categoryId: String): List<Series> {
         if (categoryId == ALL) return allSeries()
+        if (!filter(ContentType.SERIES, categoryId)) return emptyList()
         seriesByCat[categoryId]?.let { return it }
         val everything = allSeries
         val result = if (everything != null) {

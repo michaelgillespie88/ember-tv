@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "EmberTV"
+rootProject.name = "Streammania"
 include(":app")

@@ -248,6 +248,8 @@ fun SearchSection(vm: AppViewModel) {
 @Composable
 fun SettingsSection(vm: AppViewModel) {
     var confirmSignOut by remember { mutableStateOf(false) }
+    var managingCategories by remember { mutableStateOf(false) }
+    val kids = vm.profile?.kids == true
     val account = vm.account
     val info = vm.accountInfo
     val isTv = LocalIsTv.current
@@ -278,7 +280,7 @@ fun SettingsSection(vm: AppViewModel) {
                 if (info == null) "–" else "${info.activeConnections.ifEmpty { "0" }} of ${info.maxConnections.ifEmpty { "?" }} in use",
             )
             Spacer(Modifier.height(18.dp))
-            Text("Ember TV ${app.embertv.BuildConfig.VERSION_NAME}", style = Txt.Caption, color = Ember.Faint)
+            Text("Streammania ${app.embertv.BuildConfig.VERSION_NAME}", style = Txt.Caption, color = Ember.Faint)
         }
     }
 
@@ -290,7 +292,17 @@ fun SettingsSection(vm: AppViewModel) {
                 "Switch, add or edit profiles",
                 focusKey = "set:profile",
             ) { vm.switchProfile() }
-            SettingRow(
+            val p = vm.profile
+            if (!kids && p != null) {
+                val hidden = vm.categoryRules(p).keys.size
+                SettingRow(
+                    "Categories",
+                    if (hidden == 0) "All shown" else "$hidden hidden",
+                    "Hide categories you never watch",
+                    focusKey = "set:categories",
+                ) { managingCategories = true }
+            }
+            if (!kids) SettingRow(
                 "Stream format",
                 if (vm.streamFormat == "m3u8") "HLS (.m3u8)" else "MPEG-TS (.ts)",
                 "Switch if channels buffer or won't start",
@@ -330,9 +342,9 @@ fun SettingsSection(vm: AppViewModel) {
                 "Pick English audio when a stream has several",
                 focusKey = "set:audio",
             ) { vm.cycleAudioLanguage() }
-            SettingRow(
+            if (!kids) SettingRow(
                 "Player identity",
-                if (vm.userAgent == DEFAULT_USER_AGENT) "Ember TV" else "VLC compatible",
+                if (vm.userAgent == DEFAULT_USER_AGENT) "Streammania" else "VLC compatible",
                 "Some providers only accept certain players",
                 focusKey = "set:ua",
             ) { vm.toggleUserAgent() }
@@ -347,7 +359,8 @@ fun SettingsSection(vm: AppViewModel) {
                 vm.refreshAccountInfo()
                 vm.notify("Refreshing from your provider…")
             }
-            SettingRow("Sign out", "", "Removes your login from this $device", focusKey = "set:signout") {
+            // Kids profiles can't sign the whole device out.
+            if (!kids) SettingRow("Sign out", "", "Removes your login from this $device", focusKey = "set:signout") {
                 confirmSignOut = true
             }
         }
@@ -357,7 +370,7 @@ fun SettingsSection(vm: AppViewModel) {
         Row(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 16.dp)) {
             accountCard(Modifier.width(360.dp))
             Spacer(Modifier.width(36.dp))
-            settingsList(Modifier.width(520.dp))
+            settingsList(Modifier.width(520.dp).verticalScroll(rememberScrollState()).padding(bottom = 24.dp))
         }
     } else {
         val pad = LocalContentPadding.current
@@ -373,6 +386,11 @@ fun SettingsSection(vm: AppViewModel) {
         }
     }
 
+    val managed = vm.profile
+    if (managingCategories && managed != null) {
+        CategoryManager(vm, managed) { managingCategories = false }
+    }
+
     if (confirmSignOut) {
         Dialog(onDismissRequest = { confirmSignOut = false }) {
             DialogBackdropBlur()
@@ -383,7 +401,7 @@ fun SettingsSection(vm: AppViewModel) {
                     .background(dialogPanelColor())
                     .padding(if (isTv) 32.dp else 22.dp)
             ) {
-                Text("Sign out of Ember TV?", style = Txt.Title)
+                Text("Sign out of Streammania?", style = Txt.Title)
                 Spacer(Modifier.height(10.dp))
                 Text("Your favourites stay on this $device. You'll need your login details to sign back in.", style = Txt.Body, color = Ember.Dim)
                 Spacer(Modifier.height(24.dp))

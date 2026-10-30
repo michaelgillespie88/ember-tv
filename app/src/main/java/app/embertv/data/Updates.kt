@@ -18,7 +18,7 @@ object Updates {
             c.connectTimeout = 10_000
             c.readTimeout = 15_000
             c.setRequestProperty("Accept", "application/vnd.github+json")
-            c.setRequestProperty("User-Agent", "EmberTV")
+            c.setRequestProperty("User-Agent", "Streammania")
             try {
                 if (c.responseCode !in 200..299) return@withContext null
                 val root = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
@@ -38,13 +38,13 @@ object Updates {
     /** Downloads [info] into [dir], reporting progress from 0 to 1. Returns the APK file. */
     suspend fun download(info: UpdateInfo, dir: File, onProgress: (Float) -> Unit): File = withContext(Dispatchers.IO) {
         dir.mkdirs()
-        val target = File(dir, "EmberTV-${info.versionCode}.apk")
+        val target = File(dir, "Streammania-${info.versionCode}.apk")
         val partial = File(dir, "download.part")
         val c = URL(info.apkUrl).openConnection() as HttpURLConnection
         c.connectTimeout = 15_000
         c.readTimeout = 30_000
         c.instanceFollowRedirects = true
-        c.setRequestProperty("User-Agent", "EmberTV")
+        c.setRequestProperty("User-Agent", "Streammania")
         try {
             if (c.responseCode !in 200..299) throw IllegalStateException("Download failed (HTTP ${c.responseCode})")
             val total = c.contentLength.toLong()

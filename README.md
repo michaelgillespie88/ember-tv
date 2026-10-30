@@ -1,9 +1,11 @@
-# Ember TV
+# Streammania
 
 A clean, Apple TV-style IPTV player for Android TV, Google TV, Fire TV and Android phones, using an Xtream Codes login.
 The same app gives TVs a remote-friendly layout and phones a touch layout.
 
 - **Profiles** – everyone gets their own favourites, Continue Watching and resume points; "Who's watching?" appears at start when there's more than one
+- **Kids profiles and PIN lock** – kids profiles only see the categories you tick (child-friendly ones are picked to start with); a 4-digit PIN locks any profile, and once a grown-up profile has one, kids can't add or edit profiles or sign out
+- **Hide categories** – Settings → Categories hides the ones you never watch, everywhere including search
 - **Home** – opens first: a featured banner, Continue Watching, your channels, My List and the latest movies and series
 - **Live TV** – categories, channel logos, now/next with progress, quick channel list, number keys to jump to a channel
 - **Guide** – a programme grid for any category (on phones, open it from Live TV)
@@ -31,15 +33,17 @@ Every push to `main` builds a new APK automatically (see the **Actions** tab) an
 
 **Then, on either**
 1. Open Downloader and enter:
-   `https://github.com/michaelgillespie88/ember-tv/releases/latest/download/EmberTV.apk`
-2. Choose **Install**, then open **Ember TV** and sign in with your provider's server address, username and password.
+   `https://github.com/michaelgillespie88/ember-tv/releases/latest/download/Streammania.apk`
+   (the older `.../EmberTV.apk` link and Downloader codes made for it still work)
+2. Choose **Install**, then open **Streammania** and sign in with your provider's server address, username and password.
 
 **Android phone**
 1. Open the link above in the phone's browser and download the APK.
 2. Open the download and allow your browser to install apps when Android asks.
 3. On a phone, swipe up or down while watching live TV to change channel, tap for controls, double-tap the sides to skip, and press and hold anything to add it to your favourites.
 
-Updating works the same way: download the latest APK again and install over the top. Your login and favourites are kept.
+The app checks for new versions itself and offers to install them (or use **Settings → Check for updates**).
+You can also download the latest APK again and install over the top. Your login, profiles and favourites are kept.
 The version number is shown on the sign-in screen and in Settings.
 
 ## Remote controls
