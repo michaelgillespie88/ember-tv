@@ -189,6 +189,13 @@ class Prefs(context: Context) {
             sp.edit().putString("ua", value).apply()
         }
 
+    /** Package of another video app to play everything in (VLC, MX Player…); empty for the built-in player. */
+    var externalPlayer: String
+        get() = sp.getString("external_player", "") ?: ""
+        set(value) {
+            sp.edit().putString("external_player", value).apply()
+        }
+
     /** Switch the TV's refresh rate to match what's playing. */
     var matchFrameRate: Boolean
         get() = sp.getBoolean("match_frame_rate", true)

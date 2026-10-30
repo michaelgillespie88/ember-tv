@@ -158,6 +158,63 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var matchFrameRate by mutableStateOf(prefs.matchFrameRate)
         private set
 
+    // ---- Other video players (VLC, MX Player…) ----
+
+    /** Package of the app that plays everything, or "" for Streammania's own player. */
+    var externalPlayer by mutableStateOf(prefs.externalPlayer)
+        private set
+    /** Something to open in another player once one is picked. */
+    var pickingOtherPlayer by mutableStateOf<Screen?>(null)
+
+    fun chooseExternalPlayer(pkg: String) {
+        externalPlayer = pkg
+        prefs.externalPlayer = pkg
+        notify(if (pkg.isEmpty()) "Playing in Streammania" else "Playing in ${externalPlayerName()}")
+    }
+
+    fun externalPlayerName(): String {
+        if (externalPlayer.isEmpty()) return "Streammania"
+        return app.embertv.OtherPlayers.installed(getApplication()).firstOrNull { it.packageName == externalPlayer }?.label
+            ?: "Streammania (other player not found)"
+    }
+
+    /** From inside a player: plays [screen] in the chosen app, or asks which one. */
+    fun openElsewhere(screen: Screen) {
+        val pkg = externalPlayer
+        if (pkg.isNotEmpty() && app.embertv.OtherPlayers.isInstalled(getApplication(), pkg)) launchElsewhere(screen, pkg) else pickingOtherPlayer = screen
+    }
+
+    fun launchElsewhere(screen: Screen, pkg: String) {
+        pickingOtherPlayer = null
+        // Close Streammania's player first so the provider connection is free for the other app.
+        val top = stack.last()
+        val closing = top is Screen.PlayLive || top is Screen.PlayVod
+        if (closing) pop()
+        viewModelScope.launch {
+            if (closing) kotlinx.coroutines.delay(500)
+            if (!openExternally(screen, pkg)) notify("Couldn't open that player")
+        }
+    }
+
+    /** Hands a channel or video to another app. Returns false if it couldn't be opened. */
+    private fun openExternally(screen: Screen, pkg: String): Boolean {
+        val ctx = getApplication<Application>()
+        return when (screen) {
+            is Screen.PlayLive -> {
+                val c = screen.channels.getOrNull(screen.index) ?: return false
+                val ok = app.embertv.OtherPlayers.open(ctx, pkg, liveUrl(c, false), c.name, 0L)
+                if (ok) recordChannel(c)
+                ok
+            }
+            is Screen.PlayVod -> {
+                val item = screen.items.getOrNull(screen.index) ?: return false
+                val title = listOf(item.title, item.subtitle.substringBefore("  ")).filter { it.isNotBlank() }.joinToString(" · ")
+                app.embertv.OtherPlayers.open(ctx, pkg, item.url, title, screen.startMs)
+            }
+            else -> false
+        }
+    }
+
     fun toggleMatchFrameRate() {
         matchFrameRate = !matchFrameRate
         prefs.matchFrameRate = matchFrameRate
@@ -522,6 +579,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Navigation ----
 
     fun push(screen: Screen) {
+        // With another player chosen in Settings, channels and videos open there instead.
+        val pkg = externalPlayer
+        if (pkg.isNotEmpty() && (screen is Screen.PlayLive || screen is Screen.PlayVod)) {
+            if (openExternally(screen, pkg)) return
+            notify("Couldn't open ${externalPlayerName()}, so playing here")
+        }
         returnKeys.add(lastFocusKey)
         stack.add(screen)
     }

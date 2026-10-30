@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import app.embertv.data.Channel
 import app.embertv.data.ContentType
@@ -250,6 +251,7 @@ fun SettingsSection(vm: AppViewModel) {
     var confirmSignOut by remember { mutableStateOf(false) }
     var managingCategories by remember { mutableStateOf(false) }
     var pickingTeams by remember { mutableStateOf(false) }
+    var choosingPlayer by remember { mutableStateOf(false) }
     val kids = vm.profile?.kids == true
     val account = vm.account
     val info = vm.accountInfo
@@ -287,6 +289,8 @@ fun SettingsSection(vm: AppViewModel) {
 
     val settingsList: @Composable (Modifier) -> Unit = { modifier ->
         Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // ---- Profile ----
+            SettingsHeader("Profile", first = true)
             SettingRow(
                 "Profile",
                 vm.profile?.name ?: "",
@@ -309,12 +313,34 @@ fun SettingsSection(vm: AppViewModel) {
                     focusKey = "set:categories",
                 ) { managingCategories = true }
             }
-            if (!kids) SettingRow(
-                "Stream format",
-                if (vm.streamFormat == "m3u8") "HLS (.m3u8)" else "MPEG-TS (.ts)",
-                "Switch if channels buffer or won't start",
-                focusKey = "set:format",
-            ) { vm.toggleStreamFormat() }
+
+            // ---- Watching ----
+            SettingsHeader("Watching")
+            SettingRow(
+                "Video player",
+                vm.externalPlayerName(),
+                "Use VLC or another app if something won't play",
+                focusKey = "set:player",
+            ) { choosingPlayer = true }
+            SettingRow(
+                "Subtitles",
+                if (vm.subtitleMode == "off") "Off" else "English",
+                "Switch subtitles on automatically when available",
+                focusKey = "set:subs",
+            ) { vm.cycleSubtitles() }
+            SettingRow(
+                "Preferred audio",
+                if (vm.audioLanguage.isEmpty()) "Stream default" else "English",
+                "Pick English audio when a stream has several",
+                focusKey = "set:audio",
+            ) { vm.cycleAudioLanguage() }
+            val sleepLeft = vm.sleepMinutesLeft()
+            SettingRow(
+                "Sleep timer",
+                if (sleepLeft == null) "Off" else "Stops in $sleepLeft min",
+                "Stop playback after a while",
+                focusKey = "set:sleep",
+            ) { vm.cycleSleepTimer() }
             if (isTv) {
                 SettingRow(
                     "Channel up / down",
@@ -330,7 +356,10 @@ fun SettingsSection(vm: AppViewModel) {
                     focusKey = "set:zap",
                 ) { vm.toggleInvertZap() }
             }
+
+            // ---- TV ----
             if (isTv) {
+                SettingsHeader("TV")
                 SettingRow(
                     "Match frame rate",
                     if (vm.matchFrameRate) "On" else "Off",
@@ -344,31 +373,26 @@ fun SettingsSection(vm: AppViewModel) {
                     focusKey = "set:screensaver",
                 ) { vm.cycleScreensaver() }
             }
-            val sleepLeft = vm.sleepMinutesLeft()
-            SettingRow(
-                "Sleep timer",
-                if (sleepLeft == null) "Off" else "Stops in $sleepLeft min",
-                "Stop playback after a while",
-                focusKey = "set:sleep",
-            ) { vm.cycleSleepTimer() }
-            SettingRow(
-                "Subtitles",
-                if (vm.subtitleMode == "off") "Off" else "English",
-                "Switch subtitles on automatically when available",
-                focusKey = "set:subs",
-            ) { vm.cycleSubtitles() }
-            SettingRow(
-                "Preferred audio",
-                if (vm.audioLanguage.isEmpty()) "Stream default" else "English",
-                "Pick English audio when a stream has several",
-                focusKey = "set:audio",
-            ) { vm.cycleAudioLanguage() }
-            if (!kids) SettingRow(
-                "Player identity",
-                if (vm.userAgent == DEFAULT_USER_AGENT) "Streammania" else "VLC compatible",
-                "Some providers only accept certain players",
-                focusKey = "set:ua",
-            ) { vm.toggleUserAgent() }
+
+            // ---- Connection (grown-ups only) ----
+            if (!kids) {
+                SettingsHeader("Connection")
+                SettingRow(
+                    "Stream format",
+                    if (vm.streamFormat == "m3u8") "HLS (.m3u8)" else "MPEG-TS (.ts)",
+                    "Switch if channels buffer or won't start",
+                    focusKey = "set:format",
+                ) { vm.toggleStreamFormat() }
+                SettingRow(
+                    "Player identity",
+                    if (vm.userAgent == DEFAULT_USER_AGENT) "Streammania" else "VLC compatible",
+                    "Some providers only accept certain players",
+                    focusKey = "set:ua",
+                ) { vm.toggleUserAgent() }
+            }
+
+            // ---- App ----
+            SettingsHeader("App")
             SettingRow(
                 "Check for updates",
                 "Version ${app.embertv.BuildConfig.VERSION_NAME}",
@@ -408,6 +432,18 @@ fun SettingsSection(vm: AppViewModel) {
     }
 
     if (pickingTeams) TeamPicker(vm) { pickingTeams = false }
+    if (choosingPlayer) {
+        PlayerPickerDialog(
+            vm = vm,
+            title = "Video player",
+            subtitle = "Which app plays channels, movies and episodes. If something won't play in Streammania, try VLC.",
+            includeBuiltIn = true,
+            onDismiss = { choosingPlayer = false },
+        ) { pkg ->
+            vm.chooseExternalPlayer(pkg)
+            choosingPlayer = false
+        }
+    }
 
     val managed = vm.profile
     if (managingCategories && managed != null) {
@@ -455,6 +491,16 @@ private fun InfoLine(label: String, value: String) {
         Text(label, style = Txt.Label, color = Ember.Dim, modifier = Modifier.width(112.dp))
         Text(value, style = Txt.Label, color = Ember.Text, maxLines = 2)
     }
+}
+
+@Composable
+private fun SettingsHeader(text: String, first: Boolean = false) {
+    Text(
+        text.uppercase(),
+        style = Txt.Caption.copy(letterSpacing = 1.2.sp),
+        color = Ember.Faint,
+        modifier = Modifier.padding(start = 6.dp, top = if (first) 0.dp else 16.dp),
+    )
 }
 
 @Composable

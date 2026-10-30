@@ -179,6 +179,13 @@ object EmberIcons {
         moveTo(4f, 7f); lineTo(4f, 12f); lineTo(9f, 12f)
     }
 
+    /** Open elsewhere: a box with an arrow leaving its corner. */
+    val OpenExternal = outline("open-external") {
+        moveTo(11f, 5f); lineTo(5f, 5f); lineTo(5f, 19f); lineTo(19f, 19f); lineTo(19f, 13f)
+        moveTo(14f, 4f); lineTo(20f, 4f); lineTo(20f, 10f)
+        moveTo(20f, 4f); lineTo(11.5f, 12.5f)
+    }
+
     /** Picture-in-picture: a screen with a small window in the corner. */
     val Pip = outline("pip") {
         moveTo(3f, 5f); lineTo(21f, 5f); lineTo(21f, 19f); lineTo(3f, 19f); close()

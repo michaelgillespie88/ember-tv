@@ -108,6 +108,17 @@ fun EmberApp(vm: AppViewModel, isTv: Boolean) {
 
                 if (vm.update != null && vm.repo != null) UpdateDialog(vm)
 
+                // "Open in another player" from inside a player
+                vm.pickingOtherPlayer?.let { pending ->
+                    PlayerPickerDialog(
+                        vm = vm,
+                        title = "Open in…",
+                        subtitle = "Streammania's player closes first so the other app can use your provider connection.",
+                        includeBuiltIn = false,
+                        onDismiss = { vm.pickingOtherPlayer = null },
+                    ) { pkg -> vm.launchElsewhere(pending, pkg) }
+                }
+
                 // Followed teams: goal alerts, and "Where's it on?"
                 if (vm.repo != null && !vm.pickingProfile) {
                     TeamAlertBanner(vm)

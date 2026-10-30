@@ -21,11 +21,12 @@ The same app gives TVs a remote-friendly layout and phones a touch layout.
 - **Match frame rate (TVs)** – switches the TV to 50Hz for UK channels and 24Hz for films so motion is smooth (Settings → Match frame rate). On a Fire TV, also turn on **Settings → Display & Sounds → Display → Match Original Frame Rate** if your model has it
 - **Sign in from your phone** – the TV sign-in screen shows a QR code; scan it on a phone on the same Wi-Fi and type the login there. It goes straight to the TV and never leaves your network
 - **My teams** – follow clubs (Settings → My teams) for kick-off, goal and full-time pop-ups while the app is open, and their live or next match on Home
+- **Other video players** – choose VLC, MX Player or any video app in Settings → Video player to play everything there, or pick **Open in another player** from the player's options when one stream misbehaves
 - **Where's it on?** – pick any match in the live scores or on Home and Streammania searches your channels and sports guide for it; OK plays it
 - **Picture-in-picture (phones)** – press Home while watching, or the picture-in-picture button, to keep watching in a small window
 - **Screensaver (TVs)** – after a few idle minutes, a slideshow of movie and series artwork with the time; any button returns (Settings → Screensaver)
 - **Search** – across everything your provider offers
-- **Settings** – account status and expiry, TS/HLS switch, channel up/down direction, player identity, sign out
+- **Settings** – grouped into Profile, Watching, TV, Connection and App, with account status and expiry alongside
 
 ## Install on the TV
 

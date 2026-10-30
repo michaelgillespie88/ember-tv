@@ -24,6 +24,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -586,7 +587,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         if (err != null) {
             ErrorCard(
                 err,
-                if (isTv) "Press ▲ or ▼ to try another channel, or Back to leave." else "Swipe up or down to try another channel.",
+                if (isTv) "Press ▲ or ▼ to try another channel, or ◀ for options like opening it in VLC." else "Swipe up or down to try another channel, or tap ⋯ to open it in another player like VLC.",
             )
         } else if (buffering) {
             Spinner()
@@ -693,7 +694,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     }
 
     if (optionsOpen) {
-        LiveOptionsDialog(vm, channel) { optionsOpen = false }
+        LiveOptionsDialog(vm, channel, onOpenElsewhere = { vm.openElsewhere(Screen.PlayLive(channels, index)) }) { optionsOpen = false }
     }
 }
 
@@ -822,6 +823,10 @@ private fun BoxScope.ZapList(
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 10.dp)) {
                     if (hasPrevious) ZapAction(EmberIcons.Restart, "Previous channel", "", onPrevious)
                     CatchupActions(vm, channels[current], onClose)
+                    ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
+                        onClose()
+                        vm.openElsewhere(Screen.PlayLive(channels, current))
+                    }
                     val left = vm.sleepMinutesLeft()
                     ZapAction(EmberIcons.Moon, "Sleep timer", if (left == null) "Off" else "$left min") { vm.cycleSleepTimer() }
                     ZapAction(EmberIcons.Subtitles, "Subtitles", if (vm.subtitleMode == "off") "Off" else "English") { vm.cycleSubtitles() }
@@ -913,7 +918,7 @@ private fun SleepBadge(minutes: Int, modifier: Modifier = Modifier) {
 
 /** Phone "more" sheet for the live player: sleep timer, audio and subtitles. */
 @Composable
-private fun LiveOptionsDialog(vm: AppViewModel, channel: Channel, onDismiss: () -> Unit) {
+private fun LiveOptionsDialog(vm: AppViewModel, channel: Channel, onOpenElsewhere: () -> Unit, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         DialogBackdropBlur()
         Column(
@@ -926,6 +931,10 @@ private fun LiveOptionsDialog(vm: AppViewModel, channel: Channel, onDismiss: () 
         ) {
             Text("Options", style = Txt.Headline, modifier = Modifier.padding(bottom = 6.dp))
             CatchupActions(vm, channel, onDismiss)
+            ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
+                onDismiss()
+                onOpenElsewhere()
+            }
             val left = vm.sleepMinutesLeft()
             ZapAction(EmberIcons.Moon, "Sleep timer", if (left == null) "Off" else "$left min") { vm.cycleSleepTimer() }
             ZapAction(EmberIcons.Subtitles, "Subtitles", if (vm.subtitleMode == "off") "Off" else "English") { vm.cycleSubtitles() }
@@ -1194,7 +1203,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
 
         val err = error
         if (err != null) {
-            ErrorCard(err, if (isTv) "Press Back to leave." else "Go back to leave.")
+            ErrorCard(err, if (isTv) "Press ▼ for options like opening it in VLC, or Back to leave." else "Tap the screen, then the subtitles button, to open it in another player like VLC.")
         } else if (buffering) {
             Spinner()
         }
@@ -1256,7 +1265,12 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
     }
 
     if (showTracks) {
-        TracksDialog(vm = vm, exo = exo, onDismiss = { showTracks = false })
+        TracksDialog(
+            vm = vm,
+            exo = exo,
+            onOpenElsewhere = { vm.openElsewhere(Screen.PlayVod(items, current, exo.currentPosition)) },
+            onDismiss = { showTracks = false },
+        )
     }
 }
 
@@ -1422,7 +1436,7 @@ private fun SkipButton(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun TracksDialog(vm: AppViewModel, exo: ExoPlayer, onDismiss: () -> Unit) {
+private fun TracksDialog(vm: AppViewModel, exo: ExoPlayer, onOpenElsewhere: () -> Unit, onDismiss: () -> Unit) {
     val audio = remember { trackOptions(exo, C.TRACK_TYPE_AUDIO) }
     val subs = remember { trackOptions(exo, C.TRACK_TYPE_TEXT) }
     val subtitlesOff = remember { subs.none { it.selected } }
@@ -1467,7 +1481,7 @@ private fun TracksDialog(vm: AppViewModel, exo: ExoPlayer, onDismiss: () -> Unit
                 }
             }
             Spacer(Modifier.width(28.dp))
-            Column(Modifier.width(300.dp)) {
+            Column(Modifier.width(300.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                 Text("Subtitles", style = Txt.Headline)
                 Spacer(Modifier.height(14.dp))
                 TrackRow("Off", subtitlesOff, autoFocus = audio.isEmpty()) { selectSubtitle(null) }
@@ -1479,6 +1493,13 @@ private fun TracksDialog(vm: AppViewModel, exo: ExoPlayer, onDismiss: () -> Unit
                 Spacer(Modifier.height(10.dp))
                 val left = vm.sleepMinutesLeft()
                 ZapAction(EmberIcons.Moon, if (left == null) "Off" else "Stops in $left min", "Change") { vm.cycleSleepTimer() }
+                Spacer(Modifier.height(18.dp))
+                Text("Won't play properly?", style = Txt.Headline)
+                Spacer(Modifier.height(10.dp))
+                ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
+                    onDismiss()
+                    onOpenElsewhere()
+                }
             }
         }
     }
