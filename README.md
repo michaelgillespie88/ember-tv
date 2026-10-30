@@ -10,6 +10,9 @@ The same app gives TVs a remote-friendly layout and phones a touch layout.
 - **Live TV** – categories, channel logos, now/next with progress, quick channel list, number keys to jump to a channel
 - **Live preview (TVs)** – the highlighted channel plays muted in a small window in Live TV and the guide (Settings → Live preview)
 - **TiviMate-style guide (TVs)** – full screen, with the highlighted programme and a live picture across the top and about ten channels and two and a half hours underneath; move left and right to scroll through the day, pick a group or day from the buttons above the channels (Settings → Guide and channel list for bigger rows)
+- **Mini guide over live TV (TVs)** – press OK (or the Guide button) while watching: the picture keeps playing while you browse what's on now and next on nearby channels
+- **Search what's on** – search finds programmes in the guide this week as well as channels, films and series, with live, catch-up and reminder options
+- **Open straight into TV** – Settings → Watching → When the app opens: Home, the last channel you watched, or the TV guide
 - **Up Next and Recently Added** – Home's Up Next row has what you're part-way through plus the next episode of anything you finished; finished films and episodes get a tick; Recently Added shows your provider's newest films and series
 - **Recently added groups** – Movies and Series each start with a Recently added group, newest first
 - **Your channels, your way** – Settings → Channels: put favourite channels in your own order (used by ★ Favourites, the guide and channel up/down) and hide channels you never watch, per profile

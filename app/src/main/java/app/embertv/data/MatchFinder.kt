@@ -78,11 +78,11 @@ object MatchFinder {
         aliases.any { a -> Regex("\\b" + Regex.escape(a) + "\\b").containsMatchIn(text) }
 
     /** Groups copies of the same channel (HD, FHD, backup…) so the guide is read once. */
-    private fun baseName(name: String): String =
+    internal fun baseName(name: String): String =
         normalize(name).replace(Regex("\\b(uk|hd|fhd|uhd|sd|4k|hevc|h265|backup|raw|vip|50fps|60fps)\\b"), " ")
             .replace(Regex("\\s+"), " ").trim()
 
-    private fun qualityRank(name: String): Int {
+    internal fun qualityRank(name: String): Int {
         val n = normalize(name)
         return when {
             Regex("\\b(4k|uhd)\\b").containsMatchIn(n) -> 0

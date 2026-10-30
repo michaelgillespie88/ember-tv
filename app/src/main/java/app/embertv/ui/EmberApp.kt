@@ -135,6 +135,12 @@ fun EmberApp(vm: AppViewModel, isTv: Boolean) {
                 // A pinned live score in the corner
                 if (vm.repo != null && !vm.pickingProfile) ScoreBug(vm)
 
+                // Open straight into the last channel or the guide, if chosen in Settings.
+                LaunchedEffect(vm.repo != null, vm.pickingProfile) {
+                    delay(300)
+                    vm.applyStartup()
+                }
+
                 // Followed teams: goal alerts, and "Where's it on?"
                 if (vm.repo != null && !vm.pickingProfile) {
                     TeamAlertBanner(vm)

@@ -43,6 +43,7 @@ import app.embertv.data.MatchState
 import app.embertv.data.ScoresClient
 import app.embertv.data.Team
 import app.embertv.data.Tmdb
+import app.embertv.data.toChannel
 import app.embertv.data.FoundTv
 import app.embertv.data.TvFinder
 import app.embertv.data.TvLinkClient
@@ -1075,6 +1076,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }.getOrNull()
 
+    /** Plays a channel with the rest of its group, so channel up/down works as usual. */
+    fun playChannel(c: Channel) {
+        val r = repo ?: return
+        viewModelScope.launch {
+            val list = try {
+                r.channels(c.categoryId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val i = list.indexOfFirst { it.streamId == c.streamId }
+            if (i >= 0) push(Screen.PlayLive(list, i)) else push(Screen.PlayLive(listOf(c), 0))
+        }
+    }
+
     // ---- Navigation ----
 
     fun push(screen: Screen) {
@@ -1181,6 +1198,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val acc = account ?: return
         startSession(acc, accountInfo)
         reloadToken++
+    }
+
+    var startOn by mutableStateOf(prefs.startOn)
+        private set
+    private var startupApplied = false
+
+    fun cycleStartOn() {
+        val steps = listOf("home", "last", "guide")
+        val next = steps[(steps.indexOf(startOn) + 1) % steps.size]
+        startOn = next
+        prefs.startOn = next
+    }
+
+    fun startOnLabel(): String = when (startOn) {
+        "last" -> "Last channel"
+        "guide" -> "TV guide"
+        else -> "Home"
+    }
+
+    /** Once per launch, after signing in and choosing a profile: go where the app should open. */
+    fun applyStartup() {
+        if (startupApplied || repo == null || pickingProfile) return
+        startupApplied = true
+        when (startOn) {
+            "last" -> {
+                val last = recentChannels.firstOrNull()
+                if (last != null && stack.size == 1) playChannel(last.toChannel())
+            }
+            "guide" -> tab = Tabs.GUIDE
+        }
     }
 
     fun cycleScreensaver() {

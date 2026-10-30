@@ -1,5 +1,9 @@
 package app.embertv.ui
 
+import androidx.compose.material3.Icon
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -107,6 +111,96 @@ private fun ChannelShelf(vm: AppViewModel, title: String, channels: List<Channel
     }
 }
 
+/** Programmes found in the guide: on now first, then coming up, then on catch-up. */
+@Composable
+private fun ProgrammeShelf(
+    vm: AppViewModel,
+    hits: List<app.embertv.data.ProgrammeHit>,
+    progress: Pair<Int, Int>?,
+    now: Long,
+    onDetails: (app.embertv.data.ProgrammeHit) -> Unit,
+) {
+    val isTv = LocalIsTv.current
+    Column {
+        Row(Modifier.padding(start = edgePadding(), end = edgePadding()), verticalAlignment = Alignment.CenterVertically) {
+            SectionHeader("On TV")
+            if (progress != null) {
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    "Searching the guide… ${progress.first} of ${progress.second} channels",
+                    style = Txt.Caption,
+                    color = Ember.Faint,
+                )
+            }
+        }
+        if (hits.isEmpty()) {
+            Text(
+                if (progress == null) "Nothing on TV this week matches." else " ",
+                style = Txt.Body,
+                color = Ember.Faint,
+                modifier = Modifier.padding(start = edgePadding(), top = 10.dp),
+            )
+            return
+        }
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = edgePadding(), vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (isTv) 18.dp else 10.dp),
+        ) {
+            items(hits, key = { "${it.channel.streamId}:${it.programme.start}" }) { h ->
+                val p = h.programme
+                val live = p.isLive(now)
+                val catchup = p.end <= now && app.embertv.data.catchupAvailable(h.channel, p, now)
+                FocusBox(
+                    modifier = Modifier.width(if (isTv) 300.dp else 260.dp).height(if (isTv) 96.dp else 92.dp),
+                    focusKey = "search:tv:${h.channel.streamId}:${p.start}",
+                    shape = RoundedCornerShape(16.dp),
+                    focusedScale = 1.05f,
+                    color = Color(0x17FFFFFF),
+                    focusedColor = Color.White,
+                    onClick = { if (live) vm.playChannel(h.channel) else onDetails(h) },
+                    onLongClick = { onDetails(h) },
+                ) { focused ->
+                    Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ChannelLogo(h.channel.icon, h.channel.name, Modifier.size(width = 52.dp, height = 34.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                p.title,
+                                style = Txt.Label.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (focused) Color.Black else Ember.Text,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                when {
+                                    live -> LiveTag()
+                                    catchup -> Icon(EmberIcons.Catchup, "On catch-up", tint = if (focused) Color.Black else Ember.Accent, modifier = Modifier.size(14.dp))
+                                    else -> {}
+                                }
+                                if (live || catchup) Spacer(Modifier.width(6.dp))
+                                Text(
+                                    if (live) "${(p.end - now) / 60} min left" else "${formatDay(p.start, now)} ${formatClock(p.start)}",
+                                    style = Txt.Caption,
+                                    color = if (focused) Color(0xFF444448) else Ember.Dim,
+                                    maxLines = 1,
+                                )
+                            }
+                            Text(
+                                h.channel.name,
+                                style = Txt.Caption,
+                                color = if (focused) Color(0xFF555559) else Ember.Faint,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun MovieShelf(vm: AppViewModel, title: String, movies: List<Movie>, keyPrefix: String) {
     Column {
@@ -191,6 +285,24 @@ fun SearchSection(vm: AppViewModel) {
     var editing by remember { mutableStateOf(false) }
     val cat = (catalogue as? LoadResult.Ok)?.value
 
+    // What's on TV: programme titles in the guide, found a channel at a time.
+    var onTv by remember { mutableStateOf<List<app.embertv.data.ProgrammeHit>>(emptyList()) }
+    var onTvProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var programmeDetails by remember { mutableStateOf<app.embertv.data.ProgrammeHit?>(null) }
+    val now = LocalNow.current
+    LaunchedEffect(query) {
+        onTv = emptyList()
+        onTvProgress = null
+        if (query.length < 3) return@LaunchedEffect
+        delay(600)
+        val first = (vm.favourites.filter { it.type == ContentType.LIVE }.map { it.id } + vm.recentChannels.map { it.id }).distinct()
+        app.embertv.data.ProgrammeSearch.search(repo, query, now, first) { checked, total, hits ->
+            onTv = hits
+            onTvProgress = checked to total
+        }
+        onTvProgress = null
+    }
+
     LaunchedEffect(query, cat) {
         if (query.length < 2 || cat == null) {
             results = null
@@ -211,27 +323,34 @@ fun SearchSection(vm: AppViewModel) {
             EntryRow(
                 label = "",
                 value = vm.searchQuery,
-                placeholder = "Search channels, movies and series",
+                placeholder = "Search channels, films, series and what's on TV",
                 focusKey = "search:box",
                 onClick = { editing = true },
             )
         }
         val r = results
         when {
-            query.length < 2 -> EmptyView("Press OK on the search box and type at least two letters to search everything your provider offers.")
+            query.length < 2 -> EmptyView("Press OK on the search box and type at least two letters to search everything your provider offers, including what's on TV this week.")
             catalogue is LoadResult.Loading || (cat != null && r == null) ->
                 LoadingView(text = "Searching your catalogue…")
-            r != null && !r.isEmpty -> LazyColumn(
+            (r != null && !r.isEmpty) || onTv.isNotEmpty() || onTvProgress != null -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = 4.dp, bottom = LocalContentPadding.current.calculateBottomPadding() + 48.dp),
                 verticalArrangement = Arrangement.spacedBy(26.dp),
             ) {
-                if (r.channels.isNotEmpty()) item(key = "s-ch") { ChannelShelf(vm, "Channels", r.channels, "search") }
-                if (r.movies.isNotEmpty()) item(key = "s-mv") { MovieShelf(vm, "Movies", r.movies, "search") }
-                if (r.series.isNotEmpty()) item(key = "s-sr") { SeriesShelf(vm, "Series", r.series, "search") }
+                if (r != null && r.channels.isNotEmpty()) item(key = "s-ch") { ChannelShelf(vm, "Channels", r.channels, "search") }
+                if (onTv.isNotEmpty() || onTvProgress != null) item(key = "s-tv") {
+                    ProgrammeShelf(vm, onTv, onTvProgress, now) { programmeDetails = it }
+                }
+                if (r != null && r.movies.isNotEmpty()) item(key = "s-mv") { MovieShelf(vm, "Movies", r.movies, "search") }
+                if (r != null && r.series.isNotEmpty()) item(key = "s-sr") { SeriesShelf(vm, "Series", r.series, "search") }
             }
             else -> EmptyView("Nothing matches \"$query\".")
         }
+    }
+
+    programmeDetails?.let { h ->
+        ProgrammeDialog(vm, GuideFocus(h.channel, h.programme), listOf(h.channel)) { programmeDetails = null }
     }
 
     if (editing) {
@@ -340,6 +459,12 @@ fun SettingsSection(vm: AppViewModel) {
 
             // ---- Watching ----
             SettingsHeader("Watching")
+            SettingRow(
+                "When the app opens",
+                vm.startOnLabel(),
+                "Go straight to the last channel you watched or the TV guide, like a TV box",
+                focusKey = "set:starton",
+            ) { vm.cycleStartOn() }
             SettingRow(
                 "Video player",
                 vm.externalPlayerName(),

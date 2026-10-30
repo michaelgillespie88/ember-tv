@@ -293,6 +293,13 @@ class Prefs(context: Context) {
             sp.edit().putBoolean("match_frame_rate", value).apply()
         }
 
+    /** What the app opens on: "home", "last" (the last channel watched) or "guide". */
+    var startOn: String
+        get() = sp.getString("start_on", "home") ?: "home"
+        set(value) {
+            sp.edit().putString("start_on", value).apply()
+        }
+
     /** Minutes of no remote presses before the TV screensaver starts; 0 turns it off. */
     var screensaverMinutes: Int
         get() = sp.getInt("screensaver_min", 3)

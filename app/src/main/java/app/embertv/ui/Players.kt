@@ -395,6 +395,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     var overlayVisible by remember { mutableStateOf(true) }
     var overlayToken by remember { mutableIntStateOf(0) }
     var listOpen by remember { mutableStateOf(false) }
+    var miniGuideOpen by remember { mutableStateOf(false) }
     var digits by remember { mutableStateOf("") }
     var okDown by remember { mutableStateOf(false) }
     var okLong by remember { mutableStateOf(false) }
@@ -502,21 +503,25 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     BackHandler(enabled = listOpen) { listOpen = false }
     BackHandler(enabled = scoresOpen) { scoresOpen = false }
 
-    LaunchedEffect(listOpen, scoresOpen) {
-        if (!listOpen && !scoresOpen) {
+    LaunchedEffect(listOpen, scoresOpen, miniGuideOpen) {
+        if (!listOpen && !scoresOpen && !miniGuideOpen) {
             delay(60)
             runCatching { focus.requestFocus() }
         }
     }
 
     fun onKey(ev: KeyEvent): Boolean {
-        if (listOpen || scoresOpen) return false
+        if (listOpen || scoresOpen || miniGuideOpen) return false
         val native = ev.nativeKeyEvent
         val code = native.keyCode
         if (ev.type == KeyEventType.KeyUp) {
             if (isSelectKey(code)) {
                 if (okDown && !okLong) {
-                    if (overlayVisible) overlayVisible = false else showOverlay()
+                    // TVs: OK brings up the mini guide over the picture. Phones keep tap-for-info.
+                    if (isTv) {
+                        overlayVisible = false
+                        miniGuideOpen = true
+                    } else if (overlayVisible) overlayVisible = false else showOverlay()
                 }
                 okDown = false
                 okLong = false
@@ -532,6 +537,10 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             AndroidKeyEvent.KEYCODE_DPAD_LEFT -> listOpen = true
             AndroidKeyEvent.KEYCODE_DPAD_RIGHT, AndroidKeyEvent.KEYCODE_MENU -> scoresOpen = true
             AndroidKeyEvent.KEYCODE_INFO -> showOverlay()
+            AndroidKeyEvent.KEYCODE_GUIDE -> {
+                overlayVisible = false
+                miniGuideOpen = true
+            }
             AndroidKeyEvent.KEYCODE_MEDIA_REWIND, AndroidKeyEvent.KEYCODE_LAST_CHANNEL -> previousChannel()
             AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> {
                 if (native.repeatCount == 0) {
@@ -604,7 +613,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         }
 
         AnimatedVisibility(
-            visible = overlayVisible && !listOpen,
+            visible = overlayVisible && !listOpen && !miniGuideOpen,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -685,6 +694,19 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             )
         }
 
+        if (miniGuideOpen) {
+            MiniGuide(
+                vm = vm,
+                channels = channels,
+                current = index,
+                onZap = { i ->
+                    miniGuideOpen = false
+                    zapTo(i)
+                },
+                onClose = { miniGuideOpen = false },
+            )
+        }
+
         if (scoresOpen) {
             if (!isTv) Box(Modifier.fillMaxSize().clickable { scoresOpen = false })
             val now = LocalNow.current
@@ -725,7 +747,7 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, stats: VideoStats?, 
     ) {
         Column {
             Text(
-                if (isTv) "▲▼ Channels    ◀ Channel list    ▶ Live scores    Hold OK Favourite" else "Swipe up or down to change channel",
+                if (isTv) "OK Mini guide    ▲▼ Channels    ◀ Channel list    ▶ Live scores    Hold OK Favourite" else "Swipe up or down to change channel",
                 style = Txt.Caption,
                 color = Ember.Faint,
             )
