@@ -460,6 +460,12 @@ fun SettingsSection(vm: AppViewModel) {
             // ---- Watching ----
             SettingsHeader("Watching")
             SettingRow(
+                "Pause & rewind live TV",
+                if (vm.timeshiftMinutes == 0) "Off" else "Up to ${vm.timeshiftMinutes} min",
+                "Records the channel you're watching to this device so you can pause and rewind. Uses some storage while you watch",
+                focusKey = "set:timeshift",
+            ) { vm.cycleTimeshift() }
+            SettingRow(
                 "When the app opens",
                 vm.startOnLabel(),
                 "Go straight to the last channel you watched or the TV guide, like a TV box",

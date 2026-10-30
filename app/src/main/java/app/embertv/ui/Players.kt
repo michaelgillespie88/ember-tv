@@ -1,5 +1,9 @@
 package app.embertv.ui
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.material3.Icon
 import android.view.KeyEvent as AndroidKeyEvent
 import android.app.Activity
 import android.content.Context
@@ -90,6 +94,9 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import app.embertv.data.TimeshiftDataSource
+import app.embertv.data.TimeshiftRecorder
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import app.embertv.data.Channel
@@ -400,6 +407,14 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     var okDown by remember { mutableStateOf(false) }
     var okLong by remember { mutableStateOf(false) }
 
+    // Pause and rewind: the channel plays from a recording on the device while it's switched on.
+    var recorder by remember { mutableStateOf<TimeshiftRecorder?>(null) }
+    var tsStartWall by remember { mutableStateOf(0L) }
+    var direct by remember { mutableStateOf(false) }
+    var paused by remember { mutableStateOf(false) }
+    var restart by remember { mutableIntStateOf(0) }
+    var tsTick by remember { mutableIntStateOf(0) }
+
     val channel = channels[index]
     val videoStats = rememberVideoStats(exo, channel.streamId)
     MatchFrameRate(videoStats)
@@ -416,6 +431,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         previousIndex = index
         index = i
         alternate = false
+        direct = false
         retries = 0
         error = null
         showOverlay()
@@ -424,6 +440,51 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     fun zap(delta: Int) {
         val n = channels.size
         zapTo(((index + delta) % n + n) % n)
+    }
+
+    fun playFromRecording(rec: TimeshiftRecorder, offset: Long) {
+        tsStartWall = rec.wallAt(offset)
+        val item = MediaItem.Builder()
+            .setUri(TimeshiftRecorder.uriFor(offset))
+            .setMediaId("live:${channels[index].streamId}")
+            .build()
+        exo.setMediaSource(ProgressiveMediaSource.Factory(TimeshiftDataSource.Factory(rec)).createMediaSource(item))
+        exo.prepare()
+        exo.playWhenReady = !paused
+    }
+
+    /** The moment on screen, as a wall-clock time (only meaningful while recording). */
+    fun viewingWall(): Long = tsStartWall + exo.currentPosition
+
+    fun cantPause() {
+        vm.notify(if (vm.timeshiftMinutes == 0) "Turn on Pause & rewind live TV in Settings to pause" else "This channel can't be paused")
+    }
+
+    fun goLive() {
+        val rec = recorder ?: return
+        paused = false
+        playFromRecording(rec, rec.offsetAt(System.currentTimeMillis() - 3_000))
+        showOverlay()
+    }
+
+    fun seekBy(ms: Long) {
+        val rec = recorder ?: return cantPause()
+        val target = (viewingWall() + ms).coerceAtLeast(rec.oldestWall())
+        if (target >= System.currentTimeMillis() - 5_000) goLive() else playFromRecording(rec, rec.offsetAt(target))
+        showOverlay()
+    }
+
+    fun togglePause() {
+        val rec = recorder ?: return cantPause()
+        if (paused) {
+            paused = false
+            // Paused for longer than the recording keeps: carry on from the oldest part left.
+            if (viewingWall() < rec.oldestWall()) playFromRecording(rec, rec.oldestOffset()) else exo.play()
+        } else {
+            paused = true
+            exo.pause()
+        }
+        showOverlay()
     }
 
     fun previousChannel() {
@@ -443,9 +504,19 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     }
 
     // Debounced so holding up/down flicks through channels without starting every stream.
-    LaunchedEffect(index, alternate) {
+    LaunchedEffect(index, alternate, direct, restart) {
         if (!firstLoad) delay(350)
         firstLoad = false
+        recorder?.stop()
+        recorder = null
+        paused = false
+        val rec = if (!alternate && !direct) vm.newTimeshift(channel) else null
+        if (rec != null) {
+            rec.start(scope)
+            recorder = rec
+            playFromRecording(rec, 0L)
+            return@LaunchedEffect
+        }
         val url = vm.liveUrl(channel, alternate)
         val item = MediaItem.Builder()
             .setUri(url)
@@ -460,6 +531,19 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     DisposableEffect(exo) {
         val listener = object : Player.Listener {
             override fun onPlayerError(e: PlaybackException) {
+                val rec = recorder
+                if (rec != null) {
+                    val gone = generateSequence(e as Throwable) { it.cause }.any { it.message?.contains("has gone") == true }
+                    if (gone) {
+                        // Rewound (or paused) past what's kept: carry on from the oldest part.
+                        playFromRecording(rec, rec.oldestOffset())
+                    } else {
+                        // Something about this channel doesn't record well: play it directly.
+                        vm.timeshiftFailed.add(channels[index].streamId)
+                        direct = true
+                    }
+                    return
+                }
                 if (e.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     exo.seekToDefaultPosition()
                     exo.prepare()
@@ -491,6 +575,37 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         onDispose { exo.removeListener(listener) }
     }
 
+    // Recording can't start (or keeps failing): play this channel directly instead, without pause.
+    LaunchedEffect(recorder) {
+        val rec = recorder ?: return@LaunchedEffect
+        while (true) {
+            delay(1_000)
+            tsTick++
+            if (rec.failed != null) {
+                vm.timeshiftFailed.add(channels[index].streamId)
+                direct = true
+                break
+            }
+        }
+    }
+    // Leaving the app stops recording (and frees the provider connection); coming back starts again.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                recorder?.stop()
+                recorder = null
+            } else if (event == Lifecycle.Event.ON_START && !firstLoad) {
+                restart++
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose {
+            lifecycle.removeObserver(observer)
+            recorder?.stop()
+        }
+    }
+
     LaunchedEffect(digits) {
         if (digits.isEmpty()) return@LaunchedEffect
         delay(1_600)
@@ -517,8 +632,10 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         if (ev.type == KeyEventType.KeyUp) {
             if (isSelectKey(code)) {
                 if (okDown && !okLong) {
-                    // TVs: OK brings up the mini guide over the picture. Phones keep tap-for-info.
-                    if (isTv) {
+                    // TVs: OK brings up the mini guide over the picture (or carries on, when paused).
+                    if (paused) {
+                        togglePause()
+                    } else if (isTv) {
                         overlayVisible = false
                         miniGuideOpen = true
                     } else if (overlayVisible) overlayVisible = false else showOverlay()
@@ -534,14 +651,21 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         when (code) {
             AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_CHANNEL_UP -> zap(up)
             AndroidKeyEvent.KEYCODE_DPAD_DOWN, AndroidKeyEvent.KEYCODE_CHANNEL_DOWN -> zap(-up)
-            AndroidKeyEvent.KEYCODE_DPAD_LEFT -> listOpen = true
-            AndroidKeyEvent.KEYCODE_DPAD_RIGHT, AndroidKeyEvent.KEYCODE_MENU -> scoresOpen = true
+            // While paused, left and right skip back and forward like a recording.
+            AndroidKeyEvent.KEYCODE_DPAD_LEFT -> if (paused) seekBy(-10_000) else listOpen = true
+            AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> if (paused) seekBy(30_000) else scoresOpen = true
+            AndroidKeyEvent.KEYCODE_MENU -> scoresOpen = true
+            AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, AndroidKeyEvent.KEYCODE_SPACE -> togglePause()
+            AndroidKeyEvent.KEYCODE_MEDIA_PLAY -> if (paused) togglePause()
+            AndroidKeyEvent.KEYCODE_MEDIA_PAUSE -> if (!paused) togglePause()
+            AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seekBy(30_000)
             AndroidKeyEvent.KEYCODE_INFO -> showOverlay()
             AndroidKeyEvent.KEYCODE_GUIDE -> {
                 overlayVisible = false
                 miniGuideOpen = true
             }
-            AndroidKeyEvent.KEYCODE_MEDIA_REWIND, AndroidKeyEvent.KEYCODE_LAST_CHANNEL -> previousChannel()
+            AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> if (recorder != null) seekBy(-10_000) else previousChannel()
+            AndroidKeyEvent.KEYCODE_LAST_CHANNEL -> previousChannel()
             AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> {
                 if (native.repeatCount == 0) {
                     okDown = true
@@ -613,7 +737,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         }
 
         AnimatedVisibility(
-            visible = overlayVisible && !listOpen && !miniGuideOpen,
+            visible = overlayVisible && !listOpen && !miniGuideOpen && !paused,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -626,6 +750,28 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 format = if (alternate) (if (vm.streamFormat == "m3u8") "TS" else "HLS") else (if (vm.streamFormat == "m3u8") "HLS" else "TS"),
                 isTv = isTv,
             )
+        }
+
+        // Pause and rewind: the bar while paused, and how far behind live when catching up.
+        val rec = recorder
+        if (rec != null && !listOpen && !miniGuideOpen) {
+            @Suppress("UNUSED_EXPRESSION") tsTick
+            val nowMs = System.currentTimeMillis()
+            val behind = (nowMs - viewingWall()).coerceAtLeast(0L)
+            if (paused) {
+                TimeshiftPanel(
+                    behindMs = behind,
+                    keptMs = (nowMs - rec.oldestWall()).coerceAtLeast(1L),
+                    isTv = isTv,
+                    onBack = { seekBy(-10_000) },
+                    onPlay = { togglePause() },
+                    onForward = { seekBy(30_000) },
+                    onLive = { goLive() },
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            } else if (behind > 10_000) {
+                BehindLivePill(behind, isTv, Modifier.align(Alignment.TopEnd).padding(top = if (isTv) 26.dp else 76.dp, end = if (isTv) 40.dp else 16.dp)) { goLive() }
+            }
         }
 
         val sleepLeft = vm.sleepMinutesLeft(LocalNow.current * 1000)
@@ -652,6 +798,9 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 ) {
                     IconCircleButton(EmberIcons.Back, "Back", background = ControlBg, glass = true) { vm.pop() }
                     Spacer(Modifier.weight(1f))
+                    if (recorder != null) {
+                        IconCircleButton(if (paused) EmberIcons.Play else EmberIcons.Pause, if (paused) "Play" else "Pause", background = ControlBg, glass = true) { togglePause() }
+                    }
                     if (enterPip != null) IconCircleButton(EmberIcons.Pip, "Picture in picture", background = ControlBg, glass = true) { enterPip() }
                     IconCircleButton(EmberIcons.Football, "Live scores", background = ControlBg, glass = true) { scoresOpen = true }
                     IconCircleButton(EmberIcons.Restart, "Previous channel", background = ControlBg, glass = true) { previousChannel() }
@@ -722,6 +871,93 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             onOpenElsewhere = { vm.openElsewhere(Screen.PlayLive(channels, index)) },
             onMultiView = { vm.push(Screen.MultiView(listOf(channels[index]), channels)) },
         ) { optionsOpen = false }
+    }
+}
+
+private fun clockLength(ms: Long): String {
+    val s = ms / 1000
+    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, (s / 60) % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
+}
+
+/** Paused live TV: how far back you are in what's been kept, with skip and Live controls. */
+@Composable
+private fun TimeshiftPanel(
+    behindMs: Long,
+    keptMs: Long,
+    isTv: Boolean,
+    onBack: () -> Unit,
+    onPlay: () -> Unit,
+    onForward: () -> Unit,
+    onLive: () -> Unit,
+    modifier: Modifier,
+) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000))))
+            .windowInsetsPadding(WindowInsets.displayCutout)
+            .padding(start = if (isTv) 56.dp else 20.dp, end = if (isTv) 56.dp else 20.dp, top = 40.dp, bottom = if (isTv) 34.dp else 28.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(EmberIcons.Pause, null, tint = Ember.Text, modifier = Modifier.size(if (isTv) 30.dp else 26.dp))
+            Spacer(Modifier.width(12.dp))
+            Text("Paused", style = Txt.Title.copy(fontSize = if (isTv) 26.sp else 22.sp))
+            Spacer(Modifier.width(14.dp))
+            Text(if (behindMs < 10_000) "at live" else "${clockLength(behindMs)} behind live", style = Txt.Label, color = Ember.Dim)
+        }
+        Spacer(Modifier.height(14.dp))
+        // The kept recording, oldest on the left, live on the right; the dot is where you are.
+        val fraction = (1f - behindMs.toFloat() / keptMs).coerceIn(0f, 1f)
+        Box(Modifier.fillMaxWidth().height(14.dp), contentAlignment = Alignment.CenterStart) {
+            Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(Color(0x40FFFFFF)))
+            Box(Modifier.fillMaxWidth(fraction).height(5.dp).clip(RoundedCornerShape(3.dp)).background(Ember.Accent))
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                Box(
+                    Modifier
+                        .offset(x = (maxWidth * fraction - 7.dp).coerceAtLeast(0.dp))
+                        .size(14.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("−${clockLength(keptMs)}", style = Txt.Caption, color = Ember.Faint)
+            Spacer(Modifier.weight(1f))
+            Text("LIVE", style = Txt.Caption.copy(fontWeight = FontWeight.Bold), color = Ember.Live)
+        }
+        Spacer(Modifier.height(12.dp))
+        if (isTv) {
+            Text(
+                "OK  Play     ◀  Back 10s     ▶  Forward 30s     ⏪ ⏩  Skip     Up / Down  Change channel",
+                style = Txt.Caption,
+                color = Ember.Faint,
+            )
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PillButton("−10s", onClick = onBack)
+                PillButton("Play", icon = EmberIcons.Play, primary = true, onClick = onPlay)
+                PillButton("+30s", onClick = onForward)
+                PillButton("Live", onClick = onLive)
+            }
+        }
+    }
+}
+
+/** Shown while watching behind live after pausing or rewinding. */
+@Composable
+private fun BehindLivePill(behindMs: Long, isTv: Boolean, modifier: Modifier, onLive: () -> Unit) {
+    Row(
+        modifier
+            .glassSurface(RoundedCornerShape(16.dp), Color(0xB3101014))
+            .then(if (isTv) Modifier else Modifier.clickable(onClick = onLive))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("−${clockLength(behindMs)}", style = Txt.Label.copy(fontWeight = FontWeight.SemiBold), color = Ember.Text)
+        Spacer(Modifier.width(8.dp))
+        Text(if (isTv) "behind live  ·  ⏩ to catch up" else "behind live  ·  tap for live", style = Txt.Caption, color = Ember.Dim)
     }
 }
 

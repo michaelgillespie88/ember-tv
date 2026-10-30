@@ -1200,6 +1200,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         reloadToken++
     }
 
+    var timeshiftMinutes by mutableIntStateOf(prefs.timeshiftMinutes)
+        private set
+
+    fun cycleTimeshift() {
+        val steps = listOf(30, 60, 15, 0)
+        val next = steps[(steps.indexOf(timeshiftMinutes) + 1) % steps.size]
+        timeshiftMinutes = next
+        prefs.timeshiftMinutes = next
+    }
+
+    /** Channels that couldn't be recorded for pausing this session; they play directly. */
+    val timeshiftFailed = HashSet<Int>()
+
+    /** A recorder for pausing and rewinding [c], or null when that's switched off or can't work. */
+    fun newTimeshift(c: Channel): app.embertv.data.TimeshiftRecorder? {
+        val r = repo ?: return null
+        if (timeshiftMinutes <= 0 || c.streamId in timeshiftFailed) return null
+        val dir = java.io.File(getApplication<Application>().cacheDir, "timeshift")
+        // Keep well clear of filling the device: at most 4 GB, and leave 600 MB free.
+        val free = (dir.parentFile ?: dir).usableSpace
+        val maxBytes = (free - 600L * 1024 * 1024).coerceIn(80L * 1024 * 1024, 4L * 1024 * 1024 * 1024)
+        if (free < 300L * 1024 * 1024) return null
+        return app.embertv.data.TimeshiftRecorder(
+            url = r.client.liveUrl(c.streamId, "ts"),
+            userAgent = userAgent,
+            dir = dir,
+            maxAgeMs = timeshiftMinutes * 60_000L,
+            maxBytes = maxBytes,
+        )
+    }
+
     var startOn by mutableStateOf(prefs.startOn)
         private set
     private var startupApplied = false

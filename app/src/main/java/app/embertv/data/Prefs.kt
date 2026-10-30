@@ -293,6 +293,13 @@ class Prefs(context: Context) {
             sp.edit().putBoolean("match_frame_rate", value).apply()
         }
 
+    /** How far back live TV can be rewound, in minutes; 0 turns pause and rewind off. */
+    var timeshiftMinutes: Int
+        get() = sp.getInt("timeshift_min", 30)
+        set(value) {
+            sp.edit().putInt("timeshift_min", value).apply()
+        }
+
     /** What the app opens on: "home", "last" (the last channel watched) or "guide". */
     var startOn: String
         get() = sp.getString("start_on", "home") ?: "home"
