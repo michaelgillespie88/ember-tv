@@ -102,6 +102,7 @@ private fun MovieGrid(vm: AppViewModel, repo: Repository, categoryId: String, mo
                             subtitle = ratingLabel(m.rating),
                             badge = badgeText(m.qualities()),
                             favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, m.streamId)),
+                            watched = vm.movieWatched(m),
                             onClick = { vm.push(Screen.MovieDetail(m)) },
                             onLongClick = { vm.toggleFavourite(vm.favouriteOf(m)) },
                         )
@@ -156,6 +157,7 @@ fun MovieDetailScreen(vm: AppViewModel, movie: Movie) {
                 Text(movie.name, style = Txt.Hero, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(12.dp))
                 val meta = listOfNotNull(
+                    if (vm.movieWatched(movie)) "✓ Watched" else null,
                     info?.year?.takeIf { it.isNotBlank() },
                     info?.duration?.takeIf { it.isNotBlank() }?.let { prettyDuration(it) },
                     ratingLabel(info?.rating ?: movie.rating),

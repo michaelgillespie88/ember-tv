@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -152,5 +153,19 @@ fun VersionPickerDialog(vm: AppViewModel, choice: VersionChoice) {
                 textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+/** A white tick in a dark circle: already watched. */
+@Composable
+fun WatchedTick(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(22.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(Color(0xCC0B0B0E)),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.material3.Icon(EmberIcons.Check, contentDescription = "Watched", tint = Color.White, modifier = Modifier.size(14.dp))
     }
 }

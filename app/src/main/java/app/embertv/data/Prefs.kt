@@ -147,7 +147,7 @@ class Prefs(context: Context) {
         val e = sp.edit()
         for (key in sp.all.keys) {
             val belongs = if (id == MAIN_PROFILE) {
-                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams") ||
+                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams", "watched") ||
                     key.startsWith("pos_") || key.startsWith("last_ep_")
             } else {
                 key.startsWith("p_${id}_")
@@ -194,6 +194,37 @@ class Prefs(context: Context) {
         get() = sp.getString("external_player", "") ?: ""
         set(value) {
             sp.edit().putString("external_player", value).apply()
+        }
+
+    /** Films and episodes this profile has watched to the end ("movie:12", "ep:34"). */
+    var watched: Set<String>
+        get() {
+            val raw = sp.getString(pk("watched"), null) ?: return emptySet()
+            return try {
+                val arr = JSONArray(raw)
+                (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotEmpty() }.toCollection(LinkedHashSet())
+            } catch (e: Exception) {
+                emptySet()
+            }
+        }
+        set(value) {
+            val arr = JSONArray()
+            for (k in value) arr.put(k)
+            sp.edit().putString(pk("watched"), arr.toString()).apply()
+        }
+
+    /** Slimmer rows in the TV guide and channel list, so more channels fit. */
+    var compactLists: Boolean
+        get() = sp.getBoolean("compact_lists", true)
+        set(value) {
+            sp.edit().putBoolean("compact_lists", value).apply()
+        }
+
+    /** Play a small muted picture of the highlighted channel while browsing on a TV. */
+    var livePreview: Boolean
+        get() = sp.getBoolean("live_preview", true)
+        set(value) {
+            sp.edit().putBoolean("live_preview", value).apply()
         }
 
     /** Show each film or show once with its HD/FHD/4K copies as versions. */

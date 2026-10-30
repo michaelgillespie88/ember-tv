@@ -380,6 +380,18 @@ fun SettingsSection(vm: AppViewModel) {
             if (isTv) {
                 SettingsHeader("TV")
                 SettingRow(
+                    "Guide and channel list",
+                    if (vm.compactLists) "Compact · 8 channels" else "Comfortable · 5 channels",
+                    "How many channels fit on screen at once",
+                    focusKey = "set:compact",
+                ) { vm.toggleCompactLists() }
+                SettingRow(
+                    "Live preview",
+                    if (vm.livePreview) "On" else "Off",
+                    "A small muted picture of the highlighted channel. Uses one provider connection",
+                    focusKey = "set:preview",
+                ) { vm.toggleLivePreview() }
+                SettingRow(
                     "Match frame rate",
                     if (vm.matchFrameRate) "On" else "Off",
                     "50Hz for UK channels, 24Hz for films. The screen may blink as it switches",

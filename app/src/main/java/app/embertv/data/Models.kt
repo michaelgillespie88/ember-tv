@@ -56,6 +56,8 @@ data class Series(
     val genre: String,
     val rating: String,
     val year: String,
+    /** When the provider last added to it (epoch seconds), for Recently Added. */
+    val updated: Long = 0L,
     val quality: Quality = Quality.UNKNOWN,
     /** The same show in other qualities, best first (empty if there's only one). */
     val versions: List<Series> = emptyList(),

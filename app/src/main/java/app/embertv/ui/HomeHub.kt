@@ -43,6 +43,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import app.embertv.data.Category
 import app.embertv.data.Channel
 import app.embertv.data.ContentType
@@ -64,6 +66,8 @@ class HomeFeed(
     val liveRow: Pair<Category, List<Channel>>?,
     val movieRows: List<Pair<Category, List<Movie>>>,
     val seriesRows: List<Pair<Category, List<Series>>>,
+    /** Newest films and shows (Movie or Series), newest first. */
+    val recent: List<Any> = emptyList(),
 )
 
 private suspend fun <T> orNull(block: suspend () -> T): T? = try {
@@ -77,17 +81,24 @@ private suspend fun <T> orNull(block: suspend () -> T): T? = try {
 /** Builds the Home rows from the provider's first few categories. Each piece is optional. */
 internal suspend fun loadHomeFeed(repo: Repository): HomeFeed {
     val movieRows = ArrayList<Pair<Category, List<Movie>>>()
-    for (c in orNull { repo.movieCategories() }.orEmpty().take(6)) {
-        if (movieRows.size >= 3) break
+    val recentMovies = ArrayList<Movie>()
+    // A few more categories than the rows need, so Recently Added has more to choose from.
+    for (c in orNull { repo.movieCategories() }.orEmpty().take(8)) {
         val items = orNull { repo.movies(c.id) }.orEmpty()
-        if (items.isNotEmpty()) movieRows.add(c to items.sortedByDescending { it.added }.take(24))
+        recentMovies += items
+        if (items.isNotEmpty() && movieRows.size < 3) movieRows.add(c to items.sortedByDescending { it.added }.take(24))
     }
     val seriesRows = ArrayList<Pair<Category, List<Series>>>()
-    for (c in orNull { repo.seriesCategories() }.orEmpty().take(4)) {
-        if (seriesRows.size >= 2) break
+    val recentSeries = ArrayList<Series>()
+    for (c in orNull { repo.seriesCategories() }.orEmpty().take(5)) {
         val items = orNull { repo.series(c.id) }.orEmpty()
-        if (items.isNotEmpty()) seriesRows.add(c to items.take(24))
+        recentSeries += items
+        if (items.isNotEmpty() && seriesRows.size < 2) seriesRows.add(c to items.take(24))
     }
+    val recent: List<Any> = (
+        recentMovies.filter { it.added > 0 }.distinctBy { it.streamId }.map { it.added to (it as Any) } +
+            recentSeries.filter { it.updated > 0 }.distinctBy { it.seriesId }.map { it.updated to (it as Any) }
+        ).sortedByDescending { it.first }.take(24).map { it.second }
     var liveRow: Pair<Category, List<Channel>>? = null
     for (c in orNull { repo.liveCategories() }.orEmpty().take(3)) {
         val items = orNull { repo.channels(c.id) }.orEmpty()
@@ -100,7 +111,7 @@ internal suspend fun loadHomeFeed(repo: Repository): HomeFeed {
     if (heroes.isEmpty() && movieRows.isEmpty() && seriesRows.isEmpty() && liveRow == null) {
         throw IllegalStateException("Nothing came back from your provider. Check your connection, then try again.")
     }
-    return HomeFeed(heroes, liveRow, movieRows, seriesRows)
+    return HomeFeed(heroes, liveRow, movieRows, seriesRows, recent)
 }
 
 @Composable
@@ -152,7 +163,21 @@ fun ContinueCard(entry: HistoryEntry, width: Dp, onClick: () -> Unit, onLongClic
             ) {
                 androidx.compose.material3.Icon(EmberIcons.Play, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
             }
-            ProgressBar(entry.progress, Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(10.dp))
+            if (entry.positionMs > 0) {
+                ProgressBar(entry.progress, Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(10.dp))
+            } else {
+                // Queued after the last episode finished.
+                Box(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(10.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xE6FFFFFF))
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                ) {
+                    Text("NEXT EPISODE", style = Txt.Caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold), color = Color.Black)
+                }
+            }
         }
         Spacer(Modifier.height(10.dp))
         Text(
@@ -195,10 +220,46 @@ private fun LazyListScope.homeRows(
     val history = vm.history.toList()
     if (history.isNotEmpty()) {
         item(key = "row-continue") {
-            HomeRow("Continue Watching", edge) {
+            // Like Apple TV: what you're part-way through, plus the next episode of what you finished.
+            HomeRow("Up Next", edge) {
                 LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
                     items(history, key = { it.key }) { e ->
                         ContinueCard(e, continueWidth, onClick = { vm.resume(e) }, onLongClick = { vm.removeHistory(e.key) })
+                    }
+                }
+            }
+        }
+    }
+    if (feed.recent.isNotEmpty()) {
+        item(key = "row-recently-added") {
+            HomeRow("Recently Added", edge) {
+                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    items(feed.recent, key = { if (it is Movie) "m${it.streamId}" else "s${(it as Series).seriesId}" }) { item ->
+                        when (item) {
+                            is Movie -> PosterCard(
+                                title = item.name,
+                                image = item.poster,
+                                focusKey = "home:new:m${item.streamId}",
+                                modifier = Modifier.width(posterWidth),
+                                subtitle = "Film",
+                                badge = badgeText(item.qualities()),
+                                favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, item.streamId)),
+                                watched = vm.movieWatched(item),
+                                onClick = { vm.push(Screen.MovieDetail(item)) },
+                                onLongClick = { vm.toggleFavourite(vm.favouriteOf(item)) },
+                            )
+                            is Series -> PosterCard(
+                                title = item.name,
+                                image = item.cover,
+                                focusKey = "home:new:s${item.seriesId}",
+                                modifier = Modifier.width(posterWidth),
+                                subtitle = "Series",
+                                badge = badgeText(item.qualities()),
+                                favourite = vm.favKeys.contains(favouriteKey(ContentType.SERIES, item.seriesId)),
+                                onClick = { vm.push(Screen.SeriesDetail(item)) },
+                                onLongClick = { vm.toggleFavourite(vm.favouriteOf(item)) },
+                            )
+                        }
                     }
                 }
             }
@@ -294,6 +355,7 @@ private fun LazyListScope.homeRows(
                             subtitle = ratingLabel(m.rating),
                             badge = badgeText(m.qualities()),
                             favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, m.streamId)),
+                            watched = vm.movieWatched(m),
                             onClick = { vm.push(Screen.MovieDetail(m)) },
                             onLongClick = { vm.toggleFavourite(vm.favouriteOf(m)) },
                         )

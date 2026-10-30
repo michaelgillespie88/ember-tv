@@ -75,7 +75,7 @@ fun LiveSection(vm: AppViewModel) {
                     onFocusChannel = { focusedChannel = it },
                 )
                 Spacer(Modifier.width(24.dp))
-                ChannelPreview(repo, focusedChannel, Modifier.width(300.dp).fillMaxHeight())
+                ChannelPreview(vm, repo, focusedChannel, Modifier.width(300.dp).fillMaxHeight())
             }
         }
     }
@@ -109,12 +109,13 @@ private fun ChannelList(
                     modifier = modifier.fillMaxHeight(),
                     state = vm.live.list(categoryId),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp, start = 6.dp, end = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (vm.compactLists) 4.dp else 6.dp),
                 ) {
                     itemsIndexed(channels, key = { _, ch -> ch.streamId }) { index, ch ->
                         ChannelRow(
                             repo = repo,
                             channel = ch,
+                            compact = vm.compactLists,
                             focusKey = "live:$categoryId:${ch.streamId}",
                             isFavourite = vm.favKeys.contains(favouriteKey(ContentType.LIVE, ch.streamId)),
                             onFocused = { onFocusChannel(ch) },
@@ -149,12 +150,13 @@ fun ChannelRow(
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    compact: Boolean = false,
 ) {
     val now = LocalNow.current
     val programmes = rememberProgrammes(repo, channel.streamId)
     val current = programmes?.firstOrNull { it.isLive(now) }
     FocusBox(
-        modifier = Modifier.fillMaxWidth().height(70.dp),
+        modifier = Modifier.fillMaxWidth().height(if (compact) 54.dp else 70.dp),
         focusKey = focusKey,
         focusedScale = 1.03f,
         color = Color(0x0DFFFFFF),
@@ -169,7 +171,11 @@ fun ChannelRow(
                 color = Ember.Faint,
                 modifier = Modifier.width(38.dp),
             )
-            ChannelLogo(channel.icon, channel.name, Modifier.size(width = 62.dp, height = 42.dp))
+            ChannelLogo(
+                channel.icon,
+                channel.name,
+                if (compact) Modifier.size(width = 50.dp, height = 34.dp) else Modifier.size(width = 62.dp, height = 42.dp),
+            )
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -179,9 +185,9 @@ fun ChannelRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (current != null) {
-                    Spacer(Modifier.height(3.dp))
+                    Spacer(Modifier.height(if (compact) 1.dp else 3.dp))
                     Text(current.title, style = Txt.Caption, color = Ember.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Spacer(Modifier.height(5.dp))
+                    Spacer(Modifier.height(if (compact) 3.dp else 5.dp))
                     ProgressBar(current.progress(now), Modifier.width(140.dp))
                 }
             }
@@ -194,20 +200,20 @@ fun ChannelRow(
 }
 
 @Composable
-private fun ChannelPreview(repo: Repository, channel: Channel?, modifier: Modifier) {
+private fun ChannelPreview(vm: AppViewModel, repo: Repository, channel: Channel?, modifier: Modifier) {
     Column(
         modifier
             .padding(top = 8.dp, bottom = 24.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(Ember.Panel)
-            .padding(22.dp)
+            .padding(18.dp)
     ) {
         if (channel == null) {
             Text("Pick a channel", style = Txt.Headline)
             Spacer(Modifier.height(8.dp))
             Text("Press OK to watch. Hold OK to add it to your favourites.", style = Txt.Body, color = Ember.Dim)
         } else {
-            PreviewDetails(repo, channel)
+            PreviewDetails(vm, repo, channel)
         }
         Spacer(Modifier.weight(1f))
         Box(Modifier.fillMaxWidth()) {
@@ -217,13 +223,13 @@ private fun ChannelPreview(repo: Repository, channel: Channel?, modifier: Modifi
 }
 
 @Composable
-private fun PreviewDetails(repo: Repository, channel: Channel) {
+private fun PreviewDetails(vm: AppViewModel, repo: Repository, channel: Channel) {
     val now = LocalNow.current
     val programmes = rememberProgrammes(repo, channel.streamId)
-    ChannelLogo(channel.icon, channel.name, Modifier.fillMaxWidth().height(110.dp))
-    Spacer(Modifier.height(16.dp))
-    Text(channel.name, style = Txt.Headline, maxLines = 2, overflow = TextOverflow.Ellipsis)
-    Spacer(Modifier.height(16.dp))
+    LivePreview(vm, channel, Modifier.fillMaxWidth())
+    Spacer(Modifier.height(14.dp))
+    Text(channel.name, style = Txt.Headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Spacer(Modifier.height(12.dp))
     when {
         programmes == null -> Text("Loading guide…", style = Txt.Body, color = Ember.Faint)
         programmes.none { it.end > now } -> Text("No guide information for this channel.", style = Txt.Body, color = Ember.Faint)

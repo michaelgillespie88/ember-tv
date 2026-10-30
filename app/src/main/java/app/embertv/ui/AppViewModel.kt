@@ -184,6 +184,94 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var matchFrameRate by mutableStateOf(prefs.matchFrameRate)
         private set
 
+    // ---- Browsing on a TV ----
+
+    var compactLists by mutableStateOf(prefs.compactLists)
+        private set
+    var livePreview by mutableStateOf(prefs.livePreview)
+        private set
+
+    fun toggleCompactLists() {
+        compactLists = !compactLists
+        prefs.compactLists = compactLists
+    }
+
+    fun toggleLivePreview() {
+        livePreview = !livePreview
+        prefs.livePreview = livePreview
+    }
+
+    // ---- Watched ----
+
+    /** Films and episodes this profile has finished. */
+    var watchedKeys by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    fun isWatched(key: String): Boolean = key in watchedKeys
+
+    /** Watched in any of its qualities. */
+    fun movieWatched(m: Movie): Boolean = (versionsOf(m).map { it.streamId } + m.streamId).any { "movie:$it" in watchedKeys }
+
+    private fun markWatched(key: String) {
+        if (key in watchedKeys || key.startsWith(CATCHUP_PREFIX)) return
+        var next = LinkedHashSet(watchedKeys).apply { add(key) }.toSet()
+        if (next.size > 3000) next = next.drop(next.size - 3000).toSet()
+        watchedKeys = next
+        prefs.watched = next
+    }
+
+    /** Called when a film or episode plays to its end. */
+    fun markFinished(item: VodItem) {
+        if (item.key.startsWith(CATCHUP_PREFIX)) return
+        markWatched(item.key)
+        removeHistory(item.key, notifyUser = false)
+        if (item.seriesId != null) queueNextEpisode(item)
+    }
+
+    /** Puts the episode after [item] at the front of Up Next on Home, like Apple TV. */
+    private fun queueNextEpisode(item: VodItem) {
+        val sid = item.seriesId ?: return
+        val eid = item.episodeId ?: return
+        val r = repo ?: return
+        viewModelScope.launch {
+            val info = r.peekSeriesInfo(sid) ?: try {
+                r.seriesInfo(sid)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return@launch
+            }
+            val all = info.episodes.values.flatten()
+            val current = all.firstOrNull { it.id == eid } ?: return@launch
+            val next = info.episodes[current.season].orEmpty().sortedBy { it.number }.firstOrNull { it.number > current.number }
+                ?: info.seasons.filter { it > current.season }.sorted()
+                    .firstNotNullOfOrNull { s -> info.episodes[s]?.minByOrNull { it.number } }
+                ?: return@launch
+            val key = "ep:${next.id}"
+            if (key in watchedKeys) return@launch
+            // Already further along in that one? Leave Up Next as it is.
+            if (history.any { it.key == key && it.positionMs > 0 }) return@launch
+            val entry = HistoryEntry(
+                key = key,
+                type = ContentType.SERIES,
+                id = next.id,
+                seriesId = sid,
+                title = item.title,
+                subtitle = "Season ${next.season} · Episode ${next.number}  ${next.title}",
+                image = next.image.ifBlank { info.backdrop.ifBlank { item.seriesCover } },
+                seriesCover = item.seriesCover,
+                ext = next.ext,
+                positionMs = 0L,
+                durationMs = 0L,
+                updatedAt = System.currentTimeMillis(),
+            )
+            history.removeAll { it.type == ContentType.SERIES && it.seriesId == sid }
+            history.add(0, entry)
+            while (history.size > 30) history.removeAt(history.lastIndex)
+            prefs.history = history.toList()
+        }
+    }
+
     // ---- HD / FHD / 4K versions ----
 
     var mergeVersions by mutableStateOf(prefs.mergeVersions)
@@ -538,6 +626,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         reminders.clear()
         reminders.addAll(prefs.reminders.filter { it.end > nowSeconds() }.sortedBy { it.start })
         dueReminder = null
+        watchedKeys = prefs.watched
         followedTeams.clear()
         followedTeams.addAll(prefs.followedTeams)
         startTeamWatcher()
@@ -1188,7 +1277,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val finished = durationMs > 0 && positionMs.toDouble() > durationMs.toDouble() * 0.95
         val isEpisode = item.seriesId != null
         if (finished) {
-            removeHistory(item.key, notifyUser = false)
+            markFinished(item)
             return
         }
         if (positionMs < 60_000L) return

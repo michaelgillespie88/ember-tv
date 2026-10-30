@@ -1057,7 +1057,10 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                 buffering = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_READY) error = null
                 if (playbackState == Player.STATE_ENDED) {
-                    items.getOrNull(exo.currentMediaItemIndex)?.let { vm.saveProgress(it, 0L, 0L) }
+                    items.getOrNull(exo.currentMediaItemIndex)?.let {
+                        vm.saveProgress(it, 0L, 0L)
+                        vm.markFinished(it)
+                    }
                     vm.pop()
                 }
             }
@@ -1066,8 +1069,11 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                 val previous = current
                 current = exo.currentMediaItemIndex
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                    // The previous episode finished, so drop its resume point.
-                    items.getOrNull(previous)?.let { vm.saveProgress(it, 0L, 0L) }
+                    // The previous episode finished, so drop its resume point and tick it off.
+                    items.getOrNull(previous)?.let {
+                        vm.saveProgress(it, 0L, 0L)
+                        vm.markFinished(it)
+                    }
                 }
                 items.getOrNull(current)?.let { vm.saveProgress(it, 0L, 0L) }
                 showOverlay()

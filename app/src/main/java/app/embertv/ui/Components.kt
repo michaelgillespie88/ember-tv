@@ -287,6 +287,8 @@ fun PosterCard(
     favourite: Boolean = false,
     /** Shown on the poster's corner, e.g. "4K · FHD". */
     badge: String? = null,
+    /** A tick in the corner for films already watched. */
+    watched: Boolean = false,
     onFocused: (() -> Unit)? = null,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
@@ -308,6 +310,7 @@ fun PosterCard(
             NetImage(image, Modifier.fillMaxSize())
             if (favourite) FavBadge(Modifier.align(Alignment.TopEnd).padding(8.dp))
             if (badge != null) PosterBadge(badge, Modifier.align(Alignment.BottomStart).padding(6.dp))
+            if (watched) WatchedTick(Modifier.align(Alignment.TopStart).padding(7.dp))
         }
         Spacer(Modifier.height(10.dp))
         Text(

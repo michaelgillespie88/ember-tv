@@ -325,6 +325,7 @@ fun PhoneMoviesTab(vm: AppViewModel) {
                                 focusKey = "movie:$categoryId:${m.streamId}",
                                 subtitle = ratingLabel(m.rating),
                                 badge = badgeText(m.qualities()),
+                                watched = vm.movieWatched(m),
                                 favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, m.streamId)),
                                 onClick = { vm.push(Screen.MovieDetail(m)) },
                                 onLongClick = { vm.toggleFavourite(vm.favouriteOf(m)) },

@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import app.embertv.data.ALL
 import app.embertv.data.Category
@@ -51,6 +52,8 @@ private const val WINDOW_MINUTES = 120
 private const val MAX_STEPS = 84
 private val CHANNEL_COLUMN = 170.dp
 private val ROW_HEIGHT = 62.dp
+/** Compact rows fit about eight channels on a TV instead of five. */
+private val COMPACT_ROW_HEIGHT = 38.dp
 
 internal data class GuideFocus(val channel: Channel, val programme: Programme?)
 
@@ -119,8 +122,14 @@ private fun GuideGrid(
             val windowStart = (now / 1800) * 1800 + step * WINDOW_MINUTES * 60L
             val windowEnd = windowStart + WINDOW_MINUTES * 60
 
+            val compact = vm.compactLists
+            val rowHeight = if (compact) COMPACT_ROW_HEIGHT else ROW_HEIGHT
             Column(modifier.fillMaxHeight()) {
                 Row(verticalAlignment = Alignment.Top) {
+                    if (vm.livePreview) {
+                        // The highlighted channel, live, like TiviMate's guide.
+                        LivePreview(vm, focus?.channel ?: channels.firstOrNull(), Modifier.height(if (compact) 92.dp else 86.dp).padding(top = 2.dp, end = 14.dp))
+                    }
                     Box(Modifier.weight(1f)) { FocusStrip(focus, now) }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp)) {
                         TvButton("Earlier", icon = "◀", focusKey = "guide:earlier", onClick = { onStep(step - 1) })
@@ -132,17 +141,19 @@ private fun GuideGrid(
                     val gridWidth = maxWidth - CHANNEL_COLUMN
                     val dpPerMinute = gridWidth / WINDOW_MINUTES
                     Column(Modifier.fillMaxSize()) {
-                        TimeHeader(windowStart, dpPerMinute, now)
+                        TimeHeader(windowStart, dpPerMinute, now, if (compact) 24.dp else 30.dp)
                         LazyColumn(
                             state = vm.guide.list(categoryId),
                             contentPadding = PaddingValues(top = 4.dp, bottom = 40.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 4.dp),
                             modifier = Modifier.fillMaxSize(),
                         ) {
                             itemsIndexed(channels, key = { _, ch -> ch.streamId }) { index, ch ->
                                 GuideRow(
                                     repo = repo,
                                     channel = ch,
+                                    rowHeight = rowHeight,
+                                    compact = compact,
                                     full = step != 0,
                                     windowStart = windowStart,
                                     windowEnd = windowEnd,
@@ -175,7 +186,7 @@ private fun GuideGrid(
 
 @Composable
 private fun FocusStrip(focus: GuideFocus?, now: Long) {
-    Column(Modifier.fillMaxWidth().height(86.dp).padding(start = 6.dp, top = 4.dp)) {
+    Column(Modifier.fillMaxWidth().height(92.dp).padding(start = 6.dp, top = 4.dp)) {
         if (focus == null) {
             Text("TV guide", style = Txt.Title)
             Text(
@@ -218,8 +229,8 @@ fun LiveTag() {
 }
 
 @Composable
-private fun TimeHeader(windowStart: Long, dpPerMinute: Dp, now: Long) {
-    Box(Modifier.fillMaxWidth().height(30.dp)) {
+private fun TimeHeader(windowStart: Long, dpPerMinute: Dp, now: Long, height: Dp = 30.dp) {
+    Box(Modifier.fillMaxWidth().height(height)) {
         Text(
             formatDay(windowStart, now),
             style = Txt.Label,
@@ -250,6 +261,8 @@ private fun TimeHeader(windowStart: Long, dpPerMinute: Dp, now: Long) {
 private fun GuideRow(
     repo: Repository,
     channel: Channel,
+    rowHeight: Dp,
+    compact: Boolean,
     full: Boolean,
     windowStart: Long,
     windowEnd: Long,
@@ -261,21 +274,30 @@ private fun GuideRow(
     onLongPick: (Programme?) -> Unit,
 ) {
     val programmes = if (full) rememberFullProgrammes(repo, channel.streamId) else rememberProgrammes(repo, channel.streamId)
-    Row(Modifier.fillMaxWidth().height(ROW_HEIGHT)) {
+    Row(Modifier.fillMaxWidth().height(rowHeight)) {
         Row(
             Modifier.width(CHANNEL_COLUMN).fillMaxHeight().padding(end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ChannelLogo(channel.icon, channel.name, Modifier.size(width = 52.dp, height = 36.dp))
+            ChannelLogo(
+                channel.icon,
+                channel.name,
+                if (compact) Modifier.size(width = 44.dp, height = 28.dp) else Modifier.size(width = 52.dp, height = 36.dp),
+            )
             Spacer(Modifier.width(10.dp))
-            Text(channel.name, style = Txt.Label, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                channel.name,
+                style = if (compact) Txt.Label.copy(fontSize = 14.sp) else Txt.Label,
+                maxLines = if (compact) 1 else 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         Box(Modifier.width(gridWidth).fillMaxHeight()) {
             val visible = programmes.orEmpty().filter { it.end > windowStart && it.start < windowEnd }
             if (visible.isEmpty()) {
                 ProgrammeBlock(
-                    title = if (programmes == null) "Loading…" else channel.name,
-                    time = if (programmes == null) "" else "No guide information",
+                    title = if (programmes == null) "Loading…" else if (compact) "No guide information" else channel.name,
+                    time = if (programmes == null || compact) "" else "No guide information",
                     live = true,
                     focusKey = "guide:${channel.streamId}:none",
                     modifier = Modifier.fillMaxSize(),
@@ -290,7 +312,8 @@ private fun GuideRow(
                     val w = dpPerMinute * ((end - start) / 60f)
                     ProgrammeBlock(
                         title = p.title,
-                        time = "${formatClock(p.start)} – ${formatClock(p.end)}",
+                        // Compact rows have room for the title only; the strip above shows the times.
+                        time = if (compact) "" else "${formatClock(p.start)} – ${formatClock(p.end)}",
                         live = p.isLive(now),
                         past = p.end <= now,
                         catchup = p.end <= now && catchupAvailable(channel, p, now),

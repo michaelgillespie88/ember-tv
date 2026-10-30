@@ -8,6 +8,9 @@ The same app gives TVs a remote-friendly layout and phones a touch layout.
 - **Hide categories** – Settings → Categories hides the ones you never watch, everywhere including search
 - **Home** – opens first: a featured banner, Continue Watching, your channels, My List and the latest movies and series
 - **Live TV** – categories, channel logos, now/next with progress, quick channel list, number keys to jump to a channel
+- **Live preview (TVs)** – the highlighted channel plays muted in a small window in Live TV and the guide (Settings → Live preview)
+- **Compact guide (TVs)** – about eight channels on screen at once in the guide and channel list (Settings → Guide and channel list)
+- **Up Next and Recently Added** – Home's Up Next row has what you're part-way through plus the next episode of anything you finished; finished films and episodes get a tick; Recently Added shows your provider's newest films and series
 - **Guide** – a programme grid for any category, a week back and a week ahead (Earlier / Now / Later on TV, a day picker on phones; on phones, open it from Live TV)
 - **Catch-up TV** – on channels your provider records, play past programmes from the guide, start the current one from the beginning, or browse a channel's recordings day by day (from the channel list in the player)
 - **Reminders** – pick a future programme in the guide and choose Remind me; a pop-up offers to switch over when it starts (while the app is open)

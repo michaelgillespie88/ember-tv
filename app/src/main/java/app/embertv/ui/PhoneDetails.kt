@@ -106,6 +106,7 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
                 Spacer(Modifier.height(6.dp))
                 MetaLine(
                     listOf(
+                        if (vm.movieWatched(movie)) "✓ Watched" else null,
                         info?.year,
                         info?.duration?.takeIf { it.isNotBlank() }?.let { prettyDuration(it) },
                         ratingLabel(info?.rating ?: movie.rating),
@@ -256,6 +257,7 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
         itemsIndexed(episodes, key = { _, e -> e.id }) { index, e ->
             PhoneEpisodeRow(
                 episode = e,
+                watched = vm.isWatched("ep:${e.id}"),
                 watchedMs = vm.prefs.position("ep:${e.id}"),
                 onClick = { vm.playEpisodes(series, episodes, index, fromStart = false) },
             )
@@ -266,7 +268,7 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
 }
 
 @Composable
-private fun PhoneEpisodeRow(episode: Episode, watchedMs: Long, onClick: () -> Unit) {
+private fun PhoneEpisodeRow(episode: Episode, watched: Boolean, watchedMs: Long, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -282,6 +284,7 @@ private fun PhoneEpisodeRow(episode: Episode, watchedMs: Long, onClick: () -> Un
         ) {
             Placeholder("E ${episode.number}", Modifier.fillMaxSize(), fontSizeSp = 16)
             NetImage(episode.image, Modifier.fillMaxSize())
+            if (watched) WatchedTick(Modifier.align(Alignment.TopEnd).padding(5.dp))
             if (watchedMs > 0) {
                 val total = durationSeconds(episode.duration)
                 if (total != null && total > 0) {

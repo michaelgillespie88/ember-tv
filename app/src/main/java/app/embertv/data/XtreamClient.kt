@@ -231,6 +231,7 @@ class XtreamClient(val account: Account, private val userAgent: String) {
                 genre = o.str("genre"),
                 rating = o.str("rating"),
                 year = o.str("releaseDate").ifEmpty { o.str("release_date") }.take(4),
+                updated = o.str("last_modified").toLongOrNull() ?: 0L,
             )
         }.distinctBy { it.seriesId }
 

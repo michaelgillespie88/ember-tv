@@ -229,6 +229,7 @@ fun SeriesDetailScreen(vm: AppViewModel, series: Series) {
                     key(season) {
                         EpisodeRow(
                             episodes = episodes,
+                            watched = { vm.isWatched("ep:${it.id}") },
                             startIndex = episodes.indexOfFirst { it.id == lastEpisodeId }.coerceAtLeast(0),
                             positionOf = { vm.prefs.position("ep:${it.id}") },
                             onFocus = { focusedEpisode = it },
@@ -262,6 +263,7 @@ private fun SeasonChip(label: String, selected: Boolean, focusKey: String, onFoc
 @Composable
 private fun EpisodeRow(
     episodes: List<Episode>,
+    watched: (Episode) -> Boolean,
     startIndex: Int,
     positionOf: (Episode) -> Long,
     onFocus: (Episode) -> Unit,
@@ -276,6 +278,7 @@ private fun EpisodeRow(
         itemsIndexed(episodes, key = { _, e -> e.id }) { index, e ->
             EpisodeCard(
                 episode = e,
+                watched = watched(e),
                 watchedMs = positionOf(e),
                 onFocus = { onFocus(e) },
                 onClick = { onPlay(index) },
@@ -285,7 +288,7 @@ private fun EpisodeRow(
 }
 
 @Composable
-private fun EpisodeCard(episode: Episode, watchedMs: Long, onFocus: () -> Unit, onClick: () -> Unit) {
+private fun EpisodeCard(episode: Episode, watched: Boolean, watchedMs: Long, onFocus: () -> Unit, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Column(Modifier.width(230.dp)) {
         FocusBox(
@@ -300,6 +303,7 @@ private fun EpisodeCard(episode: Episode, watchedMs: Long, onFocus: () -> Unit, 
         ) {
             Placeholder("E ${episode.number}", Modifier.fillMaxSize())
             NetImage(episode.image, Modifier.fillMaxSize())
+            if (watched) WatchedTick(Modifier.align(Alignment.TopEnd).padding(8.dp))
             if (watchedMs > 0) {
                 val total = durationSeconds(episode.duration)
                 Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(10.dp)) {
