@@ -378,6 +378,28 @@ class XtreamClient(val account: Account, private val userAgent: String) {
      * Catch-up for a programme that has started. The start time goes in the provider's own clock,
      * taken from the guide when it gives one, otherwise worked out from [serverTimezone].
      */
+    /**
+     * The provider's own rewind: a channel from [startSec] (whole minutes) for [minutes]. The start
+     * goes in the provider's clock, worked out from a guide entry ([hint]) when there is one.
+     */
+    fun timeshiftUrl(streamId: Int, startSec: Long, minutes: Int, serverTimezone: String, hint: Programme?): String {
+        val f = java.text.SimpleDateFormat("yyyy-MM-dd:HH-mm", java.util.Locale.US)
+        val utc = java.util.TimeZone.getTimeZone("UTC")
+        val m = hint?.let { Regex("^(\\d{4}-\\d{2}-\\d{2})[ T](\\d{2}):(\\d{2})(?::(\\d{2}))?").find(it.serverStart) }
+        val start = if (hint != null && m != null) {
+            // How far the guide's clock is from real time, taken from one programme.
+            val g = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).apply { timeZone = utc }
+            val sec = m.groupValues[4].ifEmpty { "00" }
+            val asUtc = (g.parse("${m.groupValues[1]} ${m.groupValues[2]}:${m.groupValues[3]}:$sec")?.time ?: 0L) / 1000
+            f.timeZone = utc
+            f.format(java.util.Date((startSec + asUtc - hint.start) * 1000))
+        } else {
+            if (serverTimezone.isNotBlank()) f.timeZone = java.util.TimeZone.getTimeZone(serverTimezone)
+            f.format(java.util.Date(startSec * 1000))
+        }
+        return "$base/timeshift/$pathUser/$pathPass/${minutes.coerceAtLeast(1)}/$start/$streamId.ts"
+    }
+
     fun catchupUrl(streamId: Int, p: Programme, serverTimezone: String): String {
         val fromGuide = Regex("^(\\d{4}-\\d{2}-\\d{2})[ T](\\d{2}):(\\d{2})").find(p.serverStart)
         val start = if (fromGuide != null) {

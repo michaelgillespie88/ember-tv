@@ -94,9 +94,6 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
-import app.embertv.data.TimeshiftDataSource
-import app.embertv.data.TimeshiftRecorder
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import app.embertv.data.Channel
@@ -407,11 +404,12 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     var okDown by remember { mutableStateOf(false) }
     var okLong by remember { mutableStateOf(false) }
 
-    // Pause and rewind: the channel plays from a recording on the device while it's switched on.
-    var recorder by remember { mutableStateOf<TimeshiftRecorder?>(null) }
-    var tsStartWall by remember { mutableStateOf(0L) }
-    var direct by remember { mutableStateOf(false) }
+    // Pause and rewind, using the provider's catch-up. [shiftStart] is when the rewound stream
+    // starts (seconds, whole minutes); null while watching live.
+    var shiftStart by remember { mutableStateOf<Long?>(null) }
     var paused by remember { mutableStateOf(false) }
+    var pausedAt by remember { mutableStateOf(0L) }
+    var pendingSeek by remember { mutableStateOf(0L) }
     var restart by remember { mutableIntStateOf(0) }
     var tsTick by remember { mutableIntStateOf(0) }
 
@@ -431,7 +429,6 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         previousIndex = index
         index = i
         alternate = false
-        direct = false
         retries = 0
         error = null
         showOverlay()
@@ -442,47 +439,90 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         zapTo(((index + delta) % n + n) % n)
     }
 
-    fun playFromRecording(rec: TimeshiftRecorder, offset: Long) {
-        tsStartWall = rec.wallAt(offset)
+    val canRewind = vm.timeshiftOn && channel.hasArchive
+
+    /** The moment on screen, as wall-clock milliseconds. */
+    fun viewingWall(): Long {
+        val start = shiftStart
+        return when {
+            start != null -> start * 1000 + exo.currentPosition
+            paused -> pausedAt
+            else -> System.currentTimeMillis()
+        }
+    }
+
+    fun cantRewind() {
+        vm.notify(
+            when {
+                !vm.timeshiftOn -> "Turn on Pause & rewind live TV in Settings"
+                else -> "This channel doesn't have catch-up, so it can't rewind"
+            }
+        )
+    }
+
+    fun goLive() {
+        shiftStart = null
+        paused = false
+        pendingSeek = 0
+        restart++
+        showOverlay()
+    }
+
+    /** Plays the provider's rewind from [targetMs]: from that minute, then on to the second if the stream allows. */
+    fun startShift(targetMs: Long, roundUp: Boolean = false) {
+        val ch = channels[index]
+        val nowSec = System.currentTimeMillis() / 1000
+        val targetSec = targetMs / 1000
+        var startSec = targetSec / 60 * 60
+        if (roundUp && startSec < targetSec) startSec += 60
+        if (startSec >= nowSec - 60) return goLive()
+        val minutes = ((nowSec - startSec) / 60 + 2).toInt()
+        val url = vm.timeshiftUrl(ch, startSec, minutes) ?: return
+        shiftStart = startSec
+        pendingSeek = (targetMs - startSec * 1000).coerceAtLeast(0L)
         val item = MediaItem.Builder()
-            .setUri(TimeshiftRecorder.uriFor(offset))
-            .setMediaId("live:${channels[index].streamId}")
+            .setUri(url)
+            .setMediaId("shift:${ch.streamId}:$startSec")
             .build()
-        exo.setMediaSource(ProgressiveMediaSource.Factory(TimeshiftDataSource.Factory(rec)).createMediaSource(item))
+        exo.setMediaItem(item)
         exo.prepare()
         exo.playWhenReady = !paused
     }
 
-    /** The moment on screen, as a wall-clock time (only meaningful while recording). */
-    fun viewingWall(): Long = tsStartWall + exo.currentPosition
-
-    fun cantPause() {
-        vm.notify(if (vm.timeshiftMinutes == 0) "Turn on Pause & rewind live TV in Settings to pause" else "This channel can't be paused")
-    }
-
-    fun goLive() {
-        val rec = recorder ?: return
-        paused = false
-        playFromRecording(rec, rec.offsetAt(System.currentTimeMillis() - 3_000))
-        showOverlay()
-    }
-
     fun seekBy(ms: Long) {
-        val rec = recorder ?: return cantPause()
-        val target = (viewingWall() + ms).coerceAtLeast(rec.oldestWall())
-        if (target >= System.currentTimeMillis() - 5_000) goLive() else playFromRecording(rec, rec.offsetAt(target))
+        if (!canRewind) return cantRewind()
+        val nowMs = System.currentTimeMillis()
+        val days = if (channel.archiveDays > 0) channel.archiveDays else 7
+        val target = (viewingWall() + ms).coerceAtLeast(nowMs - days * 86_400_000L)
+        val start = shiftStart
+        when {
+            target >= nowMs - 60_000 && ms > 0 -> goLive()
+            // Within the stream already playing, and the provider lets us move around in it.
+            start != null && exo.isCurrentMediaItemSeekable && target >= start * 1000 &&
+                (exo.duration <= 0 || target - start * 1000 < exo.duration) -> exo.seekTo(target - start * 1000)
+            else -> startShift(target, roundUp = ms > 0)
+        }
         showOverlay()
     }
 
     fun togglePause() {
-        val rec = recorder ?: return cantPause()
         if (paused) {
             paused = false
-            // Paused for longer than the recording keeps: carry on from the oldest part left.
-            if (viewingWall() < rec.oldestWall()) playFromRecording(rec, rec.oldestOffset()) else exo.play()
+            when {
+                // Already rewound: just carry on.
+                shiftStart != null -> exo.play()
+                // Paused live on a catch-up channel: carry on from where it stopped.
+                canRewind && System.currentTimeMillis() - pausedAt > 3_000 -> startShift(pausedAt)
+                else -> {
+                    if (!canRewind && System.currentTimeMillis() - pausedAt > 3_000) vm.notify("Back to live: this channel can't rewind")
+                    goLive()
+                }
+            }
         } else {
+            pausedAt = viewingWall()
             paused = true
-            exo.pause()
+            // Live: stop (freeing the provider connection), and pick up from the provider's rewind later.
+            if (shiftStart == null) exo.stop() else exo.pause()
         }
         showOverlay()
     }
@@ -504,19 +544,11 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     }
 
     // Debounced so holding up/down flicks through channels without starting every stream.
-    LaunchedEffect(index, alternate, direct, restart) {
+    LaunchedEffect(index, alternate, restart) {
         if (!firstLoad) delay(350)
         firstLoad = false
-        recorder?.stop()
-        recorder = null
+        shiftStart = null
         paused = false
-        val rec = if (!alternate && !direct) vm.newTimeshift(channel) else null
-        if (rec != null) {
-            rec.start(scope)
-            recorder = rec
-            playFromRecording(rec, 0L)
-            return@LaunchedEffect
-        }
         val url = vm.liveUrl(channel, alternate)
         val item = MediaItem.Builder()
             .setUri(url)
@@ -531,17 +563,10 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     DisposableEffect(exo) {
         val listener = object : Player.Listener {
             override fun onPlayerError(e: PlaybackException) {
-                val rec = recorder
-                if (rec != null) {
-                    val gone = generateSequence(e as Throwable) { it.cause }.any { it.message?.contains("has gone") == true }
-                    if (gone) {
-                        // Rewound (or paused) past what's kept: carry on from the oldest part.
-                        playFromRecording(rec, rec.oldestOffset())
-                    } else {
-                        // Something about this channel doesn't record well: play it directly.
-                        vm.timeshiftFailed.add(channels[index].streamId)
-                        direct = true
-                    }
+                if (shiftStart != null) {
+                    // The provider's rewind didn't play: go back to live rather than show an error.
+                    vm.notify("Your provider's rewind didn't work here, so back to live")
+                    goLive()
                     return
                 }
                 if (e.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
@@ -568,41 +593,29 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 buffering = playbackState == Player.STATE_BUFFERING
-                if (playbackState == Player.STATE_READY) error = null
+                if (playbackState == Player.STATE_READY) {
+                    error = null
+                    // Rewound to a moment inside a minute: move on to it if the stream allows.
+                    val seek = pendingSeek
+                    if (shiftStart != null && seek > 1_000 && exo.isCurrentMediaItemSeekable) exo.seekTo(seek)
+                    pendingSeek = 0
+                }
+                // The rewound stream reached its end: carry on from there, or back to live.
+                if (playbackState == Player.STATE_ENDED && shiftStart != null) {
+                    val at = viewingWall()
+                    if (System.currentTimeMillis() - at < 90_000) goLive() else startShift(at)
+                }
             }
         }
         exo.addListener(listener)
         onDispose { exo.removeListener(listener) }
     }
 
-    // Recording can't start (or keeps failing): play this channel directly instead, without pause.
-    LaunchedEffect(recorder) {
-        val rec = recorder ?: return@LaunchedEffect
-        while (true) {
+    // Keeps "behind live" up to date while rewound or paused.
+    LaunchedEffect(shiftStart, paused) {
+        while (shiftStart != null || paused) {
             delay(1_000)
             tsTick++
-            if (rec.failed != null) {
-                vm.timeshiftFailed.add(channels[index].streamId)
-                direct = true
-                break
-            }
-        }
-    }
-    // Leaving the app stops recording (and frees the provider connection); coming back starts again.
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(lifecycle) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                recorder?.stop()
-                recorder = null
-            } else if (event == Lifecycle.Event.ON_START && !firstLoad) {
-                restart++
-            }
-        }
-        lifecycle.addObserver(observer)
-        onDispose {
-            lifecycle.removeObserver(observer)
-            recorder?.stop()
         }
     }
 
@@ -664,7 +677,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 overlayVisible = false
                 miniGuideOpen = true
             }
-            AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> if (recorder != null) seekBy(-10_000) else previousChannel()
+            AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> if (canRewind) seekBy(-10_000) else previousChannel()
             AndroidKeyEvent.KEYCODE_LAST_CHANNEL -> previousChannel()
             AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> {
                 if (native.repeatCount == 0) {
@@ -753,15 +766,16 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         }
 
         // Pause and rewind: the bar while paused, and how far behind live when catching up.
-        val rec = recorder
-        if (rec != null && !listOpen && !miniGuideOpen) {
+        if (!listOpen && !miniGuideOpen && (paused || shiftStart != null)) {
             @Suppress("UNUSED_EXPRESSION") tsTick
             val nowMs = System.currentTimeMillis()
             val behind = (nowMs - viewingWall()).coerceAtLeast(0L)
             if (paused) {
                 TimeshiftPanel(
                     behindMs = behind,
-                    keptMs = (nowMs - rec.oldestWall()).coerceAtLeast(1L),
+                    // The bar covers the last half hour, or further when rewound further.
+                    keptMs = maxOf(30 * 60_000L, behind + 5 * 60_000L),
+                    canRewind = canRewind,
                     isTv = isTv,
                     onBack = { seekBy(-10_000) },
                     onPlay = { togglePause() },
@@ -798,7 +812,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 ) {
                     IconCircleButton(EmberIcons.Back, "Back", background = ControlBg, glass = true) { vm.pop() }
                     Spacer(Modifier.weight(1f))
-                    if (recorder != null) {
+                    if (vm.timeshiftOn) {
                         IconCircleButton(if (paused) EmberIcons.Play else EmberIcons.Pause, if (paused) "Play" else "Pause", background = ControlBg, glass = true) { togglePause() }
                     }
                     if (enterPip != null) IconCircleButton(EmberIcons.Pip, "Picture in picture", background = ControlBg, glass = true) { enterPip() }
@@ -884,6 +898,7 @@ private fun clockLength(ms: Long): String {
 private fun TimeshiftPanel(
     behindMs: Long,
     keptMs: Long,
+    canRewind: Boolean,
     isTv: Boolean,
     onBack: () -> Unit,
     onPlay: () -> Unit,
@@ -928,7 +943,13 @@ private fun TimeshiftPanel(
             Text("LIVE", style = Txt.Caption.copy(fontWeight = FontWeight.Bold), color = Ember.Live)
         }
         Spacer(Modifier.height(12.dp))
-        if (isTv) {
+        if (!canRewind) {
+            Text(
+                "This channel doesn't have catch-up, so Play goes back to live.",
+                style = Txt.Caption,
+                color = Ember.Faint,
+            )
+        } else if (isTv) {
             Text(
                 "OK  Play     ◀  Back 10s     ▶  Forward 30s     ◀◀ ▶▶  Skip     Up / Down  Change channel",
                 style = Txt.Caption,

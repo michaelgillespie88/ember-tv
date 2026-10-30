@@ -1200,35 +1200,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         reloadToken++
     }
 
-    var timeshiftMinutes by mutableIntStateOf(prefs.timeshiftMinutes)
+    /** Pause and rewind live TV, using the provider's catch-up on channels that have it. */
+    var timeshiftOn by mutableStateOf(prefs.timeshiftMinutes > 0)
         private set
 
-    fun cycleTimeshift() {
-        val steps = listOf(30, 60, 15, 0)
-        val next = steps[(steps.indexOf(timeshiftMinutes) + 1) % steps.size]
-        timeshiftMinutes = next
-        prefs.timeshiftMinutes = next
+    fun toggleTimeshift() {
+        timeshiftOn = !timeshiftOn
+        prefs.timeshiftMinutes = if (timeshiftOn) 30 else 0
     }
 
-    /** Channels that couldn't be recorded for pausing this session; they play directly. */
-    val timeshiftFailed = HashSet<Int>()
-
-    /** A recorder for pausing and rewinding [c], or null when that's switched off or can't work. */
-    fun newTimeshift(c: Channel): app.embertv.data.TimeshiftRecorder? {
+    /** The provider's rewind for [c], from [startSec] for [minutes]; null when not signed in. */
+    fun timeshiftUrl(c: Channel, startSec: Long, minutes: Int): String? {
         val r = repo ?: return null
-        if (timeshiftMinutes <= 0 || c.streamId in timeshiftFailed) return null
-        val dir = java.io.File(getApplication<Application>().cacheDir, "timeshift")
-        // Keep well clear of filling the device: at most 4 GB, and leave 600 MB free.
-        val free = (dir.parentFile ?: dir).usableSpace
-        val maxBytes = (free - 600L * 1024 * 1024).coerceIn(80L * 1024 * 1024, 4L * 1024 * 1024 * 1024)
-        if (free < 300L * 1024 * 1024) return null
-        return app.embertv.data.TimeshiftRecorder(
-            url = r.client.liveUrl(c.streamId, "ts"),
-            userAgent = userAgent,
-            dir = dir,
-            maxAgeMs = timeshiftMinutes * 60_000L,
-            maxBytes = maxBytes,
-        )
+        val hint = (r.cachedEpg(c.streamId).orEmpty() + r.cachedFullEpg(c.streamId).orEmpty()).firstOrNull { it.serverStart.isNotBlank() }
+        return r.client.timeshiftUrl(c.streamId, startSec, minutes, accountInfo?.serverTimezone ?: "", hint)
     }
 
     var startOn by mutableStateOf(prefs.startOn)

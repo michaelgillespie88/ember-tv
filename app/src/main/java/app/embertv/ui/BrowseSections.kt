@@ -461,10 +461,10 @@ fun SettingsSection(vm: AppViewModel) {
             SettingsHeader("Watching")
             SettingRow(
                 "Pause & rewind live TV",
-                if (vm.timeshiftMinutes == 0) "Off" else "Up to ${vm.timeshiftMinutes} min",
-                "Records the channel you're watching to this device so you can pause and rewind. Uses some storage while you watch",
+                if (vm.timeshiftOn) "On" else "Off",
+                "Uses your provider's catch-up, so it works on channels that have it (marked with the catch-up symbol)",
                 focusKey = "set:timeshift",
-            ) { vm.cycleTimeshift() }
+            ) { vm.toggleTimeshift() }
             SettingRow(
                 "When the app opens",
                 vm.startOnLabel(),
