@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.embertv.data.nowSeconds
 import kotlinx.coroutines.delay
 
@@ -108,6 +109,7 @@ fun EmberApp(vm: AppViewModel, isTv: Boolean) {
                 }
 
                 if (vm.update != null && vm.repo != null) UpdateDialog(vm)
+                vm.crashNote?.let { CrashDialog(it) { vm.crashNote = null } }
 
                 // Choosing HD / FHD / 4K
                 vm.choosingVersion?.let { VersionPickerDialog(vm, it) }
@@ -206,6 +208,44 @@ private fun ReminderDialog(vm: AppViewModel, r: app.embertv.data.Reminder) {
             Column(Modifier.width(if (isTv) 340.dp else 400.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SheetOption("Watch now", focusKey = "reminder:watch", autoFocus = isTv, primary = true) { vm.watchReminder(r) }
                 SheetOption("Dismiss", focusKey = "reminder:dismiss") { vm.dismissReminder() }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CrashDialog(note: String, onDismiss: () -> Unit) {
+    val isTv = LocalIsTv.current
+    Dialog(onDismissRequest = onDismiss) {
+        DialogBackdropBlur()
+        Column(
+            Modifier
+                .width(if (isTv) 620.dp else 440.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(dialogPanelColor())
+                .padding(if (isTv) 8.dp else 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            SheetTitle(
+                "Streammania closed unexpectedly",
+                eyebrow = "Sorry about that",
+                subtitle = "If it keeps happening, take a photo of this and send it on so it can be fixed.",
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                note,
+                style = Txt.Caption.copy(fontSize = 11.sp, letterSpacing = 0.sp),
+                color = Ember.Dim,
+                maxLines = 9,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0x14FFFFFF))
+                    .padding(14.dp),
+            )
+            Spacer(Modifier.height(18.dp))
+            Column(Modifier.width(if (isTv) 340.dp else 400.dp)) {
+                SheetOption("OK", focusKey = "crash:ok", autoFocus = isTv, primary = true, onClick = onDismiss)
             }
         }
     }

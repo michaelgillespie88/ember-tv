@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
     private var swallowUp = -1
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        CrashNote.install(applicationContext)
         isTv = isTelevision()
         if (!isTv) {
             // Phones and tablets: draw behind transparent system bars; screens pad themselves.

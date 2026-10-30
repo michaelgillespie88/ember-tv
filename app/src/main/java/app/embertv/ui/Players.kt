@@ -1,5 +1,6 @@
 package app.embertv.ui
 
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -307,7 +308,7 @@ private fun rememberExoPlayer(
 }
 
 @Composable
-private fun VideoSurface(exo: ExoPlayer) {
+private fun VideoSurface(exo: ExoPlayer, modifier: Modifier = Modifier.fillMaxSize()) {
     AndroidView(
         factory = { ctx ->
             PlayerView(ctx).apply {
@@ -322,7 +323,7 @@ private fun VideoSurface(exo: ExoPlayer) {
                 descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
             }
         },
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier,
     )
 }
 
@@ -399,7 +400,11 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     var overlayVisible by remember { mutableStateOf(true) }
     var overlayToken by remember { mutableIntStateOf(0) }
     var listOpen by remember { mutableStateOf(false) }
-    var miniGuideOpen by remember { mutableStateOf(false) }
+    var guideOpen by remember { mutableStateOf(false) }
+    // TVs: OK brings up a row of playback controls (pause, skip, guide…).
+    var controlsOpen by remember { mutableStateOf(false) }
+    var controlsToken by remember { mutableIntStateOf(0) }
+    val controlsFocus = remember { FocusRequester() }
     var digits by remember { mutableStateOf("") }
     var okDown by remember { mutableStateOf(false) }
     var okLong by remember { mutableStateOf(false) }
@@ -631,26 +636,37 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     BackHandler(enabled = listOpen) { listOpen = false }
     BackHandler(enabled = scoresOpen) { scoresOpen = false }
 
-    LaunchedEffect(listOpen, scoresOpen, miniGuideOpen) {
-        if (!listOpen && !scoresOpen && !miniGuideOpen) {
+    BackHandler(enabled = controlsOpen) { controlsOpen = false }
+    LaunchedEffect(controlsOpen, controlsToken) {
+        if (!controlsOpen) return@LaunchedEffect
+        if (controlsToken == 0) {
+            delay(50)
+            runCatching { controlsFocus.requestFocus() }
+        }
+        delay(8_000)
+        controlsOpen = false
+    }
+    LaunchedEffect(listOpen, scoresOpen, guideOpen, controlsOpen) {
+        if (!listOpen && !scoresOpen && !guideOpen && !controlsOpen) {
             delay(60)
             runCatching { focus.requestFocus() }
         }
     }
 
     fun onKey(ev: KeyEvent): Boolean {
-        if (listOpen || scoresOpen || miniGuideOpen) return false
+        if (listOpen || scoresOpen || guideOpen || controlsOpen) return false
         val native = ev.nativeKeyEvent
         val code = native.keyCode
         if (ev.type == KeyEventType.KeyUp) {
             if (isSelectKey(code)) {
                 if (okDown && !okLong) {
-                    // TVs: OK brings up the mini guide over the picture (or carries on, when paused).
+                    // TVs: OK brings up the playback controls (or carries on, when paused).
                     if (paused) {
                         togglePause()
                     } else if (isTv) {
-                        overlayVisible = false
-                        miniGuideOpen = true
+                        controlsToken = 0
+                        controlsOpen = true
+                        showOverlay()
                     } else if (overlayVisible) overlayVisible = false else showOverlay()
                 }
                 okDown = false
@@ -667,7 +683,11 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             // While paused, left and right skip back and forward like a recording.
             AndroidKeyEvent.KEYCODE_DPAD_LEFT -> if (paused) seekBy(-10_000) else listOpen = true
             AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> if (paused) seekBy(30_000) else scoresOpen = true
-            AndroidKeyEvent.KEYCODE_MENU -> scoresOpen = true
+            // The ☰ button (or Guide, on remotes that have one) opens the guide over the picture.
+            AndroidKeyEvent.KEYCODE_MENU -> {
+                overlayVisible = false
+                guideOpen = true
+            }
             AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, AndroidKeyEvent.KEYCODE_SPACE -> togglePause()
             AndroidKeyEvent.KEYCODE_MEDIA_PLAY -> if (paused) togglePause()
             AndroidKeyEvent.KEYCODE_MEDIA_PAUSE -> if (!paused) togglePause()
@@ -675,7 +695,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             AndroidKeyEvent.KEYCODE_INFO -> showOverlay()
             AndroidKeyEvent.KEYCODE_GUIDE -> {
                 overlayVisible = false
-                miniGuideOpen = true
+                guideOpen = true
             }
             AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> if (canRewind) seekBy(-10_000) else previousChannel()
             AndroidKeyEvent.KEYCODE_LAST_CHANNEL -> previousChannel()
@@ -725,9 +745,33 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 )
             }
     ) {
-        VideoSurface(exo)
+        // The guide fills the screen with this channel still playing in its top-right corner.
+        if (guideOpen && !vm.inPip) {
+            PlayerGuide(
+                vm = vm,
+                channels = channels,
+                current = index,
+                onZap = { i ->
+                    guideOpen = false
+                    zapTo(i)
+                },
+                onClose = { guideOpen = false },
+            )
+        }
+        VideoSurface(
+            exo,
+            if (guideOpen && !vm.inPip) {
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = PLAYER_GUIDE_TOP, end = PLAYER_GUIDE_SIDE)
+                    .size(PLAYER_GUIDE_VIDEO_WIDTH, PLAYER_GUIDE_VIDEO_HEIGHT)
+            } else {
+                Modifier.fillMaxSize()
+            },
+        )
         // In picture-in-picture the window is tiny: just the picture.
         if (vm.inPip) return@Box
+        if (guideOpen) return@Box
 
         val err = error
         if (err != null) {
@@ -749,28 +793,38 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             )
         }
 
-        AnimatedVisibility(
-            visible = overlayVisible && !listOpen && !miniGuideOpen && !paused,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            LiveInfoBar(
-                vm = vm,
-                channel = channel,
-                stats = videoStats,
-                isFavourite = vm.isFavourite(ContentType.LIVE, channel.streamId),
-                format = if (alternate) (if (vm.streamFormat == "m3u8") "TS" else "HLS") else (if (vm.streamFormat == "m3u8") "HLS" else "TS"),
-                isTv = isTv,
-            )
-        }
-
-        // Pause and rewind: the bar while paused, and how far behind live when catching up.
-        if (!listOpen && !miniGuideOpen && (paused || shiftStart != null)) {
-            @Suppress("UNUSED_EXPRESSION") tsTick
-            val nowMs = System.currentTimeMillis()
-            val behind = (nowMs - viewingWall()).coerceAtLeast(0L)
-            if (paused) {
+        // Bottom of the screen: the controls row (TVs, after OK), then the paused bar or the channel info.
+        val nowMs = System.currentTimeMillis()
+        @Suppress("UNUSED_EXPRESSION") tsTick
+        val behind = if (paused || shiftStart != null) (nowMs - viewingWall()).coerceAtLeast(0L) else 0L
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            if (isTv && controlsOpen && !listOpen) {
+                LiveControls(
+                    paused = paused,
+                    canRewind = canRewind,
+                    behindLive = behind > 10_000,
+                    requester = controlsFocus,
+                    onActivity = { controlsToken++ },
+                    onPause = { togglePause() },
+                    onBack = { seekBy(-10_000) },
+                    onForward = { seekBy(30_000) },
+                    onLive = { goLive() },
+                    onGuide = {
+                        controlsOpen = false
+                        overlayVisible = false
+                        guideOpen = true
+                    },
+                    onChannels = {
+                        controlsOpen = false
+                        listOpen = true
+                    },
+                    onScores = {
+                        controlsOpen = false
+                        scoresOpen = true
+                    },
+                )
+            }
+            if (paused && !listOpen) {
                 TimeshiftPanel(
                     behindMs = behind,
                     // The bar covers the last half hour, or further when rewound further.
@@ -781,11 +835,28 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                     onPlay = { togglePause() },
                     onForward = { seekBy(30_000) },
                     onLive = { goLive() },
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    modifier = Modifier,
                 )
-            } else if (behind > 10_000) {
-                BehindLivePill(behind, isTv, Modifier.align(Alignment.TopEnd).padding(top = if (isTv) 26.dp else 76.dp, end = if (isTv) 40.dp else 16.dp)) { goLive() }
+            } else {
+                AnimatedVisibility(
+                    visible = (overlayVisible || controlsOpen) && !listOpen,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    LiveInfoBar(
+                        vm = vm,
+                        channel = channel,
+                        stats = videoStats,
+                        isFavourite = vm.isFavourite(ContentType.LIVE, channel.streamId),
+                        format = if (alternate) (if (vm.streamFormat == "m3u8") "TS" else "HLS") else (if (vm.streamFormat == "m3u8") "HLS" else "TS"),
+                        isTv = isTv,
+                    )
+                }
             }
+        }
+        // Watching behind live after pausing or rewinding.
+        if (!listOpen && !paused && behind > 10_000) {
+            BehindLivePill(behind, isTv, Modifier.align(Alignment.TopEnd).padding(top = if (isTv) 26.dp else 76.dp, end = if (isTv) 40.dp else 16.dp)) { goLive() }
         }
 
         val sleepLeft = vm.sleepMinutesLeft(LocalNow.current * 1000)
@@ -854,19 +925,6 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                     listOpen = false
                     zapTo(i)
                 },
-            )
-        }
-
-        if (miniGuideOpen) {
-            MiniGuide(
-                vm = vm,
-                channels = channels,
-                current = index,
-                onZap = { i ->
-                    miniGuideOpen = false
-                    zapTo(i)
-                },
-                onClose = { miniGuideOpen = false },
             )
         }
 
@@ -966,6 +1024,45 @@ private fun TimeshiftPanel(
     }
 }
 
+/** TVs: the row of controls OK brings up over live TV, Apple TV style. */
+@Composable
+private fun LiveControls(
+    paused: Boolean,
+    canRewind: Boolean,
+    behindLive: Boolean,
+    requester: FocusRequester,
+    onActivity: () -> Unit,
+    onPause: () -> Unit,
+    onBack: () -> Unit,
+    onForward: () -> Unit,
+    onLive: () -> Unit,
+    onGuide: () -> Unit,
+    onChannels: () -> Unit,
+    onScores: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0x99000000))))
+            .padding(start = 56.dp, end = 56.dp, top = 28.dp, bottom = 6.dp)
+            .onPreviewKeyEvent {
+                onActivity()
+                false
+            },
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        TvButton(if (paused) "Play" else "Pause", icon = if (paused) "▶" else "❙❙", focusKey = "live:ctl:pause", requester = requester, onClick = onPause)
+        if (canRewind) {
+            TvButton("10s", icon = "◀◀", focusKey = "live:ctl:back", onClick = onBack)
+            TvButton("30s", icon = "▶▶", focusKey = "live:ctl:fwd", onClick = onForward)
+        }
+        if (behindLive) TvButton("Live", icon = "●", focusKey = "live:ctl:live", onClick = onLive)
+        TvButton("TV guide", icon = "☰", focusKey = "live:ctl:guide", onClick = onGuide)
+        TvButton("Channels", icon = "≡", focusKey = "live:ctl:list", onClick = onChannels)
+        TvButton("Live scores", focusKey = "live:ctl:scores", onClick = onScores)
+    }
+}
+
 /** Shown while watching behind live after pausing or rewinding. */
 @Composable
 private fun BehindLivePill(behindMs: Long, isTv: Boolean, modifier: Modifier, onLive: () -> Unit) {
@@ -1004,7 +1101,7 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, stats: VideoStats?, 
     ) {
         Column {
             Text(
-                if (isTv) "OK Mini guide    ▲▼ Channels    ◀ Channel list    ▶ Live scores    Hold OK Favourite" else "Swipe up or down to change channel",
+                if (isTv) "OK Controls    ☰ Guide    ▲▼ Channels    ◀ Channel list    ▶ Live scores    Hold OK Favourite" else "Swipe up or down to change channel",
                 style = Txt.Caption,
                 color = Ember.Faint,
             )

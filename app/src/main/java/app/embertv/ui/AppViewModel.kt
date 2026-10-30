@@ -43,6 +43,7 @@ import app.embertv.data.MatchState
 import app.embertv.data.ScoresClient
 import app.embertv.data.Team
 import app.embertv.data.Tmdb
+import app.embertv.CrashNote
 import app.embertv.data.toChannel
 import app.embertv.data.FoundTv
 import app.embertv.data.TvFinder
@@ -1216,6 +1217,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return r.client.timeshiftUrl(c.streamId, startSec, minutes, accountInfo?.serverTimezone ?: "", hint)
     }
 
+    /** Why the app closed last time, if it crashed; shown once. */
+    var crashNote by mutableStateOf<String?>(CrashNote.take(getApplication()))
+
     var startOn by mutableStateOf(prefs.startOn)
         private set
     private var startupApplied = false
@@ -1559,15 +1563,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun seriesExtras(s: Series, info: app.embertv.data.SeriesInfo?): app.embertv.data.Extras? =
         tmdb?.extras("tv", info?.tmdbId ?: 0, s.name, info?.year ?: s.year)
 
-    /** TMDB's suggestions that you can actually watch, then more from the same category. */
+    /**
+     * TMDB's suggestions that you can actually watch, then more from the same category. Runs off the
+     * main thread and only works out title keys for as many films as it needs: the whole library can
+     * be tens of thousands of titles, and doing them all on screen froze the app.
+     */
     suspend fun moreLikeThis(m: Movie, extras: app.embertv.data.Extras?): List<Movie> {
         val r = repo ?: return emptyList()
-        val ownKey = Versions.key(m.name)
-        val pool = r.loadedMovies()
-        val byKey = pool.groupBy { Versions.key(it.name) }
-        val suggested = extras?.suggestions.orEmpty().mapNotNull { s ->
-            byKey[Versions.key(s.title)]?.firstOrNull { s.year.isEmpty() || Versions.year(it.name).let { y -> y == null || y == s.year } }
-        }
         val sameCategory = try {
             r.movies(m.categoryId)
         } catch (e: CancellationException) {
@@ -1575,17 +1577,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) {
             emptyList()
         }
-        return (suggested + sameCategory.shuffled(java.util.Random(m.streamId.toLong())))
-            .filter { Versions.key(it.name) != ownKey }
-            .distinctBy { Versions.key(it.name) }
-            .take(16)
+        val pool = if (extras?.suggestions.isNullOrEmpty()) emptyList() else r.loadedMovies()
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            pickMore(
+                ownName = m.name,
+                suggestions = extras?.suggestions.orEmpty(),
+                pool = pool,
+                fallback = sameCategory.shuffled(java.util.Random(m.streamId.toLong())),
+                name = { it.name },
+                year = { Versions.year(it.name) },
+            )
+        }
     }
 
     suspend fun moreLikeThis(s: Series, extras: app.embertv.data.Extras?): List<Series> {
         val r = repo ?: return emptyList()
-        val ownKey = Versions.key(s.name)
-        val byKey = r.loadedSeries().groupBy { Versions.key(it.name) }
-        val suggested = extras?.suggestions.orEmpty().mapNotNull { sg -> byKey[Versions.key(sg.title)]?.firstOrNull() }
         val sameCategory = try {
             r.series(s.categoryId)
         } catch (e: CancellationException) {
@@ -1593,10 +1599,55 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) {
             emptyList()
         }
-        return (suggested + sameCategory.shuffled(java.util.Random(s.seriesId.toLong())))
-            .filter { Versions.key(it.name) != ownKey }
-            .distinctBy { Versions.key(it.name) }
-            .take(16)
+        val pool = if (extras?.suggestions.isNullOrEmpty()) emptyList() else r.loadedSeries()
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            pickMore(
+                ownName = s.name,
+                suggestions = extras?.suggestions.orEmpty(),
+                pool = pool,
+                fallback = sameCategory.shuffled(java.util.Random(s.seriesId.toLong())),
+                name = { it.name },
+                year = { null },
+            )
+        }
+    }
+
+    private fun <T> pickMore(
+        ownName: String,
+        suggestions: List<app.embertv.data.Suggestion>,
+        pool: List<T>,
+        fallback: List<T>,
+        name: (T) -> String,
+        year: (T) -> String?,
+    ): List<T> {
+        val own = Versions.key(ownName)
+        val out = ArrayList<T>()
+        val seen = HashSet<String>().apply { add(own) }
+        if (suggestions.isNotEmpty() && pool.isNotEmpty()) {
+            // Match suggestions by a cheap first word before the full title key.
+            val wanted = suggestions.associateBy { Versions.key(it.title) }
+            val firstWords = wanted.keys.mapNotNull { it.split(' ').firstOrNull() }.toSet()
+            val found = HashMap<String, T>()
+            for (item in pool) {
+                val n = name(item)
+                val first = n.lowercase().split(' ', ':', '-', '|').firstOrNull { it.length > 1 } ?: continue
+                if (firstWords.none { n.contains(it, ignoreCase = true) } && first !in firstWords) continue
+                val k = Versions.key(n)
+                val sg = wanted[k] ?: continue
+                val y = year(item)
+                if (k !in found && (sg.year.isEmpty() || y == null || y == sg.year)) found[k] = item
+            }
+            for (k in wanted.keys) {
+                val item = found[k] ?: continue
+                if (seen.add(k)) out += item
+                if (out.size >= 16) return out
+            }
+        }
+        for (item in fallback) {
+            if (seen.add(Versions.key(name(item)))) out += item
+            if (out.size >= 16) break
+        }
+        return out
     }
 
     /** Opens a YouTube trailer in the YouTube app (or the browser if it isn't installed). */

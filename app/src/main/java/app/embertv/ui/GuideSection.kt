@@ -284,7 +284,7 @@ internal fun guideKey(
 
 /** The top of the guide: the highlighted programme, big, with its time and how far through it is. */
 @Composable
-private fun GuideInfo(focus: GuideFocus?, now: Long) {
+internal fun GuideInfo(focus: GuideFocus?, now: Long) {
     Column(Modifier.fillMaxSize().padding(top = 6.dp)) {
         if (focus == null) {
             Text("TV GUIDE", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Accent)
@@ -806,13 +806,19 @@ internal fun ProgrammeDialog(vm: AppViewModel, focus: GuideFocus, channels: List
     }
 }
 
+/** Where the playing channel sits while the guide is open over it (top right, like TiviMate). */
+internal val PLAYER_GUIDE_VIDEO_WIDTH = 236.dp
+internal val PLAYER_GUIDE_VIDEO_HEIGHT = 133.dp
+internal val PLAYER_GUIDE_TOP = 18.dp
+internal val PLAYER_GUIDE_SIDE = 40.dp
+
 /**
- * The guide over live TV, like TiviMate's: the picture keeps playing while you browse what's on
- * now and next on the channels around this one. OK on something airing switches to it; earlier
- * and later programmes offer catch-up or a reminder.
+ * The full guide over live TV, like TiviMate's: the channel you're watching keeps playing in the
+ * top-right corner (the player draws it there), the highlighted programme's details sit beside it,
+ * and the grid of channels and times fills the rest. OK on something airing switches to it.
  */
 @Composable
-fun MiniGuide(vm: AppViewModel, channels: List<Channel>, current: Int, onZap: (Int) -> Unit, onClose: () -> Unit) {
+fun PlayerGuide(vm: AppViewModel, channels: List<Channel>, current: Int, onZap: (Int) -> Unit, onClose: () -> Unit) {
     val repo = vm.repo ?: return
     val now = LocalNow.current
     var step by remember { mutableIntStateOf(0) }
@@ -820,51 +826,22 @@ fun MiniGuide(vm: AppViewModel, channels: List<Channel>, current: Int, onZap: (I
     var details by remember { mutableStateOf<GuideFocus?>(null) }
     val windowStart = (now / 1800) * 1800 + step * 1800L
     val windowEnd = windowStart + WINDOW_MINUTES * 60
-    val state = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = (current - 2).coerceAtLeast(0))
+    val state = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = (current - 4).coerceAtLeast(0))
     BackHandler(enabled = details == null) { if (step != 0) step = 0 else onClose() }
 
-    Box(Modifier.fillMaxSize()) {
-        Column(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(318.dp)
-                .background(Brush.verticalGradient(listOf(Color(0x00000000), Color(0xD90B0B0F), Color(0xF20B0B0F)), endY = 160f))
-                .padding(start = 40.dp, end = 40.dp, top = 22.dp, bottom = 10.dp)
-        ) {
-            // The highlighted programme, in a line, over the picture.
-            val f = focus
-            val p = f?.programme
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(52.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        if (f == null) "MINI GUIDE" else ((if (f.channel.num > 0) "${f.channel.num}  ·  " else "") + f.channel.name.uppercase()),
-                        style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp),
-                        color = Ember.Accent,
-                        maxLines = 1,
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            p?.title ?: f?.channel?.name ?: "What's on",
-                            style = Txt.Title.copy(fontSize = 22.sp),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                        if (p != null) {
-                            Spacer(Modifier.width(14.dp))
-                            Text(
-                                if (p.isLive(now)) "${formatClock(p.start)} – ${formatClock(p.end)}  ·  ${(p.end - now) / 60} min left"
-                                else "${formatDay(p.start, now)}  ${formatClock(p.start)} – ${formatClock(p.end)}",
-                                style = Txt.Label,
-                                color = Ember.Dim,
-                                maxLines = 1,
-                            )
-                        }
-                    }
-                }
-                Text("OK  Watch     ◀ ▶  Earlier / later     Back  Close", style = Txt.Caption, color = Ember.Faint)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Ember.Bg)
+            .background(Brush.verticalGradient(listOf(Color(0xFF1C130E), Color.Transparent), endY = 520f))
+    ) {
+        Column(Modifier.fillMaxSize().padding(start = PLAYER_GUIDE_SIDE, end = PLAYER_GUIDE_SIDE, top = PLAYER_GUIDE_TOP)) {
+            Row(Modifier.fillMaxWidth().height(PLAYER_GUIDE_VIDEO_HEIGHT + 8.dp)) {
+                Box(Modifier.weight(1f).fillMaxHeight()) { GuideInfo(focus, now) }
+                // The live picture goes here.
+                Spacer(Modifier.width(PLAYER_GUIDE_VIDEO_WIDTH + 24.dp))
             }
+            Spacer(Modifier.height(6.dp))
             BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
                 val gridWidth = maxWidth - CHANNEL_COLUMN
                 val dpPerMinute = gridWidth / WINDOW_MINUTES
@@ -872,6 +849,7 @@ fun MiniGuide(vm: AppViewModel, channels: List<Channel>, current: Int, onZap: (I
                     TimeHeader(windowStart, dpPerMinute, now, "", {}, {}, {}, showChips = false)
                     LazyColumn(
                         state = state,
+                        contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(ROW_GAP),
                         modifier = Modifier
                             .fillMaxSize()
@@ -881,7 +859,7 @@ fun MiniGuide(vm: AppViewModel, channels: List<Channel>, current: Int, onZap: (I
                             GuideRow(
                                 repo = repo,
                                 channel = ch,
-                                rowHeight = COMPACT_ROW_HEIGHT + 4.dp,
+                                rowHeight = COMPACT_ROW_HEIGHT,
                                 compact = true,
                                 wantFull = step != 0,
                                 windowStart = windowStart,
