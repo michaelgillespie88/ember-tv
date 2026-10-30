@@ -8,7 +8,9 @@ The same app gives TVs a remote-friendly layout and phones a touch layout.
 - **Hide categories** – Settings → Categories hides the ones you never watch, everywhere including search
 - **Home** – opens first: a featured banner, Continue Watching, your channels, My List and the latest movies and series
 - **Live TV** – categories, channel logos, now/next with progress, quick channel list, number keys to jump to a channel
-- **Guide** – a programme grid for any category (on phones, open it from Live TV)
+- **Guide** – a programme grid for any category, a week back and a week ahead (Earlier / Now / Later on TV, a day picker on phones; on phones, open it from Live TV)
+- **Catch-up TV** – on channels your provider records, play past programmes from the guide, start the current one from the beginning, or browse a channel's recordings day by day (from the channel list in the player)
+- **Reminders** – pick a future programme in the guide and choose Remind me; a pop-up offers to switch over when it starts (while the app is open)
 - **Movies and Series** – posters, details, seasons and episodes, resume where you left off, auto-play next episode
 - **Favourites** – hold OK on any channel, movie or series
 - **Live scores** – while watching, press ▶ on the remote (or the football button on a phone) for today's football scores; matches on the current channel are pinned to the top

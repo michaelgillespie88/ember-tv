@@ -178,4 +178,25 @@ object EmberIcons {
         arcTo(8f, 8f, 0f, true, true, 6.5f, 17.8f)
         moveTo(4f, 7f); lineTo(4f, 12f); lineTo(9f, 12f)
     }
+
+    /** Catch-up: a clock with its hand turning back. */
+    val Catchup = outline("catchup") {
+        moveTo(4.6f, 9f)
+        arcTo(8f, 8f, 0f, true, true, 4f, 12f)
+        moveTo(4.6f, 4.8f); lineTo(4.6f, 9f); lineTo(8.8f, 9f)
+        moveTo(12f, 8f); lineTo(12f, 12.5f); lineTo(15f, 14.2f)
+    }
+
+    /** Back to the start of the programme. */
+    val FromStart = solid("from-start") {
+        moveTo(5f, 5f); lineTo(7.5f, 5f); lineTo(7.5f, 19f); lineTo(5f, 19f); close()
+        moveTo(19f, 5f); lineTo(19f, 19f); lineTo(9f, 12f); close()
+    }
+
+    val Bell = outline("bell") {
+        moveTo(6f, 16.5f); lineTo(6f, 11f)
+        arcTo(6f, 6f, 0f, false, true, 18f, 11f)
+        lineTo(18f, 16.5f); lineTo(19.5f, 18f); lineTo(4.5f, 18f); close()
+        moveTo(10f, 20.5f); lineTo(14f, 20.5f)
+    }
 }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
@@ -69,8 +70,18 @@ fun EmberApp(vm: AppViewModel, isTv: Boolean) {
                         is Screen.SeriesDetail -> if (isTv) SeriesDetailScreen(vm, screen.series) else PhoneSeriesDetail(vm, screen.series)
                         is Screen.PlayLive -> LivePlayerScreen(vm, screen.channels, screen.index)
                         is Screen.PlayVod -> VodPlayerScreen(vm, screen.items, screen.index, screen.startMs)
+                        is Screen.Catchup -> CatchupScreen(vm, screen.channel)
                     }
                 }
+
+                // Programme reminders
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        vm.checkReminders(nowSeconds())
+                        delay(15_000)
+                    }
+                }
+                vm.dueReminder?.let { ReminderDialog(vm, it) }
 
                 // Sleep timer
                 val sleepAt = vm.sleepAt
@@ -114,6 +125,44 @@ private fun BoxScope.NoticeOverlay(vm: AppViewModel) {
                 .padding(horizontal = 22.dp, vertical = 12.dp)
         ) {
             Text(lastText[0], style = Txt.Label, color = Ember.Text)
+        }
+    }
+}
+
+@Composable
+private fun ReminderDialog(vm: AppViewModel, r: app.embertv.data.Reminder) {
+    val isTv = LocalIsTv.current
+    val now = LocalNow.current
+    Dialog(onDismissRequest = { vm.dismissReminder() }) {
+        DialogBackdropBlur()
+        Column(
+            Modifier
+                .width(500.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(dialogPanelColor())
+                .padding(if (isTv) 30.dp else 22.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ChannelLogo(r.channelIcon, r.channelName, Modifier.size(width = 64.dp, height = 42.dp))
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(if (r.start > now) "Starting soon" else "Starting now", style = Txt.Label, color = Ember.Accent)
+                    Text(r.title, style = Txt.Title, maxLines = 2)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("${r.channelName}  ·  ${formatClock(r.start)} – ${formatClock(r.end)}", style = Txt.Body, color = Ember.Dim)
+            Spacer(Modifier.height(22.dp))
+            if (isTv) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    TvButton("Watch now", icon = "▶", autoFocus = true, onClick = { vm.watchReminder(r) })
+                    TvButton("Dismiss", onClick = { vm.dismissReminder() })
+                }
+            } else {
+                PillButton("Watch now", icon = EmberIcons.Play, primary = true, modifier = Modifier.fillMaxWidth()) { vm.watchReminder(r) }
+                Spacer(Modifier.height(10.dp))
+                PillButton("Dismiss", modifier = Modifier.fillMaxWidth()) { vm.dismissReminder() }
+            }
         }
     }
 }

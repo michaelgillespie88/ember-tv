@@ -29,6 +29,8 @@ data class Channel(
     val categoryId: String,
     val epgId: String,
     val hasArchive: Boolean,
+    /** How many days of catch-up the provider keeps (0 when it doesn't say). */
+    val archiveDays: Int = 0,
 )
 
 data class Movie(
@@ -88,11 +90,45 @@ data class SeriesInfo(
 )
 
 /** A guide entry. Times are epoch seconds. */
-data class Programme(val title: String, val description: String, val start: Long, val end: Long) {
+data class Programme(
+    val title: String,
+    val description: String,
+    val start: Long,
+    val end: Long,
+    /** Whether the provider says this one is on catch-up; null when the guide doesn't say. */
+    val archive: Boolean? = null,
+    /** The start time exactly as the provider wrote it ("2026-10-30 21:00:00"), for catch-up links. */
+    val serverStart: String = "",
+) {
     fun isLive(now: Long): Boolean = now >= start && now < end
 
     fun progress(now: Long): Float =
         if (end > start) ((now - start).toFloat() / (end - start).toFloat()).coerceIn(0f, 1f) else 0f
+}
+
+/** Whether [p] on [channel] can be watched from catch-up (it has started and is still kept). */
+fun catchupAvailable(channel: Channel, p: Programme, now: Long): Boolean {
+    if (!channel.hasArchive || p.start >= now) return false
+    if (p.isLive(now)) return true
+    val days = if (channel.archiveDays > 0) channel.archiveDays else 7
+    if (p.start < now - days * 86_400L) return false
+    return p.archive ?: true
+}
+
+/** A programme someone asked to be reminded about. Saved per profile. */
+data class Reminder(
+    val streamId: Int,
+    val channelName: String,
+    val channelIcon: String,
+    val categoryId: String,
+    val num: Int,
+    val title: String,
+    val start: Long,
+    val end: Long,
+) {
+    val key: String get() = "$streamId:$start"
+
+    fun toChannel(): Channel = Channel(streamId, num, channelName, channelIcon, categoryId, "", false)
 }
 
 data class Favourite(

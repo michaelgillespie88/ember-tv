@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,6 +45,7 @@ import app.embertv.data.ContentType
 import app.embertv.data.FAVOURITES
 import app.embertv.data.Programme
 import app.embertv.data.Repository
+import app.embertv.data.catchupAvailable
 import app.embertv.data.favouriteKey
 import app.embertv.data.toChannel
 import app.embertv.data.toMovie
@@ -135,6 +137,9 @@ fun PhoneLiveTab(vm: AppViewModel) {
 @Composable
 fun PhoneGuideTab(vm: AppViewModel) {
     var details by remember { mutableStateOf<Pair<GuideFocus, List<Channel>>?>(null) }
+    // Days from today: negative for catch-up, positive for what's coming.
+    var day by remember { mutableIntStateOf(0) }
+    val dayState = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = 4)
     CategorySection(vm, vm.guide, "All channels", "Loading guide…", { it.liveCategories() }) { repo, categoryId ->
         when (val r = rememberChannels(vm, repo, categoryId)) {
             is LoadResult.Loading -> LoadingView()
@@ -148,16 +153,29 @@ fun PhoneGuideTab(vm: AppViewModel) {
                     )
                 } else {
                     val pad = LocalContentPadding.current
+                    val now = LocalNow.current
                     LazyColumn(
                         state = vm.guide.list(categoryId),
                         contentPadding = PaddingValues(top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 8.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
+                        item(key = "days") {
+                            LazyRow(
+                                state = dayState,
+                                contentPadding = PaddingValues(horizontal = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                items((-7..7).toList(), key = { it }) { d ->
+                                    DayChip(formatDay(now + d * 86_400L, now), d == day, "guide:day:$d", autoFocus = false) { day = d }
+                                }
+                            }
+                        }
                         itemsIndexed(channels, key = { _, ch -> ch.streamId }) { index, ch ->
                             PhoneGuideRow(
                                 repo = repo,
                                 channel = ch,
+                                day = day,
                                 onWatch = { vm.push(Screen.PlayLive(channels, index)) },
                                 onDetails = { p -> details = GuideFocus(ch, p) to channels },
                             )
@@ -170,23 +188,21 @@ fun PhoneGuideTab(vm: AppViewModel) {
     val d = details
     if (d != null) {
         val (focus, channels) = d
-        ProgrammeDialog(
-            focus = focus,
-            onWatch = {
-                details = null
-                val i = channels.indexOfFirst { it.streamId == focus.channel.streamId }
-                if (i >= 0) vm.push(Screen.PlayLive(channels, i))
-            },
-            onDismiss = { details = null },
-        )
+        ProgrammeDialog(vm, focus, channels) { details = null }
     }
 }
 
 @Composable
-private fun PhoneGuideRow(repo: Repository, channel: Channel, onWatch: () -> Unit, onDetails: (Programme) -> Unit) {
+private fun PhoneGuideRow(repo: Repository, channel: Channel, day: Int, onWatch: () -> Unit, onDetails: (Programme) -> Unit) {
     val now = LocalNow.current
-    val programmes = rememberProgrammes(repo, channel.streamId)
-    val upcoming = programmes.orEmpty().filter { it.end > now }.take(10)
+    // Today shows what's on now and next (quick to load); other days need the full guide.
+    val programmes = if (day == 0) rememberProgrammes(repo, channel.streamId) else rememberFullProgrammes(repo, channel.streamId)
+    val dayStart = startOfDay(now) + day * 86_400L
+    val upcoming = if (day == 0) {
+        programmes.orEmpty().filter { it.end > now }.take(10)
+    } else {
+        programmes.orEmpty().filter { it.end > dayStart && it.start < dayStart + 86_400L }
+    }
     Row(Modifier.fillMaxWidth().height(76.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(
             Modifier
@@ -229,6 +245,8 @@ private fun PhoneGuideRow(repo: Repository, channel: Channel, onWatch: () -> Uni
             ) {
                 items(upcoming, key = { it.start }) { p ->
                     val live = p.isLive(now)
+                    val past = p.end <= now
+                    val catchup = past && catchupAvailable(channel, p, now)
                     Column(
                         Modifier
                             .width(176.dp)
@@ -238,7 +256,19 @@ private fun PhoneGuideRow(repo: Repository, channel: Channel, onWatch: () -> Uni
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.Center,
                     ) {
-                        Text(p.title, style = Txt.Label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (catchup) {
+                                androidx.compose.material3.Icon(EmberIcons.Catchup, "On catch-up", tint = Ember.Accent, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(5.dp))
+                            }
+                            Text(
+                                p.title,
+                                style = Txt.Label,
+                                color = if (past && !catchup) Ember.Dim else Ember.Text,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                         Spacer(Modifier.height(3.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(

@@ -201,6 +201,7 @@ class XtreamClient(val account: Account, private val userAgent: String) {
                 categoryId = o.str("category_id"),
                 epgId = o.str("epg_channel_id"),
                 hasArchive = o.str("tv_archive") == "1",
+                archiveDays = o.str("tv_archive_duration").toIntOrNull() ?: 0,
             )
         }.distinctBy { it.streamId }
 
@@ -308,17 +309,38 @@ class XtreamClient(val account: Account, private val userAgent: String) {
         )
     }
 
+    /** What's on now and next. */
     suspend fun shortEpg(streamId: Int, limit: Int): List<Programme> {
         val root = call("get_short_epg", "&stream_id=$streamId&limit=$limit") as? JSONObject ?: return emptyList()
-        return asArray(root.opt("epg_listings")).objects().mapNotNull { o ->
+        return listings(root)
+    }
+
+    /** Everything the provider has for a channel: usually the past week (for catch-up) and the days ahead. */
+    suspend fun fullEpg(streamId: Int): List<Programme> {
+        val root = call("get_simple_data_table", "&stream_id=$streamId") as? JSONObject ?: return emptyList()
+        return listings(root)
+    }
+
+    private fun listings(root: JSONObject): List<Programme> =
+        asArray(root.opt("epg_listings")).objects().mapNotNull { o ->
             val start = o.str("start_timestamp").toLongOrNull() ?: return@mapNotNull null
             val end = o.str("stop_timestamp").toLongOrNull()
                 ?: o.str("end_timestamp").toLongOrNull()
                 ?: return@mapNotNull null
             if (end <= start) return@mapNotNull null
-            Programme(decode(o.str("title")).ifEmpty { "Untitled" }, decode(o.str("description")), start, end)
+            Programme(
+                title = decode(o.str("title")).ifEmpty { "Untitled" },
+                description = decode(o.str("description")),
+                start = start,
+                end = end,
+                archive = when (o.str("has_archive")) {
+                    "1" -> true
+                    "0" -> false
+                    else -> null
+                },
+                serverStart = o.str("start"),
+            )
         }.distinctBy { it.start }.sortedBy { it.start }
-    }
 
     /** Xtream sends guide text base64-encoded; a few panels send plain text instead. */
     private fun decode(s: String): String {
@@ -338,4 +360,22 @@ class XtreamClient(val account: Account, private val userAgent: String) {
     fun movieUrl(streamId: Int, ext: String): String = "$base/movie/$pathUser/$pathPass/$streamId.$ext"
 
     fun episodeUrl(episodeId: Int, ext: String): String = "$base/series/$pathUser/$pathPass/$episodeId.$ext"
+
+    /**
+     * Catch-up for a programme that has started. The start time goes in the provider's own clock,
+     * taken from the guide when it gives one, otherwise worked out from [serverTimezone].
+     */
+    fun catchupUrl(streamId: Int, p: Programme, serverTimezone: String): String {
+        val fromGuide = Regex("^(\\d{4}-\\d{2}-\\d{2})[ T](\\d{2}):(\\d{2})").find(p.serverStart)
+        val start = if (fromGuide != null) {
+            val (date, h, m) = fromGuide.destructured
+            "$date:$h-$m"
+        } else {
+            val f = java.text.SimpleDateFormat("yyyy-MM-dd:HH-mm", java.util.Locale.US)
+            if (serverTimezone.isNotBlank()) f.timeZone = java.util.TimeZone.getTimeZone(serverTimezone)
+            f.format(java.util.Date(p.start * 1000))
+        }
+        val minutes = ((p.end - p.start + 59) / 60).coerceAtLeast(1)
+        return "$base/timeshift/$pathUser/$pathPass/$minutes/$start/$streamId.ts"
+    }
 }

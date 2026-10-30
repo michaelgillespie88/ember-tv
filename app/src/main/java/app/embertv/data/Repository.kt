@@ -30,6 +30,7 @@ class Repository(val client: XtreamClient) {
     private class EpgEntry(val fetchedAt: Long, val items: List<Programme>)
 
     private val epg = HashMap<Int, EpgEntry>()
+    private val fullEpg = HashMap<Int, EpgEntry>()
     private val epgGate = Semaphore(6)
 
     fun clearCaches() {
@@ -45,6 +46,7 @@ class Repository(val client: XtreamClient) {
         movieInfos.clear()
         seriesInfos.clear()
         epg.clear()
+        fullEpg.clear()
     }
 
     // Everything the provider offers, for managing categories.
@@ -139,6 +141,45 @@ class Repository(val client: XtreamClient) {
         epg[streamId] = EpgEntry(nowSeconds(), items)
         return items
     }
+
+    fun cachedFullEpg(streamId: Int): List<Programme>? {
+        val entry = fullEpg[streamId] ?: return null
+        return if (nowSeconds() - entry.fetchedAt < 1800) entry.items else null
+    }
+
+    /** The whole guide for a channel, past and future. Falls back to the short guide. */
+    suspend fun fullEpg(streamId: Int): List<Programme> {
+        cachedFullEpg(streamId)?.let { return it }
+        val items = epgGate.withPermit {
+            try {
+                client.fullEpg(streamId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }.ifEmpty { epg(streamId) }
+        fullEpg[streamId] = EpgEntry(nowSeconds(), items)
+        return items
+    }
+
+    /**
+     * Channels saved as favourites or history don't remember whether they have catch-up, so look
+     * them up in their category. Returns [channel] unchanged if it can't be found.
+     */
+    suspend fun resolve(channel: Channel): Channel {
+        if (channel.hasArchive || channel.categoryId.isEmpty()) return channel
+        val list = try {
+            channels(channel.categoryId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+        return list.firstOrNull { it.streamId == channel.streamId } ?: channel
+    }
+
+    suspend fun resolveAll(channels: List<Channel>): List<Channel> = channels.map { resolve(it) }
 
     /** Some panels ignore category_id and return everything, so filter defensively. */
     private inline fun <T> List<T>.onlyCategory(id: String, category: (T) -> String): List<T> {

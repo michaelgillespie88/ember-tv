@@ -22,7 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,9 +42,13 @@ import app.embertv.data.ContentType
 import app.embertv.data.FAVOURITES
 import app.embertv.data.Programme
 import app.embertv.data.Repository
+import app.embertv.data.catchupAvailable
 import app.embertv.data.toChannel
+import kotlinx.coroutines.delay
 
 private const val WINDOW_MINUTES = 120
+/** How far the guide goes back and forward, in two-hour steps: a week each way. */
+private const val MAX_STEPS = 84
 private val CHANNEL_COLUMN = 170.dp
 private val ROW_HEIGHT = 62.dp
 
@@ -62,6 +68,8 @@ fun GuideSection(vm: AppViewModel) {
             }
             val selectedId = section.categoryId ?: c.value.firstOrNull()?.id ?: ALL
             val select = rememberCategorySelector(section)
+            // Two-hour steps away from now: negative is earlier (catch-up), positive is later.
+            var step by remember { mutableIntStateOf(0) }
             Row(Modifier.fillMaxSize().padding(start = 44.dp, end = 48.dp, top = 6.dp)) {
                 CategoryRail(
                     categories = categories,
@@ -72,14 +80,21 @@ fun GuideSection(vm: AppViewModel) {
                     onSelectCategory = { select(it.id, true) },
                 )
                 Spacer(Modifier.width(20.dp))
-                GuideGrid(vm, repo, selectedId, Modifier.weight(1f))
+                GuideGrid(vm, repo, selectedId, step, { step = it.coerceIn(-MAX_STEPS, MAX_STEPS) }, Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun GuideGrid(vm: AppViewModel, repo: Repository, categoryId: String, modifier: Modifier) {
+private fun GuideGrid(
+    vm: AppViewModel,
+    repo: Repository,
+    categoryId: String,
+    step: Int,
+    onStep: (Int) -> Unit,
+    modifier: Modifier,
+) {
     val favSnapshot = if (categoryId == FAVOURITES) vm.favourites.filter { it.type == ContentType.LIVE } else null
     val load by rememberLoad(repo, categoryId, vm.reloadToken, favSnapshot) {
         favSnapshot?.map { it.toChannel() } ?: repo.channels(categoryId)
@@ -101,11 +116,18 @@ private fun GuideGrid(vm: AppViewModel, repo: Repository, categoryId: String, mo
                 return
             }
             val now = LocalNow.current
-            val windowStart = (now / 1800) * 1800
+            val windowStart = (now / 1800) * 1800 + step * WINDOW_MINUTES * 60L
             val windowEnd = windowStart + WINDOW_MINUTES * 60
 
             Column(modifier.fillMaxHeight()) {
-                FocusStrip(focus, now)
+                Row(verticalAlignment = Alignment.Top) {
+                    Box(Modifier.weight(1f)) { FocusStrip(focus, now) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp)) {
+                        TvButton("Earlier", icon = "◀", focusKey = "guide:earlier", onClick = { onStep(step - 1) })
+                        TvButton("Now", focusKey = "guide:now", onClick = { onStep(0) })
+                        TvButton("Later ▶", focusKey = "guide:later", onClick = { onStep(step + 1) })
+                    }
+                }
                 BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
                     val gridWidth = maxWidth - CHANNEL_COLUMN
                     val dpPerMinute = gridWidth / WINDOW_MINUTES
@@ -121,6 +143,7 @@ private fun GuideGrid(vm: AppViewModel, repo: Repository, categoryId: String, mo
                                 GuideRow(
                                     repo = repo,
                                     channel = ch,
+                                    full = step != 0,
                                     windowStart = windowStart,
                                     windowEnd = windowEnd,
                                     dpPerMinute = dpPerMinute,
@@ -128,12 +151,13 @@ private fun GuideGrid(vm: AppViewModel, repo: Repository, categoryId: String, mo
                                     now = now,
                                     onFocus = { p -> focus = GuideFocus(ch, p) },
                                     onPick = { p ->
-                                        if (p == null || p.isLive(now) || p.end <= now) {
+                                        if (p == null || p.isLive(now)) {
                                             vm.push(Screen.PlayLive(channels, index))
                                         } else {
                                             details = GuideFocus(ch, p)
                                         }
                                     },
+                                    onLongPick = { p -> if (p != null) details = GuideFocus(ch, p) },
                                 )
                             }
                         }
@@ -143,15 +167,7 @@ private fun GuideGrid(vm: AppViewModel, repo: Repository, categoryId: String, mo
 
             val d = details
             if (d != null) {
-                ProgrammeDialog(
-                    focus = d,
-                    onWatch = {
-                        details = null
-                        val i = channels.indexOfFirst { it.streamId == d.channel.streamId }
-                        if (i >= 0) vm.push(Screen.PlayLive(channels, i))
-                    },
-                    onDismiss = { details = null },
-                )
+                ProgrammeDialog(vm, d, channels) { details = null }
             }
         }
     }
@@ -162,7 +178,12 @@ private fun FocusStrip(focus: GuideFocus?, now: Long) {
     Column(Modifier.fillMaxWidth().height(86.dp).padding(start = 6.dp, top = 4.dp)) {
         if (focus == null) {
             Text("TV guide", style = Txt.Title)
-            Text("Pick a programme to see what's on. OK on anything airing now starts the channel.", style = Txt.Body, color = Ember.Dim)
+            Text(
+                "OK on anything airing now starts the channel. Pick an earlier programme to catch up, or a later one for a reminder.",
+                style = Txt.Body,
+                color = Ember.Dim,
+                maxLines = 2,
+            )
         } else {
             val p = focus.programme
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -178,7 +199,7 @@ private fun FocusStrip(focus: GuideFocus?, now: Long) {
                     LiveTag()
                 }
             }
-            val sub = if (p == null) "No guide information" else "${focus.channel.name}  ·  ${formatClock(p.start)} – ${formatClock(p.end)}"
+            val sub = if (p == null) "No guide information" else "${focus.channel.name}  ·  ${formatDay(p.start, now)}  ${formatClock(p.start)} – ${formatClock(p.end)}"
             Text(sub, style = Txt.Label, color = Ember.Dim, maxLines = 1)
             if (p != null && p.description.isNotBlank()) {
                 Text(p.description, style = Txt.Caption, color = Ember.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -199,6 +220,12 @@ fun LiveTag() {
 @Composable
 private fun TimeHeader(windowStart: Long, dpPerMinute: Dp, now: Long) {
     Box(Modifier.fillMaxWidth().height(30.dp)) {
+        Text(
+            formatDay(windowStart, now),
+            style = Txt.Label,
+            color = if (startOfDay(windowStart) == startOfDay(now)) Ember.Dim else Ember.Accent,
+            modifier = Modifier.offset(y = 4.dp),
+        )
         for (slot in 0 until WINDOW_MINUTES / 30) {
             val t = windowStart + slot * 1800L
             Text(
@@ -209,7 +236,7 @@ private fun TimeHeader(windowStart: Long, dpPerMinute: Dp, now: Long) {
             )
         }
         val nowOffset = dpPerMinute * ((now - windowStart) / 60f)
-        Box(
+        if (now in windowStart until windowStart + WINDOW_MINUTES * 60) Box(
             Modifier
                 .offset(x = CHANNEL_COLUMN + nowOffset - 4.dp, y = 22.dp)
                 .size(8.dp)
@@ -223,6 +250,7 @@ private fun TimeHeader(windowStart: Long, dpPerMinute: Dp, now: Long) {
 private fun GuideRow(
     repo: Repository,
     channel: Channel,
+    full: Boolean,
     windowStart: Long,
     windowEnd: Long,
     dpPerMinute: Dp,
@@ -230,8 +258,9 @@ private fun GuideRow(
     now: Long,
     onFocus: (Programme?) -> Unit,
     onPick: (Programme?) -> Unit,
+    onLongPick: (Programme?) -> Unit,
 ) {
-    val programmes = rememberProgrammes(repo, channel.streamId)
+    val programmes = if (full) rememberFullProgrammes(repo, channel.streamId) else rememberProgrammes(repo, channel.streamId)
     Row(Modifier.fillMaxWidth().height(ROW_HEIGHT)) {
         Row(
             Modifier.width(CHANNEL_COLUMN).fillMaxHeight().padding(end = 8.dp),
@@ -263,15 +292,20 @@ private fun GuideRow(
                         title = p.title,
                         time = "${formatClock(p.start)} – ${formatClock(p.end)}",
                         live = p.isLive(now),
+                        past = p.end <= now,
+                        catchup = p.end <= now && catchupAvailable(channel, p, now),
                         focusKey = "guide:${channel.streamId}:${p.start}",
                         modifier = Modifier.offset(x = x).width(w.coerceAtLeast(6.dp)).fillMaxHeight(),
                         onFocus = { onFocus(p) },
                         onClick = { onPick(p) },
+                        onLongClick = { onLongPick(p) },
                     )
                 }
             }
-            val nowOffset = dpPerMinute * ((now - windowStart) / 60f)
-            Box(Modifier.offset(x = nowOffset).width(2.dp).fillMaxHeight().background(Ember.Accent.copy(alpha = 0.7f)))
+            if (now in windowStart until windowEnd) {
+                val nowOffset = dpPerMinute * ((now - windowStart) / 60f)
+                Box(Modifier.offset(x = nowOffset).width(2.dp).fillMaxHeight().background(Ember.Accent.copy(alpha = 0.7f)))
+            }
         }
     }
 }
@@ -285,6 +319,9 @@ private fun ProgrammeBlock(
     modifier: Modifier,
     onFocus: () -> Unit,
     onClick: () -> Unit,
+    past: Boolean = false,
+    catchup: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Box(modifier.padding(end = 3.dp)) {
         FocusBox(
@@ -292,22 +329,42 @@ private fun ProgrammeBlock(
             focusKey = focusKey,
             shape = RoundedCornerShape(8.dp),
             focusedScale = 1f,
-            color = if (live) Ember.CardHi else Ember.Card,
+            color = when {
+                live -> Ember.CardHi
+                past -> Ember.Card.copy(alpha = 0.55f)
+                else -> Ember.Card
+            },
             focusedColor = Color.White,
             onFocusChange = { if (it) onFocus() },
             onClick = onClick,
+            onLongClick = onLongClick,
         ) { focused ->
             Column(
                 Modifier.fillMaxSize().padding(horizontal = 10.dp),
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text(
-                    title,
-                    style = Txt.Label,
-                    color = if (focused) Color.Black else Ember.Text,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (catchup) {
+                        androidx.compose.material3.Icon(
+                            EmberIcons.Catchup,
+                            contentDescription = "On catch-up",
+                            tint = if (focused) Color.Black else Ember.Accent,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(Modifier.width(5.dp))
+                    }
+                    Text(
+                        title,
+                        style = Txt.Label,
+                        color = when {
+                            focused -> Color.Black
+                            past && !catchup -> Ember.Dim
+                            else -> Ember.Text
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 if (time.isNotEmpty()) {
                     Text(
                         time,
@@ -321,38 +378,112 @@ private fun ProgrammeBlock(
     }
 }
 
+/** The guide's full guide data for one channel (past and future), loaded when it scrolls into view. */
 @Composable
-internal fun ProgrammeDialog(focus: GuideFocus, onWatch: () -> Unit, onDismiss: () -> Unit) {
+fun rememberFullProgrammes(repo: Repository, streamId: Int): List<Programme>? {
+    val programmes by produceState(repo.cachedFullEpg(streamId), repo, streamId) {
+        if (value == null) {
+            delay(300)
+            value = repo.fullEpg(streamId)
+        }
+    }
+    return programmes
+}
+
+private class DialogAction(
+    val label: String,
+    val tvIcon: String?,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    val run: () -> Unit,
+)
+
+/**
+ * Details for a programme in the guide, with what you can do with it: watch it live or from the
+ * start, play it from catch-up, or set a reminder.
+ */
+@Composable
+internal fun ProgrammeDialog(vm: AppViewModel, focus: GuideFocus, channels: List<Channel>, onDismiss: () -> Unit) {
     val p = focus.programme ?: return
+    val repo = vm.repo ?: return
+    val isTv = LocalIsTv.current
+    val now = LocalNow.current
+    val channel by produceState(focus.channel, repo, focus.channel.streamId) { value = repo.resolve(focus.channel) }
+    val live = p.isLive(now)
+    val past = p.end <= now
+    val catchup = catchupAvailable(channel, p, now)
+    val reminded = vm.hasReminder(channel.streamId, p.start)
+
+    fun watchChannel() {
+        onDismiss()
+        val i = channels.indexOfFirst { it.streamId == channel.streamId }
+        if (i >= 0) vm.push(Screen.PlayLive(channels, i)) else vm.push(Screen.PlayLive(listOf(channel), 0))
+    }
+
+    val actions = buildList {
+        when {
+            live -> {
+                add(DialogAction("Watch live", "▶", EmberIcons.Play) { watchChannel() })
+                if (catchup) add(DialogAction("Watch from the start", "⏮", EmberIcons.FromStart) { onDismiss(); vm.playCatchup(channel, p) })
+            }
+            past -> {
+                if (catchup) add(DialogAction("Play from catch-up", "▶", EmberIcons.Play) { onDismiss(); vm.playCatchup(channel, p) })
+                add(DialogAction("Watch channel now", null, null) { watchChannel() })
+            }
+            else -> {
+                add(DialogAction(if (reminded) "Cancel reminder" else "Remind me", null, EmberIcons.Bell) { vm.toggleReminder(channel, p); onDismiss() })
+                add(DialogAction("Watch channel now", null, null) { watchChannel() })
+            }
+        }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         DialogBackdropBlur()
         Column(
             Modifier
-                .width(560.dp)
+                .width(if (isTv) 640.dp else 560.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(dialogPanelColor())
-                .padding(if (LocalIsTv.current) 32.dp else 22.dp)
+                .padding(if (isTv) 32.dp else 22.dp)
         ) {
             Text(p.title, style = Txt.Title)
             Spacer(Modifier.height(6.dp))
-            Text(
-                "${focus.channel.name}  ·  ${formatClock(p.start)} – ${formatClock(p.end)}",
-                style = Txt.Label,
-                color = Ember.Dim,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${channel.name}  ·  ${formatDay(p.start, now)}  ${formatClock(p.start)} – ${formatClock(p.end)}",
+                    style = Txt.Label,
+                    color = Ember.Dim,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (live) {
+                    Spacer(Modifier.width(10.dp))
+                    LiveTag()
+                }
+            }
             if (p.description.isNotBlank()) {
                 Spacer(Modifier.height(16.dp))
-                Text(p.description, style = Txt.Body, color = Ember.Dim, maxLines = 8, overflow = TextOverflow.Ellipsis)
+                Text(p.description, style = Txt.Body, color = Ember.Dim, maxLines = if (isTv) 6 else 8, overflow = TextOverflow.Ellipsis)
+            }
+            if (past && !catchup) {
+                Spacer(Modifier.height(12.dp))
+                Text("This programme isn't available on catch-up.", style = Txt.Caption, color = Ember.Faint)
+            }
+            if (!past && !live && reminded) {
+                Spacer(Modifier.height(12.dp))
+                Text("You'll get a reminder when it starts, as long as Streammania is open.", style = Txt.Caption, color = Ember.Accent)
             }
             Spacer(Modifier.height(24.dp))
-            if (LocalIsTv.current) {
+            if (isTv) {
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    TvButton("Watch channel now", icon = "▶", autoFocus = true, onClick = onWatch)
+                    actions.forEachIndexed { i, a ->
+                        TvButton(a.label, icon = a.tvIcon, autoFocus = i == 0, onClick = a.run)
+                    }
                     TvButton("Close", onClick = onDismiss)
                 }
             } else {
-                PillButton("Watch channel now", icon = EmberIcons.Play, primary = true, modifier = Modifier.fillMaxWidth(), onClick = onWatch)
-                Spacer(Modifier.height(10.dp))
+                actions.forEachIndexed { i, a ->
+                    PillButton(a.label, icon = a.icon, primary = i == 0, modifier = Modifier.fillMaxWidth(), onClick = a.run)
+                    Spacer(Modifier.height(10.dp))
+                }
                 PillButton("Close", modifier = Modifier.fillMaxWidth(), onClick = onDismiss)
             }
         }

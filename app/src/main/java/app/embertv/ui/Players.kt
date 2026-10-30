@@ -91,6 +91,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import app.embertv.data.Channel
+import androidx.compose.runtime.produceState
 import app.embertv.data.ContentType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -277,6 +278,8 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     var okLong by remember { mutableStateOf(false) }
 
     val channel = channels[index]
+    // So coming back from catch-up returns to this channel, not the one the player opened on.
+    LaunchedEffect(index) { vm.noteLiveIndex(index) }
 
     fun showOverlay() {
         overlayVisible = true
@@ -542,6 +545,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 channels = channels,
                 current = index,
                 hasPrevious = previousIndex != null,
+                onClose = { listOpen = false },
                 onPrevious = {
                     listOpen = false
                     previousChannel()
@@ -562,7 +566,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     }
 
     if (optionsOpen) {
-        LiveOptionsDialog(vm) { optionsOpen = false }
+        LiveOptionsDialog(vm, channel) { optionsOpen = false }
     }
 }
 
@@ -652,6 +656,7 @@ private fun BoxScope.ZapList(
     channels: List<Channel>,
     current: Int,
     hasPrevious: Boolean,
+    onClose: () -> Unit,
     onPrevious: () -> Unit,
     onPick: (Int) -> Unit,
 ) {
@@ -671,6 +676,7 @@ private fun BoxScope.ZapList(
             item(key = "zap-actions") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 10.dp)) {
                     if (hasPrevious) ZapAction(EmberIcons.Restart, "Previous channel", "", onPrevious)
+                    CatchupActions(vm, channels[current], onClose)
                     val left = vm.sleepMinutesLeft()
                     ZapAction(EmberIcons.Moon, "Sleep timer", if (left == null) "Off" else "$left min") { vm.cycleSleepTimer() }
                     ZapAction(EmberIcons.Subtitles, "Subtitles", if (vm.subtitleMode == "off") "Off" else "English") { vm.cycleSubtitles() }
@@ -709,6 +715,26 @@ private fun BoxScope.ZapList(
     }
 }
 
+/** "Watch from the start" and "Catch-up TV", for channels whose provider records them. */
+@Composable
+private fun CatchupActions(vm: AppViewModel, channel: Channel, onDone: () -> Unit) {
+    val repo = vm.repo ?: return
+    val resolved by produceState(channel, repo, channel.streamId) { value = repo.resolve(channel) }
+    if (!resolved.hasArchive) return
+    val now = LocalNow.current
+    val current = rememberProgrammes(repo, channel.streamId)?.firstOrNull { it.isLive(now) }
+    if (current != null) {
+        ZapAction(EmberIcons.FromStart, "Watch from the start", "") {
+            onDone()
+            vm.playCatchup(resolved, current)
+        }
+    }
+    ZapAction(EmberIcons.Catchup, "Catch-up TV", "") {
+        onDone()
+        vm.push(Screen.Catchup(resolved))
+    }
+}
+
 @Composable
 private fun ZapAction(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, value: String, onClick: () -> Unit) {
     FocusBox(
@@ -742,7 +768,7 @@ private fun SleepBadge(minutes: Int, modifier: Modifier = Modifier) {
 
 /** Phone "more" sheet for the live player: sleep timer, audio and subtitles. */
 @Composable
-private fun LiveOptionsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
+private fun LiveOptionsDialog(vm: AppViewModel, channel: Channel, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         DialogBackdropBlur()
         Column(
@@ -754,6 +780,7 @@ private fun LiveOptionsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text("Options", style = Txt.Headline, modifier = Modifier.padding(bottom = 6.dp))
+            CatchupActions(vm, channel, onDismiss)
             val left = vm.sleepMinutesLeft()
             ZapAction(EmberIcons.Moon, "Sleep timer", if (left == null) "Off" else "$left min") { vm.cycleSleepTimer() }
             ZapAction(EmberIcons.Subtitles, "Subtitles", if (vm.subtitleMode == "off") "Off" else "English") { vm.cycleSubtitles() }

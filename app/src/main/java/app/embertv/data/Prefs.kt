@@ -19,6 +19,43 @@ class Prefs(context: Context) {
 
     private fun pkFor(id: String, base: String): String = if (id == MAIN_PROFILE) base else "p_${id}_$base"
 
+    var reminders: List<Reminder>
+        get() {
+            val raw = sp.getString(pk("reminders"), null) ?: return emptyList()
+            return try {
+                JSONArray(raw).objects().map { o ->
+                    Reminder(
+                        streamId = o.optInt("stream"),
+                        channelName = o.optString("channel"),
+                        channelIcon = o.optString("icon"),
+                        categoryId = o.optString("category"),
+                        num = o.optInt("num"),
+                        title = o.optString("title"),
+                        start = o.optLong("start"),
+                        end = o.optLong("end"),
+                    )
+                }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+        set(value) {
+            val arr = JSONArray()
+            for (r in value) {
+                val o = JSONObject()
+                o.put("stream", r.streamId)
+                o.put("channel", r.channelName)
+                o.put("icon", r.channelIcon)
+                o.put("category", r.categoryId)
+                o.put("num", r.num)
+                o.put("title", r.title)
+                o.put("start", r.start)
+                o.put("end", r.end)
+                arr.put(o)
+            }
+            sp.edit().putString(pk("reminders"), arr.toString()).apply()
+        }
+
     fun categoryRules(id: String): CategoryRules {
         val raw = sp.getString(pkFor(id, "category_rules"), null) ?: return CategoryRules(false, emptySet())
         return try {

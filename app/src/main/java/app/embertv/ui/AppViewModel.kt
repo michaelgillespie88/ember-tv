@@ -33,6 +33,9 @@ import app.embertv.data.Favourite
 import app.embertv.data.HistoryEntry
 import app.embertv.data.MAIN_PROFILE
 import app.embertv.data.Profile
+import app.embertv.data.Programme
+import app.embertv.data.Reminder
+import app.embertv.data.nowSeconds
 import app.embertv.data.UpdateInfo
 import app.embertv.data.Updates
 import app.embertv.data.Movie
@@ -51,7 +54,10 @@ sealed interface Screen {
     data class SeriesDetail(val series: Series) : Screen
     data class PlayLive(val channels: List<Channel>, val index: Int) : Screen
     data class PlayVod(val items: List<VodItem>, val index: Int, val startMs: Long) : Screen
+    data class Catchup(val channel: Channel) : Screen
 }
+
+const val CATCHUP_PREFIX = "catchup:"
 
 data class VodItem(
     val key: String,
@@ -146,6 +152,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Channels watched recently on this profile, newest first. */
     val recentChannels = mutableStateListOf<Favourite>()
+
+    /** Programmes this profile wants a nudge about, soonest first. */
+    val reminders = mutableStateListOf<Reminder>()
+    /** A reminder whose programme is starting, shown as a pop-up. */
+    var dueReminder by mutableStateOf<Reminder?>(null)
+        private set
 
     var audioLanguage by mutableStateOf("")
         private set
@@ -278,6 +290,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         history.addAll(prefs.history)
         recentChannels.clear()
         recentChannels.addAll(prefs.recentChannels)
+        reminders.clear()
+        reminders.addAll(prefs.reminders.filter { it.end > nowSeconds() }.sortedBy { it.start })
+        dueReminder = null
         audioLanguage = prefs.audioLanguage
         subtitleMode = prefs.subtitleMode
         applyCategoryFilter()
@@ -631,11 +646,90 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun saveProgress(item: VodItem, positionMs: Long, durationMs: Long) {
+        if (item.key.startsWith(CATCHUP_PREFIX)) return
         prefs.savePosition(item.key, positionMs, durationMs)
         val sid = item.seriesId
         val eid = item.episodeId
         if (sid != null && eid != null) prefs.setLastEpisode(sid, eid)
         updateHistory(item, positionMs, durationMs)
+    }
+
+    // ---- Catch-up ----
+
+    /** Keeps the live screen's entry in step with zapping, so returning to it resumes the same channel. */
+    fun noteLiveIndex(i: Int) {
+        val top = stack.lastOrNull() as? Screen.PlayLive ?: return
+        if (top.index != i) stack[stack.lastIndex] = top.copy(index = i)
+    }
+
+    /** Plays [p] on [channel] from the provider's recordings, from its start. */
+    fun playCatchup(channel: Channel, p: Programme) {
+        val r = repo ?: return
+        val url = r.client.catchupUrl(channel.streamId, p, accountInfo?.serverTimezone ?: "")
+        val item = VodItem(
+            key = "$CATCHUP_PREFIX${channel.streamId}:${p.start}",
+            title = p.title,
+            subtitle = "${channel.name}  ·  ${formatDay(p.start)} ${formatClock(p.start)}",
+            url = url,
+            image = channel.icon,
+        )
+        push(Screen.PlayVod(listOf(item), 0, 0L))
+    }
+
+    // ---- Reminders ----
+
+    fun hasReminder(streamId: Int, start: Long): Boolean = reminders.any { it.streamId == streamId && it.start == start }
+
+    fun toggleReminder(channel: Channel, p: Programme) {
+        val existing = reminders.indexOfFirst { it.streamId == channel.streamId && it.start == p.start }
+        if (existing >= 0) {
+            reminders.removeAt(existing)
+            notify("Reminder removed")
+        } else {
+            reminders.add(
+                Reminder(channel.streamId, channel.name, channel.icon, channel.categoryId, channel.num, p.title, p.start, p.end)
+            )
+            reminders.sortBy { it.start }
+            notify("We'll remind you at ${formatClock(p.start)} while Streammania is open")
+        }
+        prefs.reminders = reminders.toList()
+    }
+
+    /** Called every few seconds: pops up the next reminder whose programme is about to start. */
+    fun checkReminders(now: Long) {
+        if (dueReminder != null || repo == null || pickingProfile) return
+        val expired = reminders.filter { it.end <= now }
+        val due = reminders.firstOrNull { it.start - 60 <= now && it.end > now }
+        if (expired.isEmpty() && due == null) return
+        reminders.removeAll(expired.toSet())
+        if (due != null) {
+            reminders.remove(due)
+            dueReminder = due
+        }
+        prefs.reminders = reminders.toList()
+    }
+
+    fun dismissReminder() {
+        dueReminder = null
+    }
+
+    /** Switches to the reminder's channel, within its category so up/down still change channel. */
+    fun watchReminder(rem: Reminder) {
+        dueReminder = null
+        val r = repo ?: return
+        viewModelScope.launch {
+            val list = try {
+                r.channels(rem.categoryId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val top = stack.last()
+            if (top is Screen.PlayLive || top is Screen.PlayVod) pop()
+            val i = list.indexOfFirst { it.streamId == rem.streamId }
+            if (i >= 0) push(Screen.PlayLive(list, i)) else push(Screen.PlayLive(listOf(rem.toChannel()), 0))
+        }
     }
 
     // ---- Continue Watching ----

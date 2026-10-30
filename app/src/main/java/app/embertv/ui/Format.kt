@@ -12,6 +12,30 @@ fun formatClock(epochSeconds: Long): String = clockFormat.format(Date(epochSecon
 
 fun formatDate(epochSeconds: Long): String = dateFormat.format(Date(epochSeconds * 1000))
 
+private val dayFormat = SimpleDateFormat("EEE d MMM", Locale.UK)
+
+/** Local midnight at the start of the day containing [epochSeconds]. */
+fun startOfDay(epochSeconds: Long): Long {
+    val c = java.util.Calendar.getInstance()
+    c.timeInMillis = epochSeconds * 1000
+    c.set(java.util.Calendar.HOUR_OF_DAY, 0)
+    c.set(java.util.Calendar.MINUTE, 0)
+    c.set(java.util.Calendar.SECOND, 0)
+    c.set(java.util.Calendar.MILLISECOND, 0)
+    return c.timeInMillis / 1000
+}
+
+/** "Today", "Yesterday", "Tomorrow" or "Tue 28 Oct". */
+fun formatDay(epochSeconds: Long, now: Long = System.currentTimeMillis() / 1000): String {
+    val days = Math.round((startOfDay(epochSeconds) - startOfDay(now)) / 86_400.0).toInt()
+    return when (days) {
+        0 -> "Today"
+        -1 -> "Yesterday"
+        1 -> "Tomorrow"
+        else -> dayFormat.format(Date(epochSeconds * 1000))
+    }
+}
+
 /** Milliseconds to "1:02:03" or "4:05". */
 fun formatMs(ms: Long): String {
     val total = (ms.coerceAtLeast(0L)) / 1000
