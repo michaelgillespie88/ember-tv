@@ -100,7 +100,7 @@ private fun ChannelList(
             val channels = r.value
             if (channels.isEmpty()) {
                 EmptyView(
-                    if (categoryId == FAVOURITES) "Hold OK on any channel to add it to your favourites."
+                    if (categoryId == FAVOURITES) "${holdPrompt()} any channel to add it to your favourites."
                     else "No channels in this category.",
                     modifier,
                 )

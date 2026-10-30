@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -130,8 +130,9 @@ fun TextEntryDialog(
             val shape = RoundedCornerShape(12.dp)
             Column(
                 Modifier
-                    .padding(top = 48.dp)
-                    .width(640.dp)
+                    .padding(top = 48.dp, start = 16.dp, end = 16.dp)
+                    .widthIn(max = 640.dp)
+                    .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
                     .background(Ember.Panel)
                     .padding(28.dp)

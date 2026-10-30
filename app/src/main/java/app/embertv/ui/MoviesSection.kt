@@ -80,7 +80,7 @@ private fun MovieGrid(vm: AppViewModel, repo: Repository, categoryId: String, mo
             val movies = r.value
             if (movies.isEmpty()) {
                 EmptyView(
-                    if (categoryId == FAVOURITES) "Hold OK on any movie to add it to your favourites."
+                    if (categoryId == FAVOURITES) "${holdPrompt()} any movie to add it to your favourites."
                     else "No movies in this category.",
                     modifier,
                 )

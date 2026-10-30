@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,7 +59,7 @@ fun FavouritesSection(vm: AppViewModel) {
     val series = vm.favourites.filter { it.type == ContentType.SERIES }.map { it.toSeries() }
 
     if (channels.isEmpty() && movies.isEmpty() && series.isEmpty()) {
-        EmptyView("Nothing here yet.\nHold OK on any channel, movie or series to add it to your favourites.")
+        EmptyView("Nothing here yet.\n${holdPrompt()} any channel, movie or series to add it to your favourites.")
         return
     }
     LazyColumn(
@@ -84,9 +88,9 @@ fun FavouritesSection(vm: AppViewModel) {
 @Composable
 private fun ChannelShelf(vm: AppViewModel, title: String, channels: List<Channel>, keyPrefix: String) {
     Column {
-        SectionHeader(title, Modifier.padding(start = 48.dp))
+        SectionHeader(title, Modifier.padding(start = edgePadding()))
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 10.dp),
+            contentPadding = PaddingValues(horizontal = edgePadding(), vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(22.dp),
         ) {
             itemsIndexed(channels, key = { _, c -> c.streamId }) { index, c ->
@@ -105,9 +109,9 @@ private fun ChannelShelf(vm: AppViewModel, title: String, channels: List<Channel
 @Composable
 private fun MovieShelf(vm: AppViewModel, title: String, movies: List<Movie>, keyPrefix: String) {
     Column {
-        SectionHeader(title, Modifier.padding(start = 48.dp))
+        SectionHeader(title, Modifier.padding(start = edgePadding()))
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 14.dp),
+            contentPadding = PaddingValues(horizontal = edgePadding(), vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(22.dp),
         ) {
             items(movies, key = { it.streamId }) { m ->
@@ -128,9 +132,9 @@ private fun MovieShelf(vm: AppViewModel, title: String, movies: List<Movie>, key
 @Composable
 private fun SeriesShelf(vm: AppViewModel, title: String, series: List<Series>, keyPrefix: String) {
     Column {
-        SectionHeader(title, Modifier.padding(start = 48.dp))
+        SectionHeader(title, Modifier.padding(start = edgePadding()))
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 14.dp),
+            contentPadding = PaddingValues(horizontal = edgePadding(), vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(22.dp),
         ) {
             items(series, key = { it.seriesId }) { s ->
@@ -200,7 +204,7 @@ fun SearchSection(vm: AppViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        Box(Modifier.padding(start = 48.dp, end = 48.dp, top = 10.dp).width(620.dp)) {
+        Box(Modifier.padding(start = edgePadding(), end = edgePadding(), top = 10.dp).fillMaxWidth().widthIn(max = 620.dp)) {
             EntryRow(
                 label = "",
                 value = vm.searchQuery,
@@ -246,14 +250,15 @@ fun SettingsSection(vm: AppViewModel) {
     var confirmSignOut by remember { mutableStateOf(false) }
     val account = vm.account
     val info = vm.accountInfo
+    val isTv = LocalIsTv.current
+    val device = if (isTv) "TV" else "phone"
 
-    Row(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 16.dp)) {
+    val accountCard: @Composable (Modifier) -> Unit = { modifier ->
         Column(
-            Modifier
-                .width(360.dp)
+            modifier
                 .clip(RoundedCornerShape(18.dp))
                 .background(Ember.Panel)
-                .padding(26.dp)
+                .padding(if (isTv) 26.dp else 20.dp)
         ) {
             Text("Account", style = Txt.Headline)
             Spacer(Modifier.height(16.dp))
@@ -275,20 +280,31 @@ fun SettingsSection(vm: AppViewModel) {
             Spacer(Modifier.height(18.dp))
             Text("Ember TV ${app.embertv.BuildConfig.VERSION_NAME}", style = Txt.Caption, color = Ember.Faint)
         }
-        Spacer(Modifier.width(36.dp))
-        Column(Modifier.width(520.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    }
+
+    val settingsList: @Composable (Modifier) -> Unit = { modifier ->
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SettingRow(
                 "Stream format",
                 if (vm.streamFormat == "m3u8") "HLS (.m3u8)" else "MPEG-TS (.ts)",
                 "Switch if channels buffer or won't start",
                 focusKey = "set:format",
             ) { vm.toggleStreamFormat() }
-            SettingRow(
-                "Channel up / down",
-                if (vm.invertZap) "Up goes to the previous channel" else "Up goes to the next channel",
-                null,
-                focusKey = "set:zap",
-            ) { vm.toggleInvertZap() }
+            if (isTv) {
+                SettingRow(
+                    "Channel up / down",
+                    if (vm.invertZap) "Up goes to the previous channel" else "Up goes to the next channel",
+                    null,
+                    focusKey = "set:zap",
+                ) { vm.toggleInvertZap() }
+            } else {
+                SettingRow(
+                    "Channel swipe",
+                    if (vm.invertZap) "Swipe down for the next channel" else "Swipe up for the next channel",
+                    null,
+                    focusKey = "set:zap",
+                ) { vm.toggleInvertZap() }
+            }
             SettingRow(
                 "Player identity",
                 if (vm.userAgent == DEFAULT_USER_AGENT) "Ember TV" else "VLC compatible",
@@ -300,9 +316,23 @@ fun SettingsSection(vm: AppViewModel) {
                 vm.refreshAccountInfo()
                 vm.notify("Refreshing from your provider…")
             }
-            SettingRow("Sign out", "", "Removes your login from this TV", focusKey = "set:signout") {
+            SettingRow("Sign out", "", "Removes your login from this $device", focusKey = "set:signout") {
                 confirmSignOut = true
             }
+        }
+    }
+
+    if (isTv) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 16.dp)) {
+            accountCard(Modifier.width(360.dp))
+            Spacer(Modifier.width(36.dp))
+            settingsList(Modifier.width(520.dp))
+        }
+    } else {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            accountCard(Modifier.fillMaxWidth())
+            Spacer(Modifier.height(16.dp))
+            settingsList(Modifier.fillMaxWidth())
         }
     }
 
@@ -313,18 +343,27 @@ fun SettingsSection(vm: AppViewModel) {
                     .width(480.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(Ember.Panel)
-                    .padding(32.dp)
+                    .padding(if (isTv) 32.dp else 22.dp)
             ) {
                 Text("Sign out of Ember TV?", style = Txt.Title)
                 Spacer(Modifier.height(10.dp))
-                Text("Your favourites stay on this TV. You'll need your login details to sign back in.", style = Txt.Body, color = Ember.Dim)
+                Text("Your favourites stay on this $device. You'll need your login details to sign back in.", style = Txt.Body, color = Ember.Dim)
                 Spacer(Modifier.height(24.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    TvButton("Cancel", autoFocus = true, onClick = { confirmSignOut = false })
-                    TvButton("Sign out", onClick = {
+                if (isTv) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        TvButton("Cancel", autoFocus = true, onClick = { confirmSignOut = false })
+                        TvButton("Sign out", onClick = {
+                            confirmSignOut = false
+                            vm.signOut()
+                        })
+                    }
+                } else {
+                    PillButton("Sign out", primary = true, modifier = Modifier.fillMaxWidth()) {
                         confirmSignOut = false
                         vm.signOut()
-                    })
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    PillButton("Cancel", modifier = Modifier.fillMaxWidth()) { confirmSignOut = false }
                 }
             }
         }
@@ -341,23 +380,43 @@ private fun InfoLine(label: String, value: String) {
 
 @Composable
 private fun SettingRow(title: String, value: String, hint: String?, focusKey: String, onClick: () -> Unit) {
+    val isTv = LocalIsTv.current
     FocusBox(
-        modifier = Modifier.fillMaxWidth().height(if (hint != null) 70.dp else 58.dp),
+        modifier = if (isTv) {
+            Modifier.fillMaxWidth().height(if (hint != null) 70.dp else 58.dp)
+        } else {
+            Modifier.fillMaxWidth().heightIn(min = 58.dp)
+        },
         focusKey = focusKey,
         focusedScale = 1.03f,
         color = Ember.Card,
         focusedColor = Color.White,
         onClick = onClick,
     ) { focused ->
-        Row(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = Txt.Label, color = if (focused) Color.Black else Ember.Text)
-                if (hint != null) {
-                    Text(hint, style = Txt.Caption, color = if (focused) Color(0xFF55555C) else Ember.Faint)
+        if (isTv) {
+            Row(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = Txt.Label, color = if (focused) Color.Black else Ember.Text)
+                    if (hint != null) {
+                        Text(hint, style = Txt.Caption, color = if (focused) Color(0xFF55555C) else Ember.Faint)
+                    }
+                }
+                if (value.isNotEmpty()) {
+                    Text(value, style = Txt.Label, color = if (focused) Color(0xFF333338) else Ember.Dim)
                 }
             }
-            if (value.isNotEmpty()) {
-                Text(value, style = Txt.Label, color = if (focused) Color(0xFF333338) else Ember.Dim)
+        } else {
+            // Phones are narrow, so the current value goes under the title instead of beside it.
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(title, style = Txt.Label, color = Ember.Text)
+                if (value.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(value, style = Txt.Label.copy(fontSize = Txt.Caption.fontSize), color = Ember.Accent)
+                }
+                if (hint != null) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(hint, style = Txt.Caption, color = Ember.Faint)
+                }
             }
         }
     }

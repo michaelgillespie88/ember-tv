@@ -4,7 +4,9 @@ import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,6 +73,13 @@ import kotlinx.coroutines.delay
 val LocalAppVm = staticCompositionLocalOf<AppViewModel> { error("AppViewModel not provided") }
 val LocalNow = compositionLocalOf { nowSeconds() }
 
+/** True on TVs and Fire TV; false on phones and tablets, which get the touch layout. */
+val LocalIsTv = staticCompositionLocalOf { true }
+
+/** "Hold OK on" with a remote, "Press and hold" on a touch screen. */
+@Composable
+fun holdPrompt(): String = if (LocalIsTv.current) "Hold OK on" else "Press and hold"
+
 // ---------- Loading helper ----------
 
 sealed interface LoadResult<out T> {
@@ -99,7 +108,8 @@ private class PressState {
     var longFired = false
 }
 
-/** OK/Enter clicks, holding OK long-presses, touch still works. */
+/** OK/Enter clicks, holding OK long-presses; on touch screens, tap and press-and-hold do the same. */
+@OptIn(ExperimentalFoundationApi::class)
 fun Modifier.tvClickable(onClick: () -> Unit, onLongClick: (() -> Unit)? = null): Modifier = composed {
     val press = remember { PressState() }
     val click by rememberUpdatedState(onClick)
@@ -135,7 +145,17 @@ fun Modifier.tvClickable(onClick: () -> Unit, onLongClick: (() -> Unit)? = null)
                 false
             }
         }
-        .clickable(interactionSource = interaction, indication = null) { click() }
+        .combinedClickable(
+            interactionSource = interaction,
+            // TVs show focus with the white outline; phones get the usual touch ripple.
+            indication = if (LocalIsTv.current) null else LocalIndication.current,
+            onLongClick = if (onLongClick != null) {
+                { longClick?.invoke() }
+            } else {
+                null
+            },
+            onClick = { click() },
+        )
 }
 
 // ---------- Focusable surface ----------
@@ -161,7 +181,8 @@ fun FocusBox(
     val ownRequester = remember { FocusRequester() }
     val requester = requester ?: ownRequester
 
-    val shouldRestore = focusKey != null && vm.restoreFocusKey == focusKey
+    // Phones have no focus highlight to return to, so only TVs restore it.
+    val shouldRestore = LocalIsTv.current && focusKey != null && vm.restoreFocusKey == focusKey
     if (shouldRestore) {
         LaunchedEffect(Unit) {
             delay(60)

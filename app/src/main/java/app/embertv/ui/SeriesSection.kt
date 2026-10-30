@@ -89,7 +89,7 @@ private fun SeriesGrid(vm: AppViewModel, repo: Repository, categoryId: String, m
             val list = r.value
             if (list.isEmpty()) {
                 EmptyView(
-                    if (categoryId == FAVOURITES) "Hold OK on any series to add it to your favourites."
+                    if (categoryId == FAVOURITES) "${holdPrompt()} any series to add it to your favourites."
                     else "No series in this category.",
                     modifier,
                 )
@@ -122,7 +122,7 @@ private fun SeriesGrid(vm: AppViewModel, repo: Repository, categoryId: String, m
 }
 
 /** The episode to offer first: the one last watched, otherwise the first of the first season. */
-private fun startingEpisode(info: SeriesInfo, lastEpisodeId: Int?): Episode? {
+internal fun startingEpisode(info: SeriesInfo, lastEpisodeId: Int?): Episode? {
     if (lastEpisodeId != null) {
         for (eps in info.episodes.values) {
             val e = eps.firstOrNull { it.id == lastEpisodeId }

@@ -46,7 +46,7 @@ private const val WINDOW_MINUTES = 120
 private val CHANNEL_COLUMN = 170.dp
 private val ROW_HEIGHT = 62.dp
 
-private data class GuideFocus(val channel: Channel, val programme: Programme?)
+internal data class GuideFocus(val channel: Channel, val programme: Programme?)
 
 @Composable
 fun GuideSection(vm: AppViewModel) {
@@ -94,7 +94,7 @@ private fun GuideGrid(vm: AppViewModel, repo: Repository, categoryId: String, mo
             val channels = r.value
             if (channels.isEmpty()) {
                 EmptyView(
-                    if (categoryId == FAVOURITES) "Hold OK on any channel to add it to your favourites."
+                    if (categoryId == FAVOURITES) "${holdPrompt()} any channel to add it to your favourites."
                     else "No channels in this category.",
                     modifier,
                 )
@@ -322,7 +322,7 @@ private fun ProgrammeBlock(
 }
 
 @Composable
-private fun ProgrammeDialog(focus: GuideFocus, onWatch: () -> Unit, onDismiss: () -> Unit) {
+internal fun ProgrammeDialog(focus: GuideFocus, onWatch: () -> Unit, onDismiss: () -> Unit) {
     val p = focus.programme ?: return
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -330,7 +330,7 @@ private fun ProgrammeDialog(focus: GuideFocus, onWatch: () -> Unit, onDismiss: (
                 .width(560.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(Ember.Panel)
-                .padding(32.dp)
+                .padding(if (LocalIsTv.current) 32.dp else 22.dp)
         ) {
             Text(p.title, style = Txt.Title)
             Spacer(Modifier.height(6.dp))
@@ -344,9 +344,15 @@ private fun ProgrammeDialog(focus: GuideFocus, onWatch: () -> Unit, onDismiss: (
                 Text(p.description, style = Txt.Body, color = Ember.Dim, maxLines = 8, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.height(24.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                TvButton("Watch channel now", icon = "▶", autoFocus = true, onClick = onWatch)
-                TvButton("Close", onClick = onDismiss)
+            if (LocalIsTv.current) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    TvButton("Watch channel now", icon = "▶", autoFocus = true, onClick = onWatch)
+                    TvButton("Close", onClick = onDismiss)
+                }
+            } else {
+                PillButton("Watch channel now", icon = EmberIcons.Play, primary = true, modifier = Modifier.fillMaxWidth(), onClick = onWatch)
+                Spacer(Modifier.height(10.dp))
+                PillButton("Close", modifier = Modifier.fillMaxWidth(), onClick = onDismiss)
             }
         }
     }

@@ -1,7 +1,23 @@
 package app.embertv.ui
 
 import android.view.KeyEvent as AndroidKeyEvent
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import android.view.ViewGroup
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -81,6 +97,35 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 // ---------------- Shared player plumbing ----------------
+
+private fun Context.findActivity(): Activity? {
+    var c: Context? = this
+    while (c is ContextWrapper) {
+        if (c is Activity) return c
+        c = c.baseContext
+    }
+    return null
+}
+
+/** On phones, play sideways and full screen; put things back when playback ends. */
+@Composable
+private fun PhoneFullscreen() {
+    if (LocalIsTv.current) return
+    val activity = LocalContext.current.findActivity() ?: return
+    DisposableEffect(activity) {
+        val window = activity.window
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+        onDispose {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+}
+
+private val ControlBg = Color(0x66000000)
 
 @Composable
 private fun rememberExoPlayer(userAgent: String, onStop: (ExoPlayer) -> Unit): ExoPlayer {
@@ -193,6 +238,8 @@ private fun BoxScope.ErrorCard(message: String, hint: String) {
 @Composable
 fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int) {
     if (vm.repo == null || channels.isEmpty()) return
+    val isTv = LocalIsTv.current
+    PhoneFullscreen()
     val exo = rememberExoPlayer(vm.userAgent) { }
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
@@ -343,6 +390,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         return true
     }
 
+    val upStep = if (vm.invertZap) -1 else 1
     Box(
         Modifier
             .fillMaxSize()
@@ -350,12 +398,34 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             .focusRequester(focus)
             .onKeyEvent { onKey(it) }
             .focusable()
+            // Touch: tap shows or hides the info, swiping up or down changes channel.
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { if (overlayVisible) overlayVisible = false else showOverlay() })
+            }
+            .pointerInput(Unit) {
+                var travelled = 0f
+                val threshold = 64.dp.toPx()
+                detectVerticalDragGestures(
+                    onDragStart = { travelled = 0f },
+                    onDragEnd = {
+                        val step = if (vm.invertZap) -1 else 1
+                        if (travelled < -threshold) zap(step) else if (travelled > threshold) zap(-step)
+                    },
+                    onVerticalDrag = { change, dy ->
+                        change.consume()
+                        travelled += dy
+                    },
+                )
+            }
     ) {
         VideoSurface(exo)
 
         val err = error
         if (err != null) {
-            ErrorCard(err, "Press ▲ or ▼ to try another channel, or Back to leave.")
+            ErrorCard(
+                err,
+                if (isTv) "Press ▲ or ▼ to try another channel, or Back to leave." else "Swipe up or down to try another channel.",
+            )
         } else if (buffering) {
             Spinner()
         }
@@ -381,10 +451,50 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 channel = channel,
                 isFavourite = vm.isFavourite(ContentType.LIVE, channel.streamId),
                 format = if (alternate) (if (vm.streamFormat == "m3u8") "TS" else "HLS") else (if (vm.streamFormat == "m3u8") "HLS" else "TS"),
+                isTv = isTv,
             )
         }
 
+        if (!isTv) {
+            AnimatedVisibility(
+                visible = overlayVisible && !listOpen,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter),
+            ) {
+                val fav = vm.isFavourite(ContentType.LIVE, channel.streamId)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color(0xAA000000), Color.Transparent)))
+                        .windowInsetsPadding(WindowInsets.displayCutout)
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    IconCircleButton(EmberIcons.Back, "Back", background = ControlBg) { vm.pop() }
+                    Spacer(Modifier.weight(1f))
+                    IconCircleButton(EmberIcons.ChevronUp, "Channel up", background = ControlBg) { zap(upStep) }
+                    IconCircleButton(EmberIcons.ChevronDown, "Channel down", background = ControlBg) { zap(-upStep) }
+                    IconCircleButton(EmberIcons.ChannelList, "Channel list", background = ControlBg) { listOpen = true }
+                    IconCircleButton(
+                        if (fav) EmberIcons.StarFilled else EmberIcons.Star,
+                        "Favourite",
+                        background = ControlBg,
+                        tint = if (fav) Ember.Accent else Ember.Text,
+                    ) {
+                        vm.toggleFavourite(vm.favouriteOf(channel))
+                        showOverlay()
+                    }
+                }
+            }
+        }
+
         if (listOpen) {
+            if (!isTv) {
+                // Tapping beside the list closes it.
+                Box(Modifier.fillMaxSize().clickable { listOpen = false })
+            }
             ZapList(
                 channels = channels,
                 current = index,
@@ -398,7 +508,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
 }
 
 @Composable
-private fun LiveInfoBar(vm: AppViewModel, channel: Channel, isFavourite: Boolean, format: String) {
+private fun LiveInfoBar(vm: AppViewModel, channel: Channel, isFavourite: Boolean, format: String, isTv: Boolean) {
     val repo = vm.repo ?: return
     val now = LocalNow.current
     val programmes = rememberProgrammes(repo, channel.streamId)
@@ -409,18 +519,28 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, isFavourite: Boolean
         Modifier
             .fillMaxWidth()
             .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000))))
-            .padding(start = 56.dp, end = 56.dp, top = 60.dp, bottom = 36.dp)
+            .windowInsetsPadding(WindowInsets.displayCutout)
+            .padding(
+                start = if (isTv) 56.dp else 24.dp,
+                end = if (isTv) 56.dp else 24.dp,
+                top = if (isTv) 60.dp else 36.dp,
+                bottom = if (isTv) 36.dp else 16.dp,
+            )
     ) {
         Column {
             Text(
-                "▲▼ Channels    ◀ Channel list    Hold OK Favourite",
+                if (isTv) "▲▼ Channels    ◀ Channel list    Hold OK Favourite" else "Swipe up or down to change channel",
                 style = Txt.Caption,
                 color = Ember.Faint,
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(if (isTv) 14.dp else 10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ChannelLogo(channel.icon, channel.name, Modifier.size(width = 120.dp, height = 80.dp))
-                Spacer(Modifier.width(24.dp))
+                ChannelLogo(
+                    channel.icon,
+                    channel.name,
+                    if (isTv) Modifier.size(width = 120.dp, height = 80.dp) else Modifier.size(width = 84.dp, height = 56.dp),
+                )
+                Spacer(Modifier.width(if (isTv) 24.dp else 16.dp))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (channel.num > 0) {
@@ -443,7 +563,7 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, isFavourite: Boolean
                             Text("${formatClock(current.start)} – ${formatClock(current.end)}", style = Txt.Label, color = Ember.Dim)
                         }
                         Spacer(Modifier.height(8.dp))
-                        ProgressBar(current.progress(now), Modifier.width(420.dp))
+                        ProgressBar(current.progress(now), Modifier.width(if (isTv) 420.dp else 280.dp))
                     } else {
                         Text(
                             if (programmes == null) "Loading guide…" else "No guide information",
@@ -554,6 +674,8 @@ private fun trackOptions(exo: ExoPlayer, type: Int): List<TrackOption> {
 @Composable
 fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, startMs: Long) {
     if (items.isEmpty()) return
+    val isTv = LocalIsTv.current
+    PhoneFullscreen()
     val scope = rememberCoroutineScope()
 
     fun save(p: Player) {
@@ -686,6 +808,13 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
         showOverlay()
     }
 
+    fun skipBy(deltaMs: Long) {
+        val d = exo.duration
+        val max = if (d > 0) d - 1_000 else Long.MAX_VALUE
+        exo.seekTo((exo.currentPosition + deltaMs).coerceIn(0L, max.coerceAtLeast(0L)))
+        showOverlay()
+    }
+
     fun stepFor(repeat: Int): Long = when {
         repeat < 6 -> 10_000L
         repeat < 20 -> 30_000L
@@ -744,17 +873,24 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
             .focusRequester(focus)
             .onKeyEvent { onKey(it) }
             .focusable()
+            // Touch: tap shows or hides the controls; double-tap the left or right side to skip 10 seconds.
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { if (overlayVisible) overlayVisible = false else showOverlay() },
+                    onDoubleTap = { offset -> skipBy(if (offset.x < size.width / 2f) -10_000L else 10_000L) },
+                )
+            }
     ) {
         VideoSurface(exo)
 
         val err = error
         if (err != null) {
-            ErrorCard(err, "Press Back to leave.")
+            ErrorCard(err, if (isTv) "Press Back to leave." else "Go back to leave.")
         } else if (buffering) {
             Spinner()
         }
 
-        if (!playing && !buffering && err == null) {
+        if (!playing && !buffering && err == null && (isTv || !overlayVisible)) {
             Box(
                 Modifier
                     .align(Alignment.Center)
@@ -773,14 +909,34 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize(),
         ) {
-            VodOverlay(
-                item = item,
-                position = scrub ?: position,
-                duration = duration,
-                scrubbing = scrub != null,
-                playing = playing,
-                hasNext = current < items.lastIndex,
-            )
+            if (isTv) {
+                VodOverlay(
+                    item = item,
+                    position = scrub ?: position,
+                    duration = duration,
+                    scrubbing = scrub != null,
+                    playing = playing,
+                    hasNext = current < items.lastIndex,
+                )
+            } else {
+                VodTouchOverlay(
+                    item = item,
+                    position = scrub ?: position,
+                    duration = duration,
+                    playing = playing,
+                    hasNext = current < items.lastIndex,
+                    onBack = { vm.pop() },
+                    onTogglePlay = { togglePlay() },
+                    onSkip = { skipBy(it) },
+                    onScrub = { ms ->
+                        scrub = ms
+                        showOverlay()
+                    },
+                    onScrubDone = { commitScrub() },
+                    onTracks = { showTracks = true },
+                    onNext = { if (exo.hasNextMediaItem()) exo.seekToNextMediaItem() },
+                )
+            }
         }
     }
 
@@ -844,6 +1000,104 @@ private fun VodOverlay(item: VodItem, position: Long, duration: Long, scrubbing:
                 Text(if (duration > 0) "-" + formatMs(duration - position) else "", style = Txt.Label, color = Ember.Dim)
             }
         }
+    }
+}
+
+@Composable
+private fun VodTouchOverlay(
+    item: VodItem,
+    position: Long,
+    duration: Long,
+    playing: Boolean,
+    hasNext: Boolean,
+    onBack: () -> Unit,
+    onTogglePlay: () -> Unit,
+    onSkip: (Long) -> Unit,
+    onScrub: (Long) -> Unit,
+    onScrubDone: () -> Unit,
+    onTracks: () -> Unit,
+    onNext: () -> Unit,
+) {
+    Box(Modifier.fillMaxSize().background(Color(0x59000000))) {
+        Row(
+            Modifier
+                .align(Alignment.TopStart)
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.displayCutout)
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconCircleButton(EmberIcons.Back, "Back", background = ControlBg, onClick = onBack)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(item.title, style = Txt.Headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (item.subtitle.isNotBlank()) {
+                    Text(item.subtitle, style = Txt.Caption, color = Ember.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            IconCircleButton(EmberIcons.Subtitles, "Audio and subtitles", background = ControlBg, onClick = onTracks)
+        }
+
+        Row(
+            Modifier.align(Alignment.Center),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(40.dp),
+        ) {
+            SkipButton("−10") { onSkip(-10_000L) }
+            IconCircleButton(
+                if (playing) EmberIcons.Pause else EmberIcons.Play,
+                if (playing) "Pause" else "Play",
+                size = 76.dp,
+                background = Color(0x80000000),
+                onClick = onTogglePlay,
+            )
+            SkipButton("+10") { onSkip(10_000L) }
+        }
+
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.displayCutout)
+                .padding(start = 20.dp, end = 20.dp, bottom = 10.dp)
+        ) {
+            val fraction = if (duration > 0) (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+            Slider(
+                value = fraction,
+                onValueChange = { f -> if (duration > 0) onScrub((f * duration).toLong()) },
+                onValueChangeFinished = onScrubDone,
+                enabled = duration > 0,
+                colors = SliderDefaults.colors(
+                    thumbColor = Color.White,
+                    activeTrackColor = Ember.Accent,
+                    inactiveTrackColor = Color(0x40FFFFFF),
+                ),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(formatMs(position), style = Txt.Label)
+                Spacer(Modifier.weight(1f))
+                if (hasNext) {
+                    PillButton("Next episode", icon = EmberIcons.Next, onClick = onNext)
+                    Spacer(Modifier.width(14.dp))
+                }
+                Text(if (duration > 0) "-" + formatMs(duration - position) else "", style = Txt.Label, color = Ember.Dim)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkipButton(label: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(56.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(ControlBg)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = Txt.Label, color = Color.White)
     }
 }
 

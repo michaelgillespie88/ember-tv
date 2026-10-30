@@ -6,6 +6,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -26,7 +29,7 @@ import app.embertv.data.nowSeconds
 import kotlinx.coroutines.delay
 
 @Composable
-fun EmberApp(vm: AppViewModel) {
+fun EmberApp(vm: AppViewModel, isTv: Boolean) {
     EmberTheme {
         val now by produceState(nowSeconds()) {
             while (true) {
@@ -34,7 +37,7 @@ fun EmberApp(vm: AppViewModel) {
                 value = nowSeconds()
             }
         }
-        CompositionLocalProvider(LocalAppVm provides vm, LocalNow provides now) {
+        CompositionLocalProvider(LocalAppVm provides vm, LocalNow provides now, LocalIsTv provides isTv) {
             Box(Modifier.fillMaxSize().background(Ember.Bg)) {
                 // Registered first so every screen's own back handling takes priority.
                 BackHandler(enabled = vm.stack.size > 1) { vm.pop() }
@@ -48,12 +51,12 @@ fun EmberApp(vm: AppViewModel) {
                 }
 
                 if (vm.repo == null) {
-                    LoginScreen(vm)
+                    if (isTv) LoginScreen(vm) else PhoneLoginScreen(vm)
                 } else {
                     when (val screen = vm.stack.last()) {
-                        Screen.Home -> HomeScreen(vm)
-                        is Screen.MovieDetail -> MovieDetailScreen(vm, screen.movie)
-                        is Screen.SeriesDetail -> SeriesDetailScreen(vm, screen.series)
+                        Screen.Home -> if (isTv) HomeScreen(vm) else PhoneHome(vm)
+                        is Screen.MovieDetail -> if (isTv) MovieDetailScreen(vm, screen.movie) else PhoneMovieDetail(vm, screen.movie)
+                        is Screen.SeriesDetail -> if (isTv) SeriesDetailScreen(vm, screen.series) else PhoneSeriesDetail(vm, screen.series)
                         is Screen.PlayLive -> LivePlayerScreen(vm, screen.channels, screen.index)
                         is Screen.PlayVod -> VodPlayerScreen(vm, screen.items, screen.index, screen.startMs)
                     }
@@ -81,7 +84,7 @@ private fun BoxScope.NoticeOverlay(vm: AppViewModel) {
         visible = notice != null,
         enter = fadeIn(),
         exit = fadeOut(),
-        modifier = Modifier.align(Alignment.TopCenter).padding(top = 28.dp),
+        modifier = Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars).padding(top = 28.dp),
     ) {
         Box(
             Modifier
