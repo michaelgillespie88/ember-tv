@@ -62,22 +62,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.embertv.data.credentialsFromLink
 
-// Tab numbers are shared with the TV layout (see HomeScreen).
-private const val TAB_LIVE = 0
-private const val TAB_GUIDE = 1
-private const val TAB_MOVIES = 2
-private const val TAB_SERIES = 3
-private const val TAB_FAVOURITES = 4
-private const val TAB_SEARCH = 5
-private const val TAB_SETTINGS = 6
+private const val TAB_HOME = Tabs.HOME
+private const val TAB_LIVE = Tabs.LIVE
+private const val TAB_GUIDE = Tabs.GUIDE
+private const val TAB_MOVIES = Tabs.MOVIES
+private const val TAB_SERIES = Tabs.SERIES
+private const val TAB_FAVOURITES = Tabs.FAVOURITES
+private const val TAB_SEARCH = Tabs.SEARCH
+private const val TAB_SETTINGS = Tabs.SETTINGS
 
-private val TAB_TITLES = listOf("Live TV", "TV Guide", "Movies", "Series", "Favourites", "Search", "Settings")
+private val TAB_TITLES = listOf("Home", "Live TV", "TV Guide", "Movies", "Series", "Favourites", "Search", "Settings")
+
+/** Tabs opened from the header (with a back arrow) rather than the tab bar. */
+private val OVERLAY_TABS = setOf(TAB_GUIDE, TAB_SEARCH, TAB_SETTINGS)
+private val CHIP_TABS = setOf(TAB_LIVE, TAB_GUIDE, TAB_MOVIES, TAB_SERIES)
 
 private class NavItem(val tab: Int, val label: String, val icon: ImageVector)
 
 private val NAV_ITEMS = listOf(
+    NavItem(TAB_HOME, "Home", EmberIcons.Home),
     NavItem(TAB_LIVE, "Live", EmberIcons.Live),
-    NavItem(TAB_GUIDE, "Guide", EmberIcons.Guide),
     NavItem(TAB_MOVIES, "Movies", EmberIcons.Movies),
     NavItem(TAB_SERIES, "Series", EmberIcons.Series),
     NavItem(TAB_FAVOURITES, "Favourites", EmberIcons.Star),
@@ -97,17 +101,18 @@ fun edgePadding(): Dp = if (LocalIsTv.current) 48.dp else 16.dp
  */
 @Composable
 fun PhoneHome(vm: AppViewModel) {
-    var returnTab by remember { mutableIntStateOf(TAB_LIVE) }
+    var returnTab by remember { mutableIntStateOf(TAB_HOME) }
     val tab = vm.tab
-    val mainTab = tab <= TAB_FAVOURITES
-    val hasChips = tab <= TAB_SERIES
+    val mainTab = tab !in OVERLAY_TABS
+    val hasChips = tab in CHIP_TABS
+    val isHome = tab == TAB_HOME
 
-    BackHandler(enabled = tab != TAB_LIVE) {
-        vm.tab = if (tab == TAB_SEARCH || tab == TAB_SETTINGS) returnTab else TAB_LIVE
+    BackHandler(enabled = tab != TAB_HOME) {
+        vm.tab = if (tab in OVERLAY_TABS) returnTab else TAB_HOME
     }
 
     fun openOverlayTab(target: Int) {
-        if (tab != TAB_SEARCH && tab != TAB_SETTINGS) returnTab = tab
+        if (tab !in OVERLAY_TABS) returnTab = tab
         vm.tab = target
     }
 
@@ -116,7 +121,8 @@ fun PhoneHome(vm: AppViewModel) {
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val contentPadding = PaddingValues(
-        top = statusTop + HEADER_ROW + (if (hasChips) CHIPS_ROW else 0.dp),
+        // Home's featured banner runs up underneath the glass header.
+        top = if (isHome) 0.dp else statusTop + HEADER_ROW + (if (hasChips) CHIPS_ROW else 0.dp),
         bottom = navBottom + (if (mainTab) TAB_BAR + 20.dp else 12.dp),
     )
 
@@ -124,6 +130,7 @@ fun PhoneHome(vm: AppViewModel) {
         Box(Modifier.fillMaxSize().backdropSource(backdrop).background(Ember.Bg)) {
             CompositionLocalProvider(LocalContentPadding provides contentPadding, LocalHeaderChips provides chips) {
                 when (tab) {
+                    TAB_HOME -> PhoneHomeTab(vm)
                     TAB_LIVE -> PhoneLiveTab(vm)
                     TAB_GUIDE -> PhoneGuideTab(vm)
                     TAB_MOVIES -> PhoneMoviesTab(vm)
@@ -140,7 +147,7 @@ fun PhoneHome(vm: AppViewModel) {
             Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .frosted(backdrop, RectangleShape, tint = Color(0x99101014), edge = false)
+                .frosted(backdrop, RectangleShape, tint = if (isHome) Color(0x40101014) else Color(0x99101014), edge = false)
         ) {
             Spacer(Modifier.height(statusTop))
             Row(
@@ -152,13 +159,18 @@ fun PhoneHome(vm: AppViewModel) {
                 } else {
                     IconCircleButton(EmberIcons.Back, "Back") { vm.tab = returnTab }
                 }
-                Text(
-                    TAB_TITLES[tab.coerceIn(0, TAB_TITLES.lastIndex)],
-                    style = Txt.LargeTitle,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+                if (isHome) {
+                    Box(Modifier.weight(1f)) { Wordmark() }
+                } else {
+                    Text(
+                        TAB_TITLES[tab.coerceIn(0, TAB_TITLES.lastIndex)],
+                        style = Txt.LargeTitle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (tab == TAB_LIVE) IconCircleButton(EmberIcons.Guide, "TV guide") { openOverlayTab(TAB_GUIDE) }
                 if (tab != TAB_SEARCH) IconCircleButton(EmberIcons.Search, "Search") { openOverlayTab(TAB_SEARCH) }
                 if (tab != TAB_SETTINGS) IconCircleButton(EmberIcons.Settings, "Settings") { openOverlayTab(TAB_SETTINGS) }
             }

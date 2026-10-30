@@ -87,6 +87,58 @@ class Prefs(context: Context) {
             sp.edit().putString("favourites", arr.toString()).apply()
         }
 
+    var history: List<HistoryEntry>
+        get() {
+            val raw = sp.getString("history", "[]") ?: "[]"
+            return try {
+                val arr = JSONArray(raw)
+                val out = ArrayList<HistoryEntry>()
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val type = ContentType.entries.firstOrNull { it.name == o.optString("type") } ?: continue
+                    out.add(
+                        HistoryEntry(
+                            key = o.optString("key"),
+                            type = type,
+                            id = o.optInt("id"),
+                            seriesId = o.optInt("sid"),
+                            title = o.optString("title"),
+                            subtitle = o.optString("sub"),
+                            image = o.optString("img"),
+                            seriesCover = o.optString("cover"),
+                            ext = o.optString("ext"),
+                            positionMs = o.optLong("pos"),
+                            durationMs = o.optLong("dur"),
+                            updatedAt = o.optLong("at"),
+                        )
+                    )
+                }
+                out
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+        set(value) {
+            val arr = JSONArray()
+            for (h in value) {
+                val o = JSONObject()
+                o.put("key", h.key)
+                o.put("type", h.type.name)
+                o.put("id", h.id)
+                o.put("sid", h.seriesId)
+                o.put("title", h.title)
+                o.put("sub", h.subtitle)
+                o.put("img", h.image)
+                o.put("cover", h.seriesCover)
+                o.put("ext", h.ext)
+                o.put("pos", h.positionMs)
+                o.put("dur", h.durationMs)
+                o.put("at", h.updatedAt)
+                arr.put(o)
+            }
+            sp.edit().putString("history", arr.toString()).apply()
+        }
+
     fun position(key: String): Long = sp.getLong("pos_$key", 0L)
 
     /** Keeps a resume point unless the video was barely started or is basically finished. */

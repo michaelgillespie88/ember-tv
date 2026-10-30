@@ -114,3 +114,22 @@ fun Favourite.toChannel(): Channel = Channel(id, num, name, image, categoryId, "
 fun Favourite.toMovie(): Movie = Movie(id, name, image, categoryId, "", ext.ifEmpty { "mp4" }, 0L)
 
 fun Favourite.toSeries(): Series = Series(id, name, image, categoryId, "", "", "", "")
+
+/** Something part-watched, for the Continue Watching row. One entry per movie and per series. */
+data class HistoryEntry(
+    val key: String,
+    val type: ContentType,
+    val id: Int,
+    val seriesId: Int,
+    val title: String,
+    val subtitle: String,
+    val image: String,
+    val seriesCover: String,
+    val ext: String,
+    val positionMs: Long,
+    val durationMs: Long,
+    val updatedAt: Long,
+) {
+    val progress: Float
+        get() = if (durationMs > 0) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
+}

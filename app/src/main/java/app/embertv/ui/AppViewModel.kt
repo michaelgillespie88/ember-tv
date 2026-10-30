@@ -18,6 +18,7 @@ import app.embertv.data.ContentType
 import app.embertv.data.DEFAULT_USER_AGENT
 import app.embertv.data.Episode
 import app.embertv.data.Favourite
+import app.embertv.data.HistoryEntry
 import app.embertv.data.Movie
 import app.embertv.data.Prefs
 import app.embertv.data.Repository
@@ -43,7 +44,24 @@ data class VodItem(
     val url: String,
     val seriesId: Int? = null,
     val episodeId: Int? = null,
+    // For Continue Watching
+    val contentId: Int = 0,
+    val image: String = "",
+    val seriesCover: String = "",
+    val ext: String = "",
 )
+
+/** Tab numbers, shared by the TV and phone layouts. Home is first, so the app opens on it. */
+object Tabs {
+    const val HOME = 0
+    const val LIVE = 1
+    const val GUIDE = 2
+    const val MOVIES = 3
+    const val SERIES = 4
+    const val FAVOURITES = 5
+    const val SEARCH = 6
+    const val SETTINGS = 7
+}
 
 data class Notice(val text: String, val id: Long = System.nanoTime())
 
@@ -79,7 +97,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var restoreFocusKey by mutableStateOf<String?>(null)
     var restoreClaimed = false
 
-    var tab by mutableIntStateOf(0)
+    var tab by mutableIntStateOf(Tabs.HOME)
+    var home = SectionState()
+        private set
     var live = SectionState()
         private set
     var guide = SectionState()
@@ -105,8 +125,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val favourites = mutableStateListOf<Favourite>()
     val favKeys: Set<String> by derivedStateOf<Set<String>> { favourites.mapTo(HashSet()) { it.key } }
 
+    /** Part-watched movies and episodes, most recent first. */
+    val history = mutableStateListOf<HistoryEntry>()
+
     init {
         favourites.addAll(prefs.favourites)
+        history.addAll(prefs.history)
         val saved = prefs.account
         if (saved != null) startSession(saved, null)
     }
@@ -166,12 +190,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         stack.add(Screen.Home)
         returnKeys.clear()
         restoreFocusKey = null
+        home = SectionState()
         live = SectionState()
         guide = SectionState()
         movies = SectionState()
         series = SectionState()
         searchQuery = ""
-        tab = 0
+        tab = Tabs.HOME
     }
 
     fun reload() {
@@ -254,7 +279,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val r = repo ?: return
         val key = "movie:${m.streamId}"
         val start = if (fromStart) 0L else prefs.position(key)
-        push(Screen.PlayVod(listOf(VodItem(key, m.name, "", r.client.movieUrl(m.streamId, m.ext))), 0, start))
+        val art = r.peekMovieInfo(m.streamId)?.backdrop?.takeIf { it.isNotBlank() } ?: m.poster
+        val item = VodItem(
+            key = key,
+            title = m.name,
+            subtitle = "",
+            url = r.client.movieUrl(m.streamId, m.ext),
+            contentId = m.streamId,
+            image = art,
+            seriesCover = m.poster,
+            ext = m.ext,
+        )
+        push(Screen.PlayVod(listOf(item), 0, start))
     }
 
     fun playEpisodes(s: Series, episodes: List<Episode>, index: Int, fromStart: Boolean) {
@@ -268,6 +304,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 url = r.client.episodeUrl(e.id, e.ext),
                 seriesId = s.seriesId,
                 episodeId = e.id,
+                contentId = e.id,
+                image = e.image.ifBlank { r.peekSeriesInfo(s.seriesId)?.backdrop?.takeIf { it.isNotBlank() } ?: s.cover },
+                seriesCover = s.cover,
+                ext = e.ext,
             )
         }
         val start = if (fromStart) 0L else prefs.position(items[index].key)
@@ -279,5 +319,82 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val sid = item.seriesId
         val eid = item.episodeId
         if (sid != null && eid != null) prefs.setLastEpisode(sid, eid)
+        updateHistory(item, positionMs, durationMs)
+    }
+
+    // ---- Continue Watching ----
+
+    private fun updateHistory(item: VodItem, positionMs: Long, durationMs: Long) {
+        if (item.contentId == 0) return
+        val finished = durationMs > 0 && positionMs.toDouble() > durationMs.toDouble() * 0.95
+        val isEpisode = item.seriesId != null
+        if (finished) {
+            removeHistory(item.key, notifyUser = false)
+            return
+        }
+        if (positionMs < 60_000L) return
+        val entry = HistoryEntry(
+            key = item.key,
+            type = if (isEpisode) ContentType.SERIES else ContentType.MOVIE,
+            id = item.contentId,
+            seriesId = item.seriesId ?: 0,
+            title = item.title,
+            subtitle = item.subtitle,
+            image = item.image,
+            seriesCover = item.seriesCover,
+            ext = item.ext,
+            positionMs = positionMs,
+            durationMs = durationMs,
+            updatedAt = System.currentTimeMillis(),
+        )
+        // One entry per movie, and one per series (the latest episode).
+        history.removeAll { it.key == entry.key || (isEpisode && it.seriesId == entry.seriesId && it.type == ContentType.SERIES) }
+        history.add(0, entry)
+        while (history.size > 30) history.removeAt(history.lastIndex)
+        prefs.history = history.toList()
+    }
+
+    fun removeHistory(key: String, notifyUser: Boolean = true) {
+        if (history.removeAll { it.key == key }) {
+            prefs.history = history.toList()
+            if (notifyUser) notify("Removed from Continue Watching")
+        }
+    }
+
+    /** Carries on from where you stopped. Episodes reload the season so the next one plays after. */
+    fun resume(entry: HistoryEntry) {
+        val r = repo ?: return
+        if (entry.type == ContentType.MOVIE) {
+            playMovie(Movie(entry.id, entry.title, entry.seriesCover, "", "", entry.ext.ifBlank { "mp4" }, 0L), fromStart = false)
+            return
+        }
+        val series = Series(entry.seriesId, entry.title, entry.seriesCover, "", "", "", "", "")
+        viewModelScope.launch {
+            try {
+                val info = r.seriesInfo(entry.seriesId)
+                val season = info.episodes.values.firstOrNull { eps -> eps.any { it.id == entry.id } }
+                if (season != null) {
+                    playEpisodes(series, season, season.indexOfFirst { it.id == entry.id }, fromStart = false)
+                    return@launch
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Fall through and play just this episode.
+            }
+            val item = VodItem(
+                key = entry.key,
+                title = entry.title,
+                subtitle = entry.subtitle,
+                url = r.client.episodeUrl(entry.id, entry.ext.ifBlank { "mp4" }),
+                seriesId = entry.seriesId,
+                episodeId = entry.id,
+                contentId = entry.id,
+                image = entry.image,
+                seriesCover = entry.seriesCover,
+                ext = entry.ext,
+            )
+            push(Screen.PlayVod(listOf(item), 0, prefs.position(entry.key)))
+        }
     }
 }

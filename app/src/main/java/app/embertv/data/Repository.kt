@@ -91,6 +91,9 @@ class Repository(val client: XtreamClient) {
         return result
     }
 
+    fun peekMovieInfo(id: Int): MovieInfo? = movieInfos[id]
+    fun peekSeriesInfo(id: Int): SeriesInfo? = seriesInfos[id]
+
     suspend fun movieInfo(id: Int): MovieInfo =
         movieInfos[id] ?: client.movieInfo(id).also { movieInfos[id] = it }
 

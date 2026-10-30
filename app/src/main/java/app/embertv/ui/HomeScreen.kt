@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,11 +31,24 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
-private val TABS = listOf("Live TV", "Guide", "Movies", "Series", "Favourites", "Search", "Settings")
+private class TvTab(val title: String, val icon: ImageVector? = null)
+
+// Same order as Tabs: Home first. Search and Settings are icons, as on Apple TV.
+private val TABS = listOf(
+    TvTab("Home"),
+    TvTab("Live TV"),
+    TvTab("Guide"),
+    TvTab("Movies"),
+    TvTab("Series"),
+    TvTab("Favourites"),
+    TvTab("Search", EmberIcons.Search),
+    TvTab("Settings", EmberIcons.Settings),
+)
 
 @Composable
 fun HomeScreen(vm: AppViewModel) {
@@ -44,6 +59,10 @@ fun HomeScreen(vm: AppViewModel) {
     // Back from the content jumps up to the tab bar; back from the tab bar leaves the app.
     BackHandler(enabled = focusedTab < 0) {
         runCatching { tabRequesters[vm.tab].requestFocus() }
+    }
+    // Back on the tab bar returns to Home before leaving the app.
+    BackHandler(enabled = focusedTab >= 0 && vm.tab != Tabs.HOME) {
+        runCatching { tabRequesters[Tabs.HOME].requestFocus() }
     }
 
     LaunchedEffect(Unit) {
@@ -73,9 +92,9 @@ fun HomeScreen(vm: AppViewModel) {
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TABS.forEachIndexed { i, title ->
+                TABS.forEachIndexed { i, t ->
                     TabItem(
-                        title = title,
+                        tab = t,
                         selected = vm.tab == i,
                         requester = tabRequesters[i],
                         onFocusChange = { isFocused ->
@@ -95,12 +114,13 @@ fun HomeScreen(vm: AppViewModel) {
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (vm.tab) {
-                0 -> LiveSection(vm)
-                1 -> GuideSection(vm)
-                2 -> MoviesSection(vm)
-                3 -> SeriesSection(vm)
-                4 -> FavouritesSection(vm)
-                5 -> SearchSection(vm)
+                Tabs.HOME -> HomeSection(vm)
+                Tabs.LIVE -> LiveSection(vm)
+                Tabs.GUIDE -> GuideSection(vm)
+                Tabs.MOVIES -> MoviesSection(vm)
+                Tabs.SERIES -> SeriesSection(vm)
+                Tabs.FAVOURITES -> FavouritesSection(vm)
+                Tabs.SEARCH -> SearchSection(vm)
                 else -> SettingsSection(vm)
             }
         }
@@ -109,7 +129,7 @@ fun HomeScreen(vm: AppViewModel) {
 
 @Composable
 private fun TabItem(
-    title: String,
+    tab: TvTab,
     selected: Boolean,
     requester: FocusRequester,
     onFocusChange: (Boolean) -> Unit,
@@ -136,17 +156,18 @@ private fun TabItem(
                 }
             }
             .tvClickable(onClick = onClick)
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = if (tab.icon != null) 11.dp else 14.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            title,
-            style = Txt.Label,
-            color = when {
-                focused -> Color.Black
-                selected -> Ember.Text
-                else -> Ember.Dim
-            },
-        )
+        val color = when {
+            focused -> Color.Black
+            selected -> Ember.Text
+            else -> Ember.Dim
+        }
+        if (tab.icon != null) {
+            Icon(tab.icon, contentDescription = tab.title, tint = color, modifier = Modifier.size(20.dp))
+        } else {
+            Text(tab.title, style = Txt.Label, color = color)
+        }
     }
 }

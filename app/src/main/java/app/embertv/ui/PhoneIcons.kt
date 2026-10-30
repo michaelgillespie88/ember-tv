@@ -47,6 +47,12 @@ object EmberIcons {
         close()
     }
 
+    val Home = outline("home") {
+        moveTo(4f, 10.5f); lineTo(12f, 4f); lineTo(20f, 10.5f)
+        moveTo(6f, 9f); lineTo(6f, 20f); lineTo(18f, 20f); lineTo(18f, 9f)
+        moveTo(10f, 20f); lineTo(10f, 14f); lineTo(14f, 14f); lineTo(14f, 20f)
+    }
+
     val Live = outline("live") {
         moveTo(3f, 7f); lineTo(21f, 7f); lineTo(21f, 19f); lineTo(3f, 19f); close()
         moveTo(8f, 3f); lineTo(12f, 7f); lineTo(16f, 3f)
