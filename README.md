@@ -1,6 +1,7 @@
 # Ember TV
 
-A clean, Apple TV-style IPTV player for Android TV and Google TV (built for a TCL Google TV), using an Xtream Codes login.
+A clean, Apple TV-style IPTV player for Android TV, Google TV, Fire TV and Android phones, using an Xtream Codes login.
+The same app gives TVs a remote-friendly layout and phones a touch layout.
 
 - **Live TV** – categories, channel logos, now/next with progress, quick channel list, number keys to jump to a channel
 - **Guide** – a three-hour programme grid for any category
@@ -26,6 +27,11 @@ Every push to `main` builds a new APK automatically (see the **Actions** tab) an
 1. Open Downloader and enter:
    `https://github.com/michaelgillespie88/ember-tv/releases/latest/download/EmberTV.apk`
 2. Choose **Install**, then open **Ember TV** and sign in with your provider's server address, username and password.
+
+**Android phone**
+1. Open the link above in the phone's browser and download the APK.
+2. Open the download and allow your browser to install apps when Android asks.
+3. On a phone, swipe up or down while watching live TV to change channel, tap for controls, double-tap the sides to skip, and press and hold anything to add it to your favourites.
 
 Updating works the same way: download the latest APK again and install over the top. Your login and favourites are kept.
 The version number is shown on the sign-in screen and in Settings.
