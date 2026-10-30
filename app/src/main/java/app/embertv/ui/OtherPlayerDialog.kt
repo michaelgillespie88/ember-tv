@@ -52,68 +52,55 @@ fun PlayerPickerDialog(
         DialogBackdropBlur()
         Column(
             Modifier
-                .width(if (isTv) 520.dp else 460.dp)
-                .heightIn(max = if (isTv) 480.dp else 620.dp)
-                .clip(RoundedCornerShape(22.dp))
+                .width(if (isTv) 520.dp else 440.dp)
+                .heightIn(max = if (isTv) 520.dp else 640.dp)
+                .clip(RoundedCornerShape(28.dp))
                 .background(dialogPanelColor())
-                .padding(if (isTv) 26.dp else 20.dp)
+                .padding(if (isTv) 8.dp else 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(title, style = Txt.Title)
-            Spacer(Modifier.height(6.dp))
-            Text(subtitle, style = Txt.Caption, color = Ember.Dim)
-            Spacer(Modifier.height(16.dp))
+            SheetTitle(title, subtitle = subtitle)
+            Spacer(Modifier.height(20.dp))
             if (players.isEmpty()) {
                 Text(
                     if (isTv) "No other video players are installed. Install VLC from the Amazon Appstore (search for VLC), then come back here."
                     else "No other video players are installed. Install VLC from the Play Store, then come back here.",
                     style = Txt.Body,
                     color = Ember.Dim,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
                 Spacer(Modifier.height(16.dp))
             }
-            LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(
+                Modifier.weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+            ) {
                 itemsIndexed(rows, key = { _, p -> p.packageName.ifEmpty { "builtin" } }) { i, p ->
                     val selected = includeBuiltIn && p.packageName == vm.externalPlayer
-                    FocusBox(
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                    SheetOption(
+                        title = p.label,
                         focusKey = "player:${p.packageName}",
-                        shape = RoundedCornerShape(12.dp),
-                        focusedScale = 1.03f,
-                        color = if (selected) Color(0x26FFFFFF) else Ember.Card,
-                        focusedColor = Color.White,
                         autoFocus = isTv && (selected || (i == 0 && rows.none { includeBuiltIn && it.packageName == vm.externalPlayer })),
-                        onClick = { onPick(p.packageName) },
-                    ) { focused ->
-                        Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        leading = { dark ->
                             Icon(
                                 if (p.packageName.isEmpty()) EmberIcons.Play else EmberIcons.OpenExternal,
                                 contentDescription = null,
-                                tint = if (focused) Color.Black else Ember.Dim,
+                                tint = if (dark) Color.Black else Ember.Dim,
                                 modifier = Modifier.size(20.dp),
                             )
-                            Spacer(Modifier.width(14.dp))
-                            Text(
-                                p.label,
-                                style = Txt.Label,
-                                color = if (focused) Color.Black else Ember.Text,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (selected) Text("✓", style = Txt.Label, color = if (focused) Color.Black else Ember.Accent)
-                        }
-                    }
+                        },
+                        trailing = if (selected) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Accent) } else null,
+                    ) { onPick(p.packageName) }
+                }
+                item(key = "close") {
+                    Spacer(Modifier.height(6.dp))
+                    SheetOption("Close", focusKey = "player:close", autoFocus = isTv && rows.isEmpty(), onClick = onDismiss)
                 }
             }
             if (!includeBuiltIn && players.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
                 Text("To always use one, choose it in Settings → Video player.", style = Txt.Caption, color = Ember.Faint)
-            }
-            Spacer(Modifier.height(16.dp))
-            if (isTv) {
-                TvButton("Close", autoFocus = rows.isEmpty(), onClick = onDismiss)
-            } else {
-                PillButton("Close", modifier = Modifier.fillMaxWidth(), onClick = onDismiss)
             }
         }
     }

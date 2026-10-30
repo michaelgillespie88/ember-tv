@@ -474,30 +474,23 @@ fun SettingsSection(vm: AppViewModel) {
             DialogBackdropBlur()
             Column(
                 Modifier
-                    .width(480.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .width(if (isTv) 520.dp else 440.dp)
+                    .clip(RoundedCornerShape(28.dp))
                     .background(dialogPanelColor())
-                    .padding(if (isTv) 32.dp else 22.dp)
+                    .padding(if (isTv) 8.dp else 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("Sign out of Streammania?", style = Txt.Title)
-                Spacer(Modifier.height(10.dp))
-                Text("Your favourites stay on this $device. You'll need your login details to sign back in.", style = Txt.Body, color = Ember.Dim)
+                SheetTitle(
+                    "Sign out of Streammania?",
+                    subtitle = "Your favourites stay on this $device. You'll need your login details to sign back in.",
+                )
                 Spacer(Modifier.height(24.dp))
-                if (isTv) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        TvButton("Cancel", autoFocus = true, onClick = { confirmSignOut = false })
-                        TvButton("Sign out", onClick = {
-                            confirmSignOut = false
-                            vm.signOut()
-                        })
-                    }
-                } else {
-                    PillButton("Sign out", primary = true, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.width(if (isTv) 340.dp else 400.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SheetOption("Cancel", focusKey = "signout:cancel", autoFocus = isTv) { confirmSignOut = false }
+                    SheetOption("Sign out", focusKey = "signout:yes", primary = true) {
                         confirmSignOut = false
                         vm.signOut()
                     }
-                    Spacer(Modifier.height(10.dp))
-                    PillButton("Cancel", modifier = Modifier.fillMaxWidth()) { confirmSignOut = false }
                 }
             }
         }

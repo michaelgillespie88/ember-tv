@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -73,7 +74,7 @@ fun TeamPicker(vm: AppViewModel, onDone: () -> Unit) {
     val load by rememberLoad(league.code) { ScoresClient.teams(league) }
 
     Dialog(onDismissRequest = onDone, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(Ember.Bg).windowInsetsPadding(WindowInsets.safeDrawing)) {
+        Box(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color(0xFF1E1410), Ember.Bg), radius = 1600f)).windowInsetsPadding(WindowInsets.safeDrawing)) {
             Column(Modifier.fillMaxSize().padding(horizontal = if (isTv) 48.dp else 16.dp, vertical = if (isTv) 28.dp else 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (!isTv) {
@@ -287,42 +288,31 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
         done = true
     }
     val close = { vm.findingMatch = null }
+    val status = when (match.state) {
+        MatchState.LIVE -> "Live now · ${match.home.score}–${match.away.score} · ${match.status} · ${match.league.name}"
+        MatchState.UPCOMING -> "${formatDay(match.kickoff / 1000, now)} ${formatClock(match.kickoff / 1000)} · ${match.league.name}"
+        MatchState.FINISHED -> "Finished ${match.home.score}–${match.away.score} · ${match.league.name}"
+    }
 
     Dialog(onDismissRequest = close) {
         DialogBackdropBlur()
         Column(
             Modifier
-                .width(if (isTv) 620.dp else 520.dp)
-                .heightIn(max = if (isTv) 480.dp else 640.dp)
-                .clip(RoundedCornerShape(22.dp))
+                .width(if (isTv) 600.dp else 500.dp)
+                .heightIn(max = if (isTv) 520.dp else 660.dp)
+                .clip(RoundedCornerShape(28.dp))
                 .background(dialogPanelColor())
-                .padding(if (isTv) 26.dp else 20.dp)
+                .padding(if (isTv) 8.dp else 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Where's it on?", style = Txt.Caption, color = Ember.Accent)
-            Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(26.dp)) { NetImage(match.home.logo, Modifier.fillMaxSize(), ContentScale.Fit) }
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "${match.home.shortName} v ${match.away.shortName}",
-                    style = Txt.Title,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                Spacer(Modifier.width(8.dp))
-                Box(Modifier.size(26.dp)) { NetImage(match.away.logo, Modifier.fillMaxSize(), ContentScale.Fit) }
+                Box(Modifier.size(40.dp)) { NetImage(match.home.logo, Modifier.fillMaxSize(), ContentScale.Fit) }
+                Spacer(Modifier.width(22.dp))
+                Box(Modifier.size(40.dp)) { NetImage(match.away.logo, Modifier.fillMaxSize(), ContentScale.Fit) }
             }
-            Text(
-                when (match.state) {
-                    MatchState.LIVE -> "Live now · ${match.home.score}–${match.away.score} · ${match.status} · ${match.league.name}"
-                    MatchState.UPCOMING -> "${formatDay(match.kickoff / 1000, now)} ${formatClock(match.kickoff / 1000)} · ${match.league.name}"
-                    MatchState.FINISHED -> "Finished ${match.home.score}–${match.away.score} · ${match.league.name}"
-                },
-                style = Txt.Label,
-                color = Ember.Dim,
-            )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
+            SheetTitle("${match.home.shortName} v ${match.away.shortName}", eyebrow = "Where's it on?", subtitle = status)
+            Spacer(Modifier.height(18.dp))
             if (!done) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), color = Ember.Dim, strokeWidth = 2.dp)
@@ -333,7 +323,7 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
                         color = Ember.Dim,
                     )
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
             }
             if (done && hits.isEmpty()) {
                 Text(
@@ -341,57 +331,39 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
                         "nearer kick-off, as event channels are often added on the day.",
                     style = Txt.Body,
                     color = Ember.Dim,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
                 Spacer(Modifier.height(16.dp))
             }
-            if (hits.isNotEmpty()) {
-                LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    itemsIndexed(hits.take(40), key = { _, h -> h.channel.streamId }) { i, h ->
-                        FocusBox(
-                            modifier = Modifier.fillMaxWidth().height(64.dp),
-                            focusKey = "find:${h.channel.streamId}",
-                            shape = RoundedCornerShape(12.dp),
-                            focusedScale = 1.02f,
-                            color = Ember.Card,
-                            focusedColor = Color.White,
-                            autoFocus = isTv && i == 0,
-                            onClick = { vm.playFound(hits.take(40), i) },
-                        ) { focused ->
-                            Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                ChannelLogo(h.channel.icon, h.channel.name, Modifier.size(width = 54.dp, height = 36.dp))
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(h.channel.name, style = Txt.Label, color = if (focused) Color.Black else Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    val p = h.programme
-                                    if (p != null) {
-                                        Text(
-                                            "${formatClock(p.start)}  ${p.title}",
-                                            style = Txt.Caption,
-                                            color = if (focused) Color(0xFF55555C) else Ember.Faint,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
-                                }
-                                if (h.score >= 8) {
-                                    Spacer(Modifier.width(8.dp))
-                                    Box(
-                                        Modifier.clip(RoundedCornerShape(6.dp)).background(if (focused) Color(0x1F000000) else Ember.Accent.copy(alpha = 0.2f))
-                                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                                    ) {
-                                        Text("Best match", style = Txt.Caption, color = if (focused) Color.Black else Ember.Accent)
-                                    }
-                                }
+            LazyColumn(
+                Modifier.weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+            ) {
+                itemsIndexed(hits.take(40), key = { _, h -> h.channel.streamId }) { i, h ->
+                    val p = h.programme
+                    SheetOption(
+                        title = h.channel.name,
+                        subtitle = p?.let { "${formatClock(it.start)}  ${it.title}" },
+                        focusKey = "find:${h.channel.streamId}",
+                        autoFocus = isTv && i == 0,
+                        primary = i == 0,
+                        leading = { ChannelLogo(h.channel.icon, h.channel.name, Modifier.size(width = 54.dp, height = 36.dp)) },
+                        trailing = if (h.score >= 8) { dark ->
+                            Box(
+                                Modifier.clip(RoundedCornerShape(6.dp))
+                                    .background(if (dark) Color(0x1F000000) else Ember.Accent.copy(alpha = 0.2f))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Text("Best match", style = Txt.Caption, color = if (dark) Color.Black else Ember.Accent)
                             }
-                        }
-                    }
+                        } else null,
+                    ) { vm.playFound(hits.take(40), i) }
                 }
-                Spacer(Modifier.height(14.dp))
-            }
-            if (isTv) {
-                TvButton("Close", autoFocus = done && hits.isEmpty(), onClick = close)
-            } else {
-                PillButton("Close", modifier = Modifier.fillMaxWidth(), onClick = close)
+                item(key = "close") {
+                    Spacer(Modifier.height(6.dp))
+                    SheetOption("Close", focusKey = "find:close", autoFocus = isTv && done && hits.isEmpty(), onClick = close)
+                }
             }
         }
     }

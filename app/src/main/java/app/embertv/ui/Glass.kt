@@ -4,7 +4,18 @@ import android.os.Build
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
@@ -16,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
@@ -34,7 +46,11 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindowProvider
 import app.embertv.data.Category
@@ -127,22 +143,133 @@ fun Modifier.glassSurface(shape: Shape, fill: Color = Color(0x1FFFFFFF)): Modifi
 
 // ---------------- Dialogs ----------------
 
-/** Panel colour for pop-ups: translucent on phones (the screen behind is blurred), solid on TVs. */
+/**
+ * Panel colour for pop-ups. Phones get a frosted sheet (the screen behind is blurred). TVs get no
+ * panel at all: like tvOS, the screen dims right down and the pop-up floats in the middle.
+ */
 @Composable
-fun dialogPanelColor(): Color = if (LocalIsTv.current) Ember.Panel else Color(0xD91A1A1F)
+fun dialogPanelColor(): Color = if (LocalIsTv.current) Color.Transparent else Color(0xD91A1A1F)
 
-/** Blurs the screen behind a pop-up on phones running Android 12 or newer. Call inside a Dialog. */
+/**
+ * Sets up the window behind a pop-up. Call inside a Dialog.
+ * TVs: the screen dims almost to black, as on Apple TV. Phones (Android 12+): it blurs.
+ */
 @Composable
 fun DialogBackdropBlur() {
-    if (LocalIsTv.current || !blurSupported) return
+    val isTv = LocalIsTv.current
+    if (!isTv && !blurSupported) return
     val view = LocalView.current
     SideEffect {
         val window = (view.parent as? DialogWindowProvider)?.window ?: return@SideEffect
+        if (isTv) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            window.setDimAmount(0.93f)
+            return@SideEffect
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
         val attrs = window.attributes
         attrs.blurBehindRadius = 60
         window.attributes = attrs
         window.setDimAmount(0.3f)
+    }
+}
+
+// ---------------- Apple TV–style pop-up pieces ----------------
+
+/** A centred heading for a pop-up: small coloured [eyebrow], big [title], dimmer [subtitle]. */
+@Composable
+fun SheetTitle(title: String, eyebrow: String? = null, subtitle: String? = null, subtitleLines: Int = 4) {
+    val isTv = LocalIsTv.current
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        if (eyebrow != null) {
+            Text(eyebrow, style = Txt.Label, color = Ember.Accent, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(6.dp))
+        }
+        Text(
+            title,
+            style = if (isTv) Txt.Hero.copy(fontSize = 32.sp, lineHeight = 38.sp) else Txt.Title,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (!subtitle.isNullOrBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                subtitle,
+                style = Txt.Body,
+                color = Ember.Dim,
+                textAlign = TextAlign.Center,
+                maxLines = subtitleLines,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/**
+ * A choice in a pop-up, Apple TV style: a wide rounded bar that turns white and lifts when focused.
+ * With no [leading] or [subtitle] the text is centred, like tvOS alert buttons.
+ * On phones, [primary] makes it the white button.
+ */
+@Composable
+fun SheetOption(
+    title: String,
+    focusKey: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    autoFocus: Boolean = false,
+    primary: Boolean = false,
+    leading: (@Composable (focused: Boolean) -> Unit)? = null,
+    trailing: (@Composable (focused: Boolean) -> Unit)? = null,
+    onClick: () -> Unit,
+) {
+    val isTv = LocalIsTv.current
+    val white = !isTv && primary
+    FocusBox(
+        modifier = modifier.fillMaxWidth().heightIn(min = if (isTv) 58.dp else 52.dp),
+        focusKey = focusKey,
+        shape = RoundedCornerShape(if (isTv) 16.dp else 14.dp),
+        focusedScale = 1.05f,
+        // Solid on TVs: without blur, see-through buttons would show the screen behind.
+        color = if (white) Color.White else if (isTv) Color(0xFF2A2A31) else Color(0x1FFFFFFF),
+        focusedColor = Color.White,
+        autoFocus = autoFocus,
+        onClick = onClick,
+    ) { focused ->
+        val dark = focused || white
+        val centred = leading == null && subtitle == null && trailing == null
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (centred) Arrangement.Center else Arrangement.Start,
+        ) {
+            if (leading != null) {
+                leading(dark)
+                Spacer(Modifier.width(14.dp))
+            }
+            Column(if (centred) Modifier else Modifier.weight(1f), horizontalAlignment = if (centred) Alignment.CenterHorizontally else Alignment.Start) {
+                Text(
+                    title,
+                    style = Txt.Label.copy(fontSize = if (isTv) 17.sp else 16.sp, fontWeight = FontWeight.SemiBold),
+                    color = if (dark) Color.Black else Ember.Text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        style = Txt.Caption,
+                        color = if (dark) Color(0xFF55555C) else Ember.Faint,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (trailing != null) {
+                Spacer(Modifier.width(12.dp))
+                trailing(dark)
+            }
+        }
     }
 }
 

@@ -171,31 +171,23 @@ private fun ReminderDialog(vm: AppViewModel, r: app.embertv.data.Reminder) {
         DialogBackdropBlur()
         Column(
             Modifier
-                .width(500.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .width(if (isTv) 520.dp else 440.dp)
+                .clip(RoundedCornerShape(28.dp))
                 .background(dialogPanelColor())
-                .padding(if (isTv) 30.dp else 22.dp)
+                .padding(if (isTv) 8.dp else 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ChannelLogo(r.channelIcon, r.channelName, Modifier.size(width = 64.dp, height = 42.dp))
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(if (r.start > now) "Starting soon" else "Starting now", style = Txt.Label, color = Ember.Accent)
-                    Text(r.title, style = Txt.Title, maxLines = 2)
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Text("${r.channelName}  ·  ${formatClock(r.start)} – ${formatClock(r.end)}", style = Txt.Body, color = Ember.Dim)
-            Spacer(Modifier.height(22.dp))
-            if (isTv) {
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    TvButton("Watch now", icon = "▶", autoFocus = true, onClick = { vm.watchReminder(r) })
-                    TvButton("Dismiss", onClick = { vm.dismissReminder() })
-                }
-            } else {
-                PillButton("Watch now", icon = EmberIcons.Play, primary = true, modifier = Modifier.fillMaxWidth()) { vm.watchReminder(r) }
-                Spacer(Modifier.height(10.dp))
-                PillButton("Dismiss", modifier = Modifier.fillMaxWidth()) { vm.dismissReminder() }
+            ChannelLogo(r.channelIcon, r.channelName, Modifier.size(width = 96.dp, height = 64.dp))
+            Spacer(Modifier.height(16.dp))
+            SheetTitle(
+                r.title,
+                eyebrow = if (r.start > now) "Starting soon" else "Starting now",
+                subtitle = "${r.channelName}  ·  ${formatClock(r.start)} – ${formatClock(r.end)}",
+            )
+            Spacer(Modifier.height(24.dp))
+            Column(Modifier.width(if (isTv) 340.dp else 400.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SheetOption("Watch now", focusKey = "reminder:watch", autoFocus = isTv, primary = true) { vm.watchReminder(r) }
+                SheetOption("Dismiss", focusKey = "reminder:dismiss") { vm.dismissReminder() }
             }
         }
     }
@@ -210,33 +202,27 @@ private fun UpdateDialog(vm: AppViewModel) {
         DialogBackdropBlur()
         Column(
             Modifier
-                .width(480.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .width(if (isTv) 520.dp else 440.dp)
+                .clip(RoundedCornerShape(28.dp))
                 .background(dialogPanelColor())
-                .padding(if (isTv) 30.dp else 22.dp)
+                .padding(if (isTv) 8.dp else 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Update available", style = Txt.Title)
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Version ${info.versionName} is ready (you have ${app.embertv.BuildConfig.VERSION_NAME}). " +
-                    "Your login, profiles and favourites are kept.",
-                style = Txt.Body,
-                color = Ember.Dim,
+            SheetTitle(
+                "Update available",
+                eyebrow = "Streammania ${info.versionName}",
+                subtitle = "You have ${app.embertv.BuildConfig.VERSION_NAME}. Your login, profiles and favourites are kept.",
             )
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(24.dp))
             if (progress != null) {
                 Text("Downloading… ${(progress * 100).toInt()}%", style = Txt.Label)
                 Spacer(Modifier.height(10.dp))
-                ProgressBar(progress, Modifier.fillMaxWidth())
-            } else if (isTv) {
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    TvButton("Install now", icon = "↓", autoFocus = true, onClick = { vm.installUpdate() })
-                    TvButton("Later", onClick = { vm.dismissUpdate() })
-                }
+                ProgressBar(progress, Modifier.width(340.dp))
             } else {
-                PillButton("Install now", primary = true, modifier = Modifier.fillMaxWidth()) { vm.installUpdate() }
-                Spacer(Modifier.height(10.dp))
-                PillButton("Later", modifier = Modifier.fillMaxWidth()) { vm.dismissUpdate() }
+                Column(Modifier.width(if (isTv) 340.dp else 400.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SheetOption("Install now", focusKey = "update:install", autoFocus = isTv, primary = true) { vm.installUpdate() }
+                    SheetOption("Later", focusKey = "update:later") { vm.dismissUpdate() }
+                }
             }
         }
     }

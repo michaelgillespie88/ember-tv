@@ -436,55 +436,33 @@ internal fun ProgrammeDialog(vm: AppViewModel, focus: GuideFocus, channels: List
         }
     }
 
+    val eyebrow = "${channel.name}  ·  ${formatDay(p.start, now)}  ${formatClock(p.start)} – ${formatClock(p.end)}" + if (live) "  ·  LIVE" else ""
+    val note = when {
+        past && !catchup -> "This programme isn't available on catch-up."
+        !past && !live && reminded -> "You'll get a reminder when it starts, as long as Streammania is open."
+        else -> null
+    }
     Dialog(onDismissRequest = onDismiss) {
         DialogBackdropBlur()
         Column(
             Modifier
-                .width(if (isTv) 640.dp else 560.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .width(if (isTv) 600.dp else 520.dp)
+                .clip(RoundedCornerShape(28.dp))
                 .background(dialogPanelColor())
-                .padding(if (isTv) 32.dp else 22.dp)
+                .padding(if (isTv) 8.dp else 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(p.title, style = Txt.Title)
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "${channel.name}  ·  ${formatDay(p.start, now)}  ${formatClock(p.start)} – ${formatClock(p.end)}",
-                    style = Txt.Label,
-                    color = Ember.Dim,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (live) {
-                    Spacer(Modifier.width(10.dp))
-                    LiveTag()
-                }
-            }
-            if (p.description.isNotBlank()) {
-                Spacer(Modifier.height(16.dp))
-                Text(p.description, style = Txt.Body, color = Ember.Dim, maxLines = if (isTv) 6 else 8, overflow = TextOverflow.Ellipsis)
-            }
-            if (past && !catchup) {
-                Spacer(Modifier.height(12.dp))
-                Text("This programme isn't available on catch-up.", style = Txt.Caption, color = Ember.Faint)
-            }
-            if (!past && !live && reminded) {
-                Spacer(Modifier.height(12.dp))
-                Text("You'll get a reminder when it starts, as long as Streammania is open.", style = Txt.Caption, color = Ember.Accent)
+            SheetTitle(p.title, eyebrow = eyebrow, subtitle = p.description.takeIf { it.isNotBlank() }, subtitleLines = if (isTv) 4 else 6)
+            if (note != null) {
+                Spacer(Modifier.height(10.dp))
+                Text(note, style = Txt.Caption, color = if (reminded) Ember.Accent else Ember.Faint, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
             Spacer(Modifier.height(24.dp))
-            if (isTv) {
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    actions.forEachIndexed { i, a ->
-                        TvButton(a.label, icon = a.tvIcon, autoFocus = i == 0, onClick = a.run)
-                    }
-                    TvButton("Close", onClick = onDismiss)
-                }
-            } else {
+            Column(Modifier.width(if (isTv) 380.dp else 480.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 actions.forEachIndexed { i, a ->
-                    PillButton(a.label, icon = a.icon, primary = i == 0, modifier = Modifier.fillMaxWidth(), onClick = a.run)
-                    Spacer(Modifier.height(10.dp))
+                    SheetOption(a.label, focusKey = "prog:$i", autoFocus = isTv && i == 0, primary = i == 0, onClick = a.run)
                 }
-                PillButton("Close", modifier = Modifier.fillMaxWidth(), onClick = onDismiss)
+                SheetOption("Close", focusKey = "prog:close", onClick = onDismiss)
             }
         }
     }

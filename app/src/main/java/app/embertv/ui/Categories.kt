@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -84,7 +85,7 @@ fun CategoryManager(vm: AppViewModel, profile: Profile, onDone: () -> Unit) {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Ember.Bg)
+                .background(Brush.radialGradient(listOf(Color(0xFF1E1410), Ember.Bg), radius = 1600f))
                 .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
             val load by rememberLoad(repo, type) {

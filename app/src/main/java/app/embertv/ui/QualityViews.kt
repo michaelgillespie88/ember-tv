@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -74,7 +75,27 @@ fun QualityChips(qualities: List<Quality>, modifier: Modifier = Modifier) {
     }
 }
 
-/** Which quality to play: one row per version, best first. */
+/** The "4K" / "FHD" tag at the start of a quality choice. */
+@Composable
+private fun QualityTag(q: Quality, dark: Boolean) {
+    Box(
+        Modifier
+            .width(56.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (dark) Color(0x1F000000) else Color(0x1FFFFFFF))
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            q.badge.ifEmpty { "–" },
+            style = Txt.Label.copy(fontWeight = FontWeight.Bold),
+            color = if (dark) Color.Black else Ember.Text,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** Which quality to play: one choice per version, best first, Apple TV style. */
 @Composable
 fun VersionPickerDialog(vm: AppViewModel, choice: VersionChoice) {
     val isTv = LocalIsTv.current
@@ -85,79 +106,51 @@ fun VersionPickerDialog(vm: AppViewModel, choice: VersionChoice) {
             is VersionChoice.ForEpisode -> vm.playEpisodeVersion(choice.versions[i], choice.from, choice.episodes, choice.index, choice.fromStart)
         }
     }
+    val episodeLine = (choice as? VersionChoice.ForEpisode)?.let { c ->
+        val e = c.episodes[c.index]
+        "Season ${e.season} · Episode ${e.number}"
+    }
     Dialog(onDismissRequest = close) {
         DialogBackdropBlur()
         Column(
             Modifier
                 .width(if (isTv) 520.dp else 440.dp)
-                .heightIn(max = if (isTv) 480.dp else 620.dp)
-                .clip(RoundedCornerShape(22.dp))
+                .heightIn(max = if (isTv) 520.dp else 640.dp)
+                .clip(RoundedCornerShape(28.dp))
                 .background(dialogPanelColor())
-                .padding(if (isTv) 26.dp else 20.dp)
+                .padding(if (isTv) 8.dp else 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Choose quality", style = Txt.Caption, color = Ember.Accent)
-            Spacer(Modifier.height(4.dp))
-            Text(choice.title, style = Txt.Title, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (choice is VersionChoice.ForEpisode) {
-                val e = choice.episodes[choice.index]
-                Text("Season ${e.season} · Episode ${e.number}", style = Txt.Label, color = Ember.Dim)
-            }
-            Spacer(Modifier.height(16.dp))
-            LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SheetTitle(choice.title, eyebrow = "Choose quality", subtitle = episodeLine)
+            Spacer(Modifier.height(22.dp))
+            LazyColumn(
+                Modifier.weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+            ) {
                 itemsIndexed(choice.qualities) { i, q ->
                     val name = choice.names[i]
-                    val extras = Versions.extras(name)
-                    FocusBox(
-                        modifier = Modifier.fillMaxWidth().height(64.dp),
+                    SheetOption(
+                        title = (listOf(q.title) + Versions.extras(name)).joinToString(" · "),
+                        subtitle = name,
                         focusKey = "version:$i",
-                        shape = RoundedCornerShape(14.dp),
-                        focusedScale = 1.03f,
-                        color = Ember.Card,
-                        focusedColor = Color.White,
                         autoFocus = isTv && i == 0,
-                        onClick = { pick(i) },
-                    ) { focused ->
-                        Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier
-                                    .width(52.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (focused) Color(0x1F000000) else Color(0x1FFFFFFF))
-                                    .padding(vertical = 6.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    q.badge.ifEmpty { "–" },
-                                    style = Txt.Label.copy(fontWeight = FontWeight.Bold),
-                                    color = if (focused) Color.Black else Ember.Text,
-                                    textAlign = TextAlign.Center,
-                                )
-                            }
-                            Spacer(Modifier.width(14.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    (listOf(q.title) + extras).joinToString(" · "),
-                                    style = Txt.Label,
-                                    color = if (focused) Color.Black else Ember.Text,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    name,
-                                    style = Txt.Caption,
-                                    color = if (focused) Color(0xFF55555C) else Ember.Faint,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    }
+                        primary = i == 0,
+                        leading = { dark -> QualityTag(q, dark) },
+                    ) { pick(i) }
+                }
+                item {
+                    Spacer(Modifier.height(6.dp))
+                    SheetOption("Cancel", focusKey = "version:cancel", onClick = close)
                 }
             }
             Spacer(Modifier.height(14.dp))
-            Text("To skip this question, pick a quality in Settings → Quality to play.", style = Txt.Caption, color = Ember.Faint)
-            Spacer(Modifier.height(14.dp))
-            if (isTv) TvButton("Cancel", onClick = close) else PillButton("Cancel", modifier = Modifier.fillMaxWidth(), onClick = close)
+            Text(
+                "To skip this question, pick a quality in Settings → Quality to play.",
+                style = Txt.Caption,
+                color = Ember.Faint,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
