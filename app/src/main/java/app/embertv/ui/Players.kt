@@ -875,7 +875,55 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         val nowMs = System.currentTimeMillis()
         @Suppress("UNUSED_EXPRESSION") tsTick
         val behind = if (paused || shiftStart != null) (nowMs - viewingWall()).coerceAtLeast(0L) else 0L
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+        // Bottom of the screen: the channel info (or the paused bar), then the buttons after OK on TVs.
+        // One smooth shade behind all of it, so there's no hard line where one part meets the next.
+        val bottomShown = !listOpen && (paused || overlayVisible || controlsOpen)
+        val shade by androidx.compose.animation.core.animateFloatAsState(if (bottomShown) 1f else 0f, label = "shade")
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        0.35f to Color(0x8C000000),
+                        1f to Color(0xF2000000),
+                    ),
+                    alpha = shade,
+                )
+        ) {
+            if (paused && !listOpen) {
+                TimeshiftPanel(
+                    behindMs = behind,
+                    // The bar covers the last half hour, or further when rewound further.
+                    keptMs = maxOf(30 * 60_000L, behind + 5 * 60_000L),
+                    canRewind = canRewind,
+                    isTv = isTv,
+                    onBack = { seekBy(-10_000) },
+                    onPlay = { togglePause() },
+                    onForward = { seekBy(30_000) },
+                    onLive = { goLive() },
+                    modifier = Modifier,
+                )
+            } else {
+                AnimatedVisibility(
+                    visible = (overlayVisible || controlsOpen) && !listOpen,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    LiveInfoBar(
+                        vm = vm,
+                        channel = channel,
+                        stats = videoStats,
+                        isFavourite = vm.isFavourite(ContentType.LIVE, channel.streamId),
+                        format = if (alternate) (if (vm.streamFormat == "m3u8") "TS" else "HLS") else (if (vm.streamFormat == "m3u8") "HLS" else "TS"),
+                        isTv = isTv,
+                        // The remote hints make way for the buttons.
+                        showHints = !controlsOpen,
+                        tight = isTv && controlsOpen,
+                    )
+                }
+            }
             if (isTv && controlsOpen && !listOpen) {
                 LiveControls(
                     paused = paused,
@@ -905,35 +953,6 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                         optionsOpen = true
                     },
                 )
-            }
-            if (paused && !listOpen) {
-                TimeshiftPanel(
-                    behindMs = behind,
-                    // The bar covers the last half hour, or further when rewound further.
-                    keptMs = maxOf(30 * 60_000L, behind + 5 * 60_000L),
-                    canRewind = canRewind,
-                    isTv = isTv,
-                    onBack = { seekBy(-10_000) },
-                    onPlay = { togglePause() },
-                    onForward = { seekBy(30_000) },
-                    onLive = { goLive() },
-                    modifier = Modifier,
-                )
-            } else {
-                AnimatedVisibility(
-                    visible = (overlayVisible || controlsOpen) && !listOpen,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
-                ) {
-                    LiveInfoBar(
-                        vm = vm,
-                        channel = channel,
-                        stats = videoStats,
-                        isFavourite = vm.isFavourite(ContentType.LIVE, channel.streamId),
-                        format = if (alternate) (if (vm.streamFormat == "m3u8") "TS" else "HLS") else (if (vm.streamFormat == "m3u8") "HLS" else "TS"),
-                        isTv = isTv,
-                    )
-                }
             }
         }
         // Watching behind live after pausing or rewinding.
@@ -1085,9 +1104,8 @@ private fun TimeshiftPanel(
     Column(
         modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000))))
             .windowInsetsPadding(WindowInsets.displayCutout)
-            .padding(start = if (isTv) 56.dp else 20.dp, end = if (isTv) 56.dp else 20.dp, top = 40.dp, bottom = if (isTv) 34.dp else 28.dp),
+            .padding(start = if (isTv) 56.dp else 20.dp, end = if (isTv) 56.dp else 20.dp, top = if (isTv) 70.dp else 40.dp, bottom = if (isTv) 34.dp else 28.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(EmberIcons.Pause, null, tint = Ember.Text, modifier = Modifier.size(if (isTv) 30.dp else 26.dp))
@@ -1163,8 +1181,7 @@ private fun LiveControls(
     Row(
         Modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0x99000000))))
-            .padding(start = 40.dp, end = 40.dp, top = 28.dp, bottom = 6.dp)
+            .padding(start = 56.dp, end = 56.dp, top = 22.dp, bottom = 34.dp)
             .onPreviewKeyEvent {
                 onActivity()
                 false
@@ -1208,7 +1225,16 @@ private fun BehindLivePill(behindMs: Long, isTv: Boolean, modifier: Modifier, on
 }
 
 @Composable
-private fun LiveInfoBar(vm: AppViewModel, channel: Channel, stats: VideoStats?, isFavourite: Boolean, format: String, isTv: Boolean) {
+private fun LiveInfoBar(
+    vm: AppViewModel,
+    channel: Channel,
+    stats: VideoStats?,
+    isFavourite: Boolean,
+    format: String,
+    isTv: Boolean,
+    showHints: Boolean = true,
+    tight: Boolean = false,
+) {
     val repo = vm.repo ?: return
     val now = LocalNow.current
     val programmes = rememberProgrammes(repo, channel.streamId)
@@ -1218,17 +1244,18 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, stats: VideoStats?, 
     Box(
         Modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000))))
             .windowInsetsPadding(WindowInsets.displayCutout)
             .padding(
                 start = if (isTv) 56.dp else 24.dp,
                 end = if (isTv) 56.dp else 24.dp,
-                top = if (isTv) 60.dp else 36.dp,
-                bottom = if (isTv) 36.dp else 16.dp,
+                top = if (isTv) 70.dp else 36.dp,
+                bottom = if (tight) 0.dp else if (isTv) 36.dp else 16.dp,
             )
     ) {
         Column {
-            if (isTv) {
+            if (isTv && !showHints) {
+                // Nothing: the buttons below say what OK does now.
+            } else if (isTv) {
                 RemoteHints(
                     listOf(
                         Hint("OK", "Controls"),
@@ -1242,7 +1269,7 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, stats: VideoStats?, 
             } else {
                 Text("Swipe up or down to change channel", style = Txt.Caption, color = Ember.Faint)
             }
-            Spacer(Modifier.height(if (isTv) 14.dp else 10.dp))
+            if (showHints || !isTv) Spacer(Modifier.height(if (isTv) 14.dp else 10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ChannelLogo(
                     channel.icon,
@@ -1272,11 +1299,10 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, stats: VideoStats?, 
                             Spacer(Modifier.width(12.dp))
                             Box(
                                 Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0x33FFFFFF))
+                                    .glassSurface(RoundedCornerShape(7.dp), Color(0x1FFFFFFF))
                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
-                                Text(label, style = Txt.Caption, color = Ember.Text, maxLines = 1)
+                                Text(label, style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Text, maxLines = 1)
                             }
                         }
                     }
