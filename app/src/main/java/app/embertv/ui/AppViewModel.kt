@@ -642,6 +642,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         lastWatched = prefs.lastWatched
         homeOrder = prefs.homeOrder
         homeHidden = prefs.homeHidden
+        Ember.backdrop = BACKDROPS.firstOrNull { it.id == prefs.backdrop } ?: BACKDROPS[0]
         homeExtras = null
         applyCategoryFilter()
         reloadToken++
@@ -1251,6 +1252,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val next = if (id in homeHidden) homeHidden - id else homeHidden + id
         homeHidden = next
         prefs.homeHidden = next
+    }
+
+    /** Changes this profile's background colours. */
+    fun chooseBackdrop(b: AppBackground) {
+        Ember.backdrop = b
+        prefs.backdrop = b.id
     }
 
     fun resetHomeRows() {

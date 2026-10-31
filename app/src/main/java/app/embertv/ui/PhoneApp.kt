@@ -132,7 +132,7 @@ fun PhoneHome(vm: AppViewModel) {
                 .fillMaxSize()
                 .backdropSource(backdrop)
                 .background(Ember.Bg)
-                .background(Brush.verticalGradient(listOf(Color(0xFF1C130E), Color.Transparent), endY = 900f))
+                .background(Brush.verticalGradient(listOf(Ember.Glow, Color.Transparent), endY = 900f))
         ) {
             CompositionLocalProvider(LocalContentPadding provides contentPadding, LocalHeaderChips provides chips) {
                 when (tab) {
@@ -337,7 +337,7 @@ fun PhoneLoginScreen(vm: AppViewModel) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Brush.radialGradient(listOf(Color(0xFF2A1408), Ember.Bg), radius = 1200f))
+            .background(Brush.radialGradient(listOf(Ember.GlowStrong, Ember.Bg), radius = 1200f))
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
         Column(

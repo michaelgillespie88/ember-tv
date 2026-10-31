@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.heightIn
@@ -396,6 +397,7 @@ fun SettingsSection(vm: AppViewModel) {
     var managingChannels by remember { mutableStateOf(false) }
     var pickingLeagues by remember { mutableStateOf(false) }
     var arrangingHome by remember { mutableStateOf(false) }
+    var pickingBackdrop by remember { mutableStateOf(false) }
     var choosingAudio by remember { mutableStateOf(false) }
     var pickingTeams by remember { mutableStateOf(false) }
     var choosingPlayer by remember { mutableStateOf(false) }
@@ -470,6 +472,12 @@ fun SettingsSection(vm: AppViewModel) {
                     "Choose which rows Home shows, and their order",
                     focusKey = "set:arrange",
                 ) { arrangingHome = true }
+                SettingRow(
+                    "Background",
+                    Ember.backdrop.name,
+                    "The colour behind everything, and the glow at the top of each page",
+                    focusKey = "set:backdrop",
+                ) { pickingBackdrop = true }
             }
             val p = vm.profile
             if (!kids && p != null) {
@@ -692,6 +700,9 @@ fun SettingsSection(vm: AppViewModel) {
     if (pickingLeagues) {
         LeaguePicker(vm) { pickingLeagues = false }
     }
+    if (pickingBackdrop) {
+        BackdropPicker(vm) { pickingBackdrop = false }
+    }
     if (arrangingHome) {
         ArrangeHomeDialog(vm) { arrangingHome = false }
     }
@@ -884,4 +895,55 @@ private fun AudioSubtitlesSheet(vm: AppViewModel, onDone: () -> Unit) {
             }
         }
     }
+}
+
+/** Settings → Background: a swatch for each look. Choosing one changes the app straight away. */
+@Composable
+private fun BackdropPicker(vm: AppViewModel, onDone: () -> Unit) {
+    val isTv = LocalIsTv.current
+    Dialog(onDismissRequest = onDone) {
+        DialogBackdropBlur()
+        Column(
+            Modifier
+                .widthIn(max = 460.dp)
+                .fillMaxWidth()
+                .heightIn(max = if (isTv) 520.dp else 640.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(dialogPanelColor())
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            SheetTitle("Background", eyebrow = vm.profile?.name, subtitle = "Pick a colour. You'll see it change behind this")
+            Spacer(Modifier.height(16.dp))
+            Column(
+                Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for (b in BACKDROPS) {
+                    val chosen = Ember.backdrop.id == b.id
+                    SheetOption(
+                        b.name,
+                        focusKey = "backdrop:${b.id}",
+                        autoFocus = chosen,
+                        leading = { _ -> BackdropSwatch(b) },
+                        trailing = { dark -> if (chosen) CheckMark(dark) },
+                    ) { vm.chooseBackdrop(b) }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            GlassButton("Done", EmberIcons.Check, onClick = onDone)
+        }
+    }
+}
+
+/** A little round preview of a background: its glow fading into its base colour. */
+@Composable
+private fun BackdropSwatch(b: AppBackground) {
+    Box(
+        Modifier
+            .size(34.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(b.swatch, b.bg)))
+            .border(0.8.dp, Color(0x40FFFFFF), androidx.compose.foundation.shape.CircleShape)
+    )
 }

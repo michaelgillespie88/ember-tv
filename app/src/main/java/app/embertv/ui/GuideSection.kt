@@ -144,7 +144,7 @@ private fun GuideGrid(
     Box(
         modifier
             .background(Ember.Bg)
-            .background(Brush.verticalGradient(listOf(Color(0xFF1C130E), Color.Transparent), endY = 520f))
+            .background(Brush.verticalGradient(listOf(Ember.Glow, Color.Transparent), endY = 520f))
     ) {
         Column(Modifier.fillMaxSize().padding(start = 40.dp, end = 40.dp, top = if (vm.guideFullScreen) 18.dp else 4.dp)) {
             // ---- What's highlighted, with the channel playing live beside it ----

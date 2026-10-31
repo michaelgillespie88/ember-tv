@@ -85,7 +85,7 @@ fun CategoryManager(vm: AppViewModel, profile: Profile, onDone: () -> Unit) {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Brush.radialGradient(listOf(Color(0xFF1E1410), Ember.Bg), radius = 1600f))
+                .background(Brush.radialGradient(listOf(Ember.GlowSoft, Ember.Bg), radius = 1600f))
                 .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
             val load by rememberLoad(repo, type) {

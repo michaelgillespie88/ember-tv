@@ -81,7 +81,7 @@ fun LoginScreen(vm: AppViewModel) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Brush.radialGradient(listOf(Color(0xFF2A1408), Ember.Bg), radius = 1400f))
+            .background(Brush.radialGradient(listOf(Ember.GlowStrong, Ember.Bg), radius = 1400f))
     ) {
         Row(
             Modifier.fillMaxSize().padding(horizontal = 80.dp, vertical = 48.dp),

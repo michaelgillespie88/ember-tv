@@ -164,7 +164,7 @@ class Prefs(context: Context) {
         val e = sp.edit()
         for (key in sp.all.keys) {
             val belongs = if (id == MAIN_PROFILE) {
-                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams", "watched", "hidden_channels", "sport_leagues", "sport_others", "series_seen", "last_watched", "home_order", "home_hidden") ||
+                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams", "watched", "hidden_channels", "sport_leagues", "sport_others", "series_seen", "last_watched", "home_order", "home_hidden", "backdrop") ||
                     key.startsWith("pos_") || key.startsWith("last_ep_")
             } else {
                 key.startsWith("p_${id}_")
@@ -513,6 +513,13 @@ class Prefs(context: Context) {
         }
         set(value) {
             sp.edit().putString(pk("home_order"), JSONArray().apply { value.forEach { put(it) } }.toString()).apply()
+        }
+
+    /** This profile's background colours (an id from the Background list). */
+    var backdrop: String
+        get() = sp.getString(pk("backdrop"), "warm") ?: "warm"
+        set(value) {
+            sp.edit().putString(pk("backdrop"), value).apply()
         }
 
     /** Home rows this profile has turned off. */

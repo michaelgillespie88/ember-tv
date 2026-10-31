@@ -103,7 +103,7 @@ fun HomeScreen(vm: AppViewModel) {
         Modifier
             .fillMaxSize()
             .background(Ember.Bg)
-            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color(0xFF1C130E), androidx.compose.ui.graphics.Color.Transparent), endY = 620f))
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Ember.Glow, androidx.compose.ui.graphics.Color.Transparent), endY = 620f))
     ) {
         AnimatedVisibility(visible = !hideBar, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
         Row(

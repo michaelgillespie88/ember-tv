@@ -6,6 +6,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -14,8 +16,32 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import app.embertv.R
 
+/**
+ * A background for the whole app: the dark base colour, and the soft glow at the top of each page
+ * that shows through the tinted glass. [glowSoft] and [glowStrong] are for the full-screen pages
+ * (editors, sign-in) that glow from the middle.
+ */
+class AppBackground(val id: String, val name: String, val bg: Color, val glow: Color, val glowSoft: Color, val glowStrong: Color, val swatch: Color)
+
+val BACKDROPS = listOf(
+    AppBackground("warm", "Ember", Color(0xFF09090C), Color(0xFF1C130E), Color(0xFF1E1410), Color(0xFF2A1408), Color(0xFF6A3A1E)),
+    AppBackground("graphite", "Graphite", Color(0xFF0A0A0C), Color(0xFF18181C), Color(0xFF1A1A1E), Color(0xFF24242A), Color(0xFF4A4A52)),
+    AppBackground("midnight", "Midnight", Color(0xFF06080E), Color(0xFF0E1628), Color(0xFF10192D), Color(0xFF14223F), Color(0xFF24407A)),
+    AppBackground("ocean", "Ocean", Color(0xFF050B0C), Color(0xFF0B1E22), Color(0xFF0D2226), Color(0xFF0F2E33), Color(0xFF1C5A64)),
+    AppBackground("forest", "Forest", Color(0xFF060A08), Color(0xFF0F1D14), Color(0xFF112117), Color(0xFF162D1F), Color(0xFF285A38)),
+    AppBackground("plum", "Plum", Color(0xFF09070C), Color(0xFF1B1022), Color(0xFF1F1227), Color(0xFF2B1736), Color(0xFF57305F)),
+    AppBackground("rose", "Rose", Color(0xFF0B0709), Color(0xFF221016), Color(0xFF26121A), Color(0xFF341722), Color(0xFF6E3044)),
+    AppBackground("black", "Pure black", Color(0xFF000000), Color(0xFF000000), Color(0xFF0A0A0A), Color(0xFF111111), Color(0xFF1A1A1A)),
+)
+
 object Ember {
-    val Bg = Color(0xFF09090C)
+    /** The chosen background (Settings → Background). Reading it from a screen redraws it when it changes. */
+    var backdrop by androidx.compose.runtime.mutableStateOf(BACKDROPS[0])
+
+    val Bg: Color get() = backdrop.bg
+    val Glow: Color get() = backdrop.glow
+    val GlowSoft: Color get() = backdrop.glowSoft
+    val GlowStrong: Color get() = backdrop.glowStrong
     // Tinted glass, Apple TV style: light lets the warm background glow through.
     val Panel = Color(0x12FFFFFF)
     val Card = Color(0x17FFFFFF)
