@@ -107,11 +107,12 @@ fun HomeScreen(vm: AppViewModel) {
     ) {
         AnimatedVisibility(visible = !hideBar, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 22.dp, bottom = 12.dp),
+            // Kept snug so every tab fits on a TV: when it was too wide the Settings icon got squeezed out.
+            Modifier.fillMaxWidth().padding(start = 40.dp, end = 40.dp, top = 22.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Wordmark()
-            Spacer(Modifier.width(24.dp))
+            Spacer(Modifier.width(12.dp))
             Row(
                 Modifier.weight(1f),
                 horizontalArrangement = Arrangement.Center,
@@ -134,9 +135,9 @@ fun HomeScreen(vm: AppViewModel) {
                     )
                 }
             }
-            Spacer(Modifier.width(20.dp))
+            Spacer(Modifier.width(10.dp))
             ProfileButton(vm)
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(12.dp))
             Text(formatClock(LocalNow.current), style = Txt.Label, color = Ember.Dim)
         }
         }
@@ -166,7 +167,7 @@ private fun TabItem(
     var focused by remember { mutableStateOf(false) }
     Box(
         Modifier
-            .padding(horizontal = 2.dp)
+            .padding(horizontal = 1.dp)
             .height(40.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(
@@ -184,7 +185,7 @@ private fun TabItem(
                 }
             }
             .tvClickable(onClick = onClick)
-            .padding(horizontal = if (tab.icon != null) 11.dp else 14.dp),
+            .padding(horizontal = if (tab.icon != null) 10.dp else 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         val color = when {
@@ -193,7 +194,8 @@ private fun TabItem(
             else -> Ember.Dim
         }
         if (tab.icon != null) {
-            Icon(tab.icon, contentDescription = tab.title, tint = color, modifier = Modifier.size(20.dp))
+            // Search and Settings are thin line icons: drawn bright and a little bigger so they stand out.
+            Icon(tab.icon, contentDescription = tab.title, tint = if (focused) Color.Black else Ember.Text, modifier = Modifier.size(22.dp))
         } else {
             Text(tab.title, style = Txt.Label, color = color)
         }
