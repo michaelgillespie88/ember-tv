@@ -853,16 +853,10 @@ internal fun ProgrammeDialog(vm: AppViewModel, focus: GuideFocus, channels: List
     }
 }
 
-/** Where the playing channel sits while the guide is open over it (top right, like TiviMate). */
-internal val PLAYER_GUIDE_VIDEO_WIDTH = 236.dp
-internal val PLAYER_GUIDE_VIDEO_HEIGHT = 133.dp
-internal val PLAYER_GUIDE_TOP = 18.dp
-internal val PLAYER_GUIDE_SIDE = 40.dp
-
 /**
- * The full guide over live TV, like TiviMate's: the channel you're watching keeps playing in the
- * top-right corner (the player draws it there), the highlighted programme's details sit beside it,
- * and the grid of channels and times fills the rest. OK on something airing switches to it.
+ * The guide over live TV: the channel you're watching keeps playing full screen, and the guide
+ * floats over the lower part of it in a frosted panel, with the highlighted programme's details at
+ * the top of the panel. OK on something airing switches to it.
  */
 @Composable
 fun PlayerGuide(vm: AppViewModel, channels: List<Channel>, current: Int, onZap: (Int) -> Unit, onClose: () -> Unit) {
@@ -876,19 +870,24 @@ fun PlayerGuide(vm: AppViewModel, channels: List<Channel>, current: Int, onZap: 
     val state = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = (current - 4).coerceAtLeast(0))
     BackHandler(enabled = details == null) { if (step != 0) step = 0 else onClose() }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Ember.Bg)
-            .background(Brush.verticalGradient(listOf(Color(0xFF1C130E), Color.Transparent), endY = 520f))
-    ) {
-        Column(Modifier.fillMaxSize().padding(start = PLAYER_GUIDE_SIDE, end = PLAYER_GUIDE_SIDE, top = PLAYER_GUIDE_TOP)) {
-            Row(Modifier.fillMaxWidth().height(PLAYER_GUIDE_VIDEO_HEIGHT + 8.dp)) {
-                Box(Modifier.weight(1f).fillMaxHeight()) { GuideInfo(focus, now) }
-                // The live picture goes here.
-                Spacer(Modifier.width(PLAYER_GUIDE_VIDEO_WIDTH + 24.dp))
-            }
-            Spacer(Modifier.height(6.dp))
+    Box(Modifier.fillMaxSize()) {
+        // A soft shade towards the bottom so the panel stands out; the picture stays clear above it.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color(0x26000000), 1f to Color(0xB3000000)))
+        )
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.68f)
+                .padding(start = 28.dp, end = 28.dp, bottom = 22.dp)
+                .glassSurface(RoundedCornerShape(26.dp), Color(0xD9101014))
+                .padding(start = 20.dp, end = 20.dp, top = 14.dp)
+        ) {
+            Box(Modifier.fillMaxWidth().height(104.dp).clip(RoundedCornerShape(0.dp))) { GuideInfo(focus, now) }
+            Spacer(Modifier.height(4.dp))
             BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
                 val gridWidth = maxWidth - CHANNEL_COLUMN
                 val dpPerMinute = gridWidth / WINDOW_MINUTES

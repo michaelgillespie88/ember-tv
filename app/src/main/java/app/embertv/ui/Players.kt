@@ -821,8 +821,12 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 )
             }
     ) {
-        // The guide fills the screen with this channel still playing in its top-right corner.
-        if (guideOpen && !vm.inPip) {
+        // The channel keeps playing full screen, even with the guide open over it.
+        VideoSurface(exo, Modifier.fillMaxSize(), pictureMode = if (vm.inPip) 0 else vm.pictureMode)
+        // In picture-in-picture the window is tiny: just the picture.
+        if (vm.inPip) return@Box
+        // The guide floats over the lower part of the picture in a frosted panel.
+        if (guideOpen) {
             PlayerGuide(
                 vm = vm,
                 channels = channels,
@@ -833,23 +837,8 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 },
                 onClose = { guideOpen = false },
             )
+            return@Box
         }
-        VideoSurface(
-            exo,
-            if (guideOpen && !vm.inPip) {
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = PLAYER_GUIDE_TOP, end = PLAYER_GUIDE_SIDE)
-                    .size(PLAYER_GUIDE_VIDEO_WIDTH, PLAYER_GUIDE_VIDEO_HEIGHT)
-            } else {
-                Modifier.fillMaxSize()
-            },
-            // The small guide picture always shows the whole frame.
-            pictureMode = if (guideOpen || vm.inPip) 0 else vm.pictureMode,
-        )
-        // In picture-in-picture the window is tiny: just the picture.
-        if (vm.inPip) return@Box
-        if (guideOpen) return@Box
 
         val err = error
         if (err != null) {
@@ -1351,64 +1340,93 @@ private fun BoxScope.ZapList(
     onPick: (Int) -> Unit,
 ) {
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (current - 3).coerceAtLeast(0))
-    Box(
+    val isTv = LocalIsTv.current
+    // The same floating frosted panel as scores and options, on the left, over the picture.
+    Column(
         Modifier
             .align(Alignment.CenterStart)
-            .width(430.dp)
+            .windowInsetsPadding(WindowInsets.displayCutout)
             .fillMaxHeight()
-            .background(Brush.horizontalGradient(listOf(Color(0xF20B0B0E), Color(0xCC0B0B0E))))
+            .padding(if (isTv) 28.dp else 12.dp)
+            .width(if (isTv) 420.dp else 340.dp)
+            .glassSurface(RoundedCornerShape(26.dp), Color(0xE0141418))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }
+            .padding(top = 20.dp)
     ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Channels", style = Txt.Headline.copy(fontWeight = FontWeight.Bold))
+                Text("${channels.size} in this list", style = Txt.Caption, color = Ember.Faint)
+            }
+            if (!isTv) IconCircleButton(EmberIcons.Close, "Close", size = 38.dp, background = Color(0x1AFFFFFF), glass = true, onClick = onClose)
+        }
+        Spacer(Modifier.height(10.dp))
         LazyColumn(
             state = state,
-            contentPadding = PaddingValues(vertical = 32.dp, horizontal = 24.dp),
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.weight(1f),
         ) {
-            item(key = "zap-actions") {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 10.dp)) {
-                    if (hasPrevious) ZapAction(EmberIcons.Restart, "Previous channel", "", onClick = onPrevious)
-                    CatchupActions(vm, channels[current], onClose)
-                    ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
-                        onClose()
-                        vm.openElsewhere(Screen.PlayLive(channels, current))
+            if (hasPrevious) {
+                item(key = "zap-previous") {
+                    Box(Modifier.padding(bottom = 6.dp)) {
+                        ZapAction(EmberIcons.Restart, "Previous channel", "", onClick = onPrevious)
                     }
-                    ZapAction(EmberIcons.MultiView, "Multi-view", "") {
-                        onClose()
-                        vm.push(Screen.MultiView(listOf(channels[current]), channels))
-                    }
-                    if (vm.pinnedMatch != null) ZapAction(EmberIcons.Football, "Remove pinned score", "") { vm.unpinMatch() }
-                    val left = vm.sleepMinutesLeft()
-                    ZapAction(EmberIcons.Moon, "Sleep timer", if (left == null) "Off" else "$left min") { vm.cycleSleepTimer() }
-                    ZapAction(EmberIcons.Subtitles, "Subtitles", if (vm.subtitleMode == "off") "Off" else "English") { vm.cycleSubtitles() }
                 }
             }
             itemsIndexed(channels, key = { _, c -> c.streamId }) { i, c ->
-                FocusBox(
-                    modifier = Modifier.fillMaxWidth().height(58.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    focusedScale = 1.03f,
-                    color = if (i == current) Color(0x26FFFFFF) else Color.Transparent,
-                    focusedColor = Color.White,
-                    autoFocus = i == current,
-                    onClick = { onPick(i) },
-                ) { focused ->
-                    Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            if (c.num > 0) "${c.num}" else "",
-                            style = Txt.Caption,
-                            color = if (focused) Color(0xFF55555C) else Ember.Faint,
-                            modifier = Modifier.width(40.dp),
-                        )
-                        ChannelLogo(c.icon, c.name, Modifier.size(width = 54.dp, height = 36.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            c.name,
-                            style = Txt.Label,
-                            color = if (focused) Color.Black else Ember.Text,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                ZapRow(vm, c, playing = i == current, onClick = { onPick(i) })
+            }
+        }
+        if (isTv) {
+            RemoteHints(
+                listOf(Hint("OK", "Watch"), Hint("BACK", "Close")),
+                Modifier.padding(start = 20.dp, top = 6.dp, bottom = 18.dp),
+            )
+        }
+    }
+}
+
+/** A channel in the list over live TV: number, logo, name and what's on now, white when selected. */
+@Composable
+private fun ZapRow(vm: AppViewModel, c: Channel, playing: Boolean, onClick: () -> Unit) {
+    val repo = vm.repo
+    val now = LocalNow.current
+    val onNow = if (repo != null) rememberProgrammes(repo, c.streamId)?.firstOrNull { it.isLive(now) } else null
+    FocusBox(
+        modifier = Modifier.fillMaxWidth().height(64.dp),
+        shape = RoundedCornerShape(16.dp),
+        focusedScale = 1.03f,
+        color = if (playing) Color(0x26FFFFFF) else Color.Transparent,
+        focusedColor = Color.White,
+        autoFocus = playing,
+        onClick = onClick,
+    ) { focused ->
+        Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (c.num > 0) "${c.num}" else "",
+                style = Txt.Caption,
+                color = if (focused) Color(0xFF55555C) else Ember.Faint,
+                maxLines = 1,
+                modifier = Modifier.width(44.dp),
+            )
+            ChannelLogo(c.icon, c.name, Modifier.size(width = 54.dp, height = 36.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(c.name, style = Txt.Label, color = if (focused) Color.Black else Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (onNow != null) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(onNow.title, style = Txt.Caption, color = if (focused) Color(0xFF55555C) else Ember.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(4.dp))
+                    Box(Modifier.fillMaxWidth(0.85f).height(2.dp).clip(RoundedCornerShape(1.dp)).background(if (focused) Color(0x22000000) else Color(0x26FFFFFF))) {
+                        Box(Modifier.fillMaxHeight().fillMaxWidth(onNow.progress(now).coerceIn(0f, 1f)).background(if (focused) Color.Black else Ember.Text))
                     }
                 }
+            }
+            if (playing) {
+                Spacer(Modifier.width(8.dp))
+                // The channel you're watching.
+                Box(Modifier.size(8.dp).clip(CircleShape).background(if (focused) Color.Black else Ember.Live))
             }
         }
     }
