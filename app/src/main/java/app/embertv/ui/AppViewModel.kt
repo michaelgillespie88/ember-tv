@@ -1727,9 +1727,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var sportOthers by mutableStateOf(prefs.sportOthers)
         private set
 
-    fun setSportLeague(code: String, on: Boolean) = setSportLeagues(if (on) sportLeagues + code else sportLeagues - code)
+    fun setSportLeague(code: String, on: Boolean) = chooseSportLeagues(if (on) sportLeagues + code else sportLeagues - code)
 
-    fun setSportLeagues(codes: Set<String>) {
+    fun chooseSportLeagues(codes: Set<String>) {
         if (codes == sportLeagues) return
         sportLeagues = codes
         prefs.sportLeagues = codes

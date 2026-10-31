@@ -822,7 +822,7 @@ private fun LeaguePicker(vm: AppViewModel, onDone: () -> Unit) {
                         subtitle = "Premier League, the EFL and the cups",
                         autoFocus = isTv,
                     ) {
-                        vm.setSportLeagues(app.embertv.data.DEFAULT_SPORT_LEAGUES)
+                        vm.chooseSportLeagues(app.embertv.data.DEFAULT_SPORT_LEAGUES)
                     }
                 }
                 items(app.embertv.data.LEAGUES, key = { it.code }) { l ->
