@@ -395,6 +395,7 @@ fun SettingsSection(vm: AppViewModel) {
     var managingCategories by remember { mutableStateOf(false) }
     var managingChannels by remember { mutableStateOf(false) }
     var pickingLeagues by remember { mutableStateOf(false) }
+    var arrangingHome by remember { mutableStateOf(false) }
     var choosingAudio by remember { mutableStateOf(false) }
     var pickingTeams by remember { mutableStateOf(false) }
     var choosingPlayer by remember { mutableStateOf(false) }
@@ -462,6 +463,13 @@ fun SettingsSection(vm: AppViewModel) {
                     "Shown first in Live Sport Now" + if (vm.sportOthers) ", then other leagues" else " (others hidden)",
                     focusKey = "set:leagues",
                 ) { pickingLeagues = true }
+                val shownRows = HOME_ROWS.count { it.first !in vm.homeHidden }
+                SettingRow(
+                    "Arrange Home",
+                    if (shownRows == HOME_ROWS.size) "All rows" else "$shownRows of ${HOME_ROWS.size} rows",
+                    "Choose which rows Home shows, and their order",
+                    focusKey = "set:arrange",
+                ) { arrangingHome = true }
             }
             val p = vm.profile
             if (!kids && p != null) {
@@ -683,6 +691,9 @@ fun SettingsSection(vm: AppViewModel) {
     }
     if (pickingLeagues) {
         LeaguePicker(vm) { pickingLeagues = false }
+    }
+    if (arrangingHome) {
+        ArrangeHomeDialog(vm) { arrangingHome = false }
     }
     if (managingChannels) {
         ChannelManager(vm) { managingChannels = false }

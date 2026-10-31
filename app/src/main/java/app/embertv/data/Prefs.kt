@@ -164,7 +164,7 @@ class Prefs(context: Context) {
         val e = sp.edit()
         for (key in sp.all.keys) {
             val belongs = if (id == MAIN_PROFILE) {
-                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams", "watched", "hidden_channels", "sport_leagues", "sport_others") ||
+                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams", "watched", "hidden_channels", "sport_leagues", "sport_others", "series_seen", "last_watched", "home_order", "home_hidden") ||
                     key.startsWith("pos_") || key.startsWith("last_ep_")
             } else {
                 key.startsWith("p_${id}_")
@@ -475,6 +475,52 @@ class Prefs(context: Context) {
     fun setLastEpisode(seriesId: Int, episodeId: Int) {
         sp.edit().putInt(pk("last_ep_$seriesId"), episodeId).apply()
     }
+
+    /** When this profile last watched each series (epoch ms), for New Episodes on Home. */
+    var seriesSeen: Map<Int, Long>
+        get() {
+            val raw = sp.getString(pk("series_seen"), null) ?: return emptyMap()
+            return try {
+                val o = JSONObject(raw)
+                o.keys().asSequence().mapNotNull { k -> k.toIntOrNull()?.let { it to o.optLong(k) } }.toMap()
+            } catch (e: Exception) {
+                emptyMap()
+            }
+        }
+        set(value) {
+            val o = JSONObject()
+            for ((k, v) in value) o.put(k.toString(), v)
+            sp.edit().putString(pk("series_seen"), o.toString()).apply()
+        }
+
+    /** The last film ("m:<id>") or series ("s:<id>") watched, for Because You Watched on Home. */
+    var lastWatched: String
+        get() = sp.getString(pk("last_watched"), "") ?: ""
+        set(value) {
+            sp.edit().putString(pk("last_watched"), value).apply()
+        }
+
+    /** Home's rows in this profile's order; rows not listed go in their usual place. */
+    var homeOrder: List<String>
+        get() {
+            val raw = sp.getString(pk("home_order"), null) ?: return emptyList()
+            return try {
+                val arr = JSONArray(raw)
+                (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotEmpty() }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+        set(value) {
+            sp.edit().putString(pk("home_order"), JSONArray().apply { value.forEach { put(it) } }.toString()).apply()
+        }
+
+    /** Home rows this profile has turned off. */
+    var homeHidden: Set<String>
+        get() = sp.getStringSet(pk("home_hidden"), null)?.toSet() ?: emptySet()
+        set(value) {
+            sp.edit().putStringSet(pk("home_hidden"), value).apply()
+        }
 }
 
 /** English football: the Premier League, the EFL and the domestic cups. */

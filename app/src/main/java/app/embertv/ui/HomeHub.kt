@@ -20,6 +20,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
@@ -126,6 +130,8 @@ internal suspend fun loadHomeFeed(repo: Repository): HomeFeed = kotlinx.coroutin
 @Composable
 private fun rememberHomeFeed(vm: AppViewModel, repo: Repository): androidx.compose.runtime.State<LoadResult<HomeFeed>> {
     LaunchedEffect(repo, vm.reloadToken) { vm.ensureHome() }
+    // New Episodes and Because You Watched, worked out alongside.
+    LaunchedEffect(repo, vm.reloadToken, vm.vodVersion, vm.lastWatched) { vm.ensureHomeExtras() }
     return androidx.compose.runtime.rememberUpdatedState(vm.homeFeed)
 }
 
@@ -214,80 +220,25 @@ private fun LazyListScope.homeRows(
     posterWidth: Dp,
     continueWidth: Dp,
     gap: Dp,
+    onArrange: () -> Unit,
 ) {
     val rowPadding = PaddingValues(horizontal = edge, vertical = 12.dp)
-    val sport = vm.liveSport
-    if (sport.isNotEmpty()) {
-        item(key = "row-sport") {
-            HomeRow("Live Sport Now", edge) {
-                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    items(sport, key = { it.match.id }) { s ->
-                        SportCard(
-                            s,
-                            continueWidth,
-                            "home:sport:${s.match.id}",
-                            // Always list the channels showing it, so there's a choice.
-                            onClick = { vm.findingMatch = s.match },
-                            onLongClick = { vm.pinMatch(s.match) },
-                        )
-                    }
-                }
-            }
-        }
-    }
-    val matches = vm.teamMatches.take(8)
-    if (matches.isNotEmpty()) {
-        item(key = "row-teams") {
-            HomeRow("Your Teams", edge) {
-                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    items(matches, key = { it.id }) { m ->
-                        MatchCard(m, continueWidth, "home:match:${m.id}") { vm.findingMatch = m }
-                    }
-                }
-            }
-        }
-    }
-    val history = vm.history.toList()
-    if (history.isNotEmpty()) {
-        item(key = "row-continue") {
-            // Like Apple TV: what you're part-way through, plus the next episode of what you finished.
-            HomeRow("Up Next", edge) {
-                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    items(history, key = { it.key }) { e ->
-                        ContinueCard(e, continueWidth, onClick = { vm.resume(e) }, onLongClick = { vm.removeHistory(e.key) })
-                    }
-                }
-            }
-        }
-    }
-    if (feed.recent.isNotEmpty()) {
-        item(key = "row-recently-added") {
-            HomeRow("Recently Added", edge) {
-                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    items(feed.recent, key = { if (it is Movie) "m${it.streamId}" else "s${(it as Series).seriesId}" }) { item ->
-                        when (item) {
-                            is Movie -> PosterCard(
-                                title = item.name,
-                                image = item.poster,
-                                focusKey = "home:new:m${item.streamId}",
-                                modifier = Modifier.width(posterWidth),
-                                subtitle = "Film",
-                                badge = badgeText(item.qualities()),
-                                favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, item.streamId)),
-                                watched = vm.movieWatched(item),
-                                onClick = { vm.push(Screen.MovieDetail(item)) },
-                                onLongClick = { vm.toggleFavourite(vm.favouriteOf(item)) },
-                            )
-                            is Series -> PosterCard(
-                                title = item.name,
-                                image = item.cover,
-                                focusKey = "home:new:s${item.seriesId}",
-                                modifier = Modifier.width(posterWidth),
-                                subtitle = "Series",
-                                badge = badgeText(item.qualities()),
-                                favourite = vm.favKeys.contains(favouriteKey(ContentType.SERIES, item.seriesId)),
-                                onClick = { vm.push(Screen.SeriesDetail(item)) },
-                                onLongClick = { vm.toggleFavourite(vm.favouriteOf(item)) },
+    // Each row by its id, so they can be shown in the profile's chosen order (Arrange Home).
+    val rows = HashMap<String, () -> Unit>()
+    rows["sport"] = {
+        val sport = vm.liveSport
+        if (sport.isNotEmpty()) {
+            item(key = "row-sport") {
+                HomeRow("Live Sport Now", edge) {
+                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        items(sport, key = { it.match.id }) { s ->
+                            SportCard(
+                                s,
+                                continueWidth,
+                                "home:sport:${s.match.id}",
+                                // Always list the channels showing it, so there's a choice.
+                                onClick = { vm.findingMatch = s.match },
+                                onLongClick = { vm.pinMatch(s.match) },
                             )
                         }
                     }
@@ -295,123 +246,272 @@ private fun LazyListScope.homeRows(
             }
         }
     }
-    val recent = vm.recentChannels.map { it.toChannel() }
-    if (recent.isNotEmpty()) {
-        item(key = "row-recent") {
-            HomeRow("Recently Watched", edge) {
-                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    itemsIndexed(recent, key = { _, c -> c.streamId }) { i, c ->
-                        ChannelCard(
-                            name = c.name,
-                            logo = c.icon,
-                            focusKey = "home:recent:${c.streamId}",
-                            onClick = { vm.push(Screen.PlayLive(recent, i)) },
-                            onLongClick = { vm.toggleFavourite(vm.favouriteOf(c)) },
-                        )
+    rows["teams"] = {
+        val matches = vm.teamMatches.take(8)
+        if (matches.isNotEmpty()) {
+            item(key = "row-teams") {
+                HomeRow("Your Teams", edge) {
+                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        items(matches, key = { it.id }) { m ->
+                            MatchCard(m, continueWidth, "home:match:${m.id}") { vm.findingMatch = m }
+                        }
                     }
                 }
             }
         }
     }
-    val favChannels = vm.favourites.filter { it.type == ContentType.LIVE }.map { it.toChannel() }
-    if (favChannels.isNotEmpty()) {
-        item(key = "row-favchannels") {
-            HomeRow("Your Channels", edge) {
-                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    itemsIndexed(favChannels, key = { _, c -> c.streamId }) { i, c ->
-                        ChannelCard(
-                            name = c.name,
-                            logo = c.icon,
-                            focusKey = "home:fav:${c.streamId}",
-                            onClick = { vm.push(Screen.PlayLive(favChannels, i)) },
-                            onLongClick = { vm.toggleFavourite(vm.favouriteOf(c)) },
-                        )
+    rows["continue"] = {
+        val history = vm.history.toList()
+        if (history.isNotEmpty()) {
+            item(key = "row-continue") {
+                // Like Apple TV: what you're part-way through, plus the next episode of what you finished.
+                HomeRow("Up Next", edge) {
+                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        items(history, key = { it.key }) { e ->
+                            ContinueCard(e, continueWidth, onClick = { vm.resume(e) }, onLongClick = { vm.removeHistory(e.key) })
+                        }
                     }
                 }
             }
         }
     }
-    val myList = vm.favourites.filter { it.type != ContentType.LIVE }
-    if (myList.isNotEmpty()) {
-        item(key = "row-mylist") {
-            HomeRow("My List", edge) {
-                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    items(myList, key = { it.key }) { f ->
-                        PosterCard(
-                            title = f.name,
-                            image = f.image,
-                            focusKey = "home:mylist:${f.key}",
-                            modifier = Modifier.width(posterWidth),
-                            favourite = true,
-                            onClick = {
-                                if (f.type == ContentType.MOVIE) vm.push(Screen.MovieDetail(f.toMovie()))
-                                else vm.push(Screen.SeriesDetail(f.toSeries()))
-                            },
-                            onLongClick = { vm.toggleFavourite(f) },
-                        )
+    rows["recently-added"] = {
+        if (feed.recent.isNotEmpty()) {
+            item(key = "row-recently-added") {
+                HomeRow("Recently Added", edge) {
+                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        items(feed.recent, key = { if (it is Movie) "m${it.streamId}" else "s${(it as Series).seriesId}" }) { item ->
+                            when (item) {
+                                is Movie -> PosterCard(
+                                    title = item.name,
+                                    image = item.poster,
+                                    focusKey = "home:new:m${item.streamId}",
+                                    modifier = Modifier.width(posterWidth),
+                                    subtitle = "Film",
+                                    badge = badgeText(item.qualities()),
+                                    favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, item.streamId)),
+                                    watched = vm.movieWatched(item),
+                                    onClick = { vm.push(Screen.MovieDetail(item)) },
+                                    onLongClick = { vm.toggleFavourite(vm.favouriteOf(item)) },
+                                )
+                                is Series -> PosterCard(
+                                    title = item.name,
+                                    image = item.cover,
+                                    focusKey = "home:new:s${item.seriesId}",
+                                    modifier = Modifier.width(posterWidth),
+                                    subtitle = "Series",
+                                    badge = badgeText(item.qualities()),
+                                    favourite = vm.favKeys.contains(favouriteKey(ContentType.SERIES, item.seriesId)),
+                                    onClick = { vm.push(Screen.SeriesDetail(item)) },
+                                    onLongClick = { vm.toggleFavourite(vm.favouriteOf(item)) },
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     }
-    val live = feed.liveRow
-    if (live != null) {
-        item(key = "row-live") {
-            HomeRow("Live · ${live.first.name}", edge) {
-                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    itemsIndexed(live.second, key = { _, c -> c.streamId }) { i, c ->
-                        ChannelCard(
-                            name = c.name,
-                            logo = c.icon,
-                            focusKey = "home:live:${c.streamId}",
-                            onClick = { vm.push(Screen.PlayLive(live.second, i)) },
-                            onLongClick = { vm.toggleFavourite(vm.favouriteOf(c)) },
-                        )
+    rows["recent-channels"] = {
+        val recent = vm.recentChannels.map { it.toChannel() }
+        if (recent.isNotEmpty()) {
+            item(key = "row-recent") {
+                HomeRow("Recently Watched", edge) {
+                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        itemsIndexed(recent, key = { _, c -> c.streamId }) { i, c ->
+                            ChannelCard(
+                                name = c.name,
+                                logo = c.icon,
+                                focusKey = "home:recent:${c.streamId}",
+                                onClick = { vm.push(Screen.PlayLive(recent, i)) },
+                                onLongClick = { vm.toggleFavourite(vm.favouriteOf(c)) },
+                            )
+                        }
                     }
                 }
             }
         }
     }
-    for ((cat, movies) in feed.movieRows) {
-        item(key = "row-movies-${cat.id}") {
-            HomeRow(cat.name, edge) {
-                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    items(movies, key = { it.streamId }) { m ->
-                        PosterCard(
-                            title = m.name,
-                            image = m.poster,
-                            focusKey = "home:m:${cat.id}:${m.streamId}",
-                            modifier = Modifier.width(posterWidth),
-                            subtitle = ratingLabel(m.rating),
-                            badge = badgeText(m.qualities()),
-                            favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, m.streamId)),
-                            watched = vm.movieWatched(m),
-                            onClick = { vm.push(Screen.MovieDetail(m)) },
-                            onLongClick = { vm.toggleFavourite(vm.favouriteOf(m)) },
-                        )
+    rows["fav-channels"] = {
+        val favChannels = vm.favourites.filter { it.type == ContentType.LIVE }.map { it.toChannel() }
+        if (favChannels.isNotEmpty()) {
+            item(key = "row-favchannels") {
+                HomeRow("Your Channels", edge) {
+                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        itemsIndexed(favChannels, key = { _, c -> c.streamId }) { i, c ->
+                            ChannelCard(
+                                name = c.name,
+                                logo = c.icon,
+                                focusKey = "home:fav:${c.streamId}",
+                                onClick = { vm.push(Screen.PlayLive(favChannels, i)) },
+                                onLongClick = { vm.toggleFavourite(vm.favouriteOf(c)) },
+                            )
+                        }
                     }
                 }
             }
         }
     }
-    for ((cat, list) in feed.seriesRows) {
-        item(key = "row-series-${cat.id}") {
-            HomeRow(cat.name, edge) {
-                LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    items(list, key = { it.seriesId }) { s ->
-                        PosterCard(
-                            title = s.name,
-                            image = s.cover,
-                            focusKey = "home:s:${cat.id}:${s.seriesId}",
-                            modifier = Modifier.width(posterWidth),
-                            badge = badgeText(s.qualities()),
-                            favourite = vm.favKeys.contains(favouriteKey(ContentType.SERIES, s.seriesId)),
-                            onClick = { vm.push(Screen.SeriesDetail(s)) },
-                            onLongClick = { vm.toggleFavourite(vm.favouriteOf(s)) },
-                        )
+    rows["mylist"] = {
+        val myList = vm.favourites.filter { it.type != ContentType.LIVE }
+        if (myList.isNotEmpty()) {
+            item(key = "row-mylist") {
+                HomeRow("My List", edge) {
+                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        items(myList, key = { it.key }) { f ->
+                            PosterCard(
+                                title = f.name,
+                                image = f.image,
+                                focusKey = "home:mylist:${f.key}",
+                                modifier = Modifier.width(posterWidth),
+                                favourite = true,
+                                onClick = {
+                                    if (f.type == ContentType.MOVIE) vm.push(Screen.MovieDetail(f.toMovie()))
+                                    else vm.push(Screen.SeriesDetail(f.toSeries()))
+                                },
+                                onLongClick = { vm.toggleFavourite(f) },
+                            )
+                        }
                     }
                 }
             }
+        }
+    }
+    rows["live"] = {
+        val live = feed.liveRow
+        if (live != null) {
+            item(key = "row-live") {
+                HomeRow("Live · ${live.first.name}", edge) {
+                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        itemsIndexed(live.second, key = { _, c -> c.streamId }) { i, c ->
+                            ChannelCard(
+                                name = c.name,
+                                logo = c.icon,
+                                focusKey = "home:live:${c.streamId}",
+                                onClick = { vm.push(Screen.PlayLive(live.second, i)) },
+                                onLongClick = { vm.toggleFavourite(vm.favouriteOf(c)) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    rows["movies"] = {
+        for ((cat, movies) in feed.movieRows) {
+            item(key = "row-movies-${cat.id}") {
+                HomeRow(cat.name, edge) {
+                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        items(movies, key = { it.streamId }) { m ->
+                            PosterCard(
+                                title = m.name,
+                                image = m.poster,
+                                focusKey = "home:m:${cat.id}:${m.streamId}",
+                                modifier = Modifier.width(posterWidth),
+                                subtitle = ratingLabel(m.rating),
+                                badge = badgeText(m.qualities()),
+                                favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, m.streamId)),
+                                watched = vm.movieWatched(m),
+                                onClick = { vm.push(Screen.MovieDetail(m)) },
+                                onLongClick = { vm.toggleFavourite(vm.favouriteOf(m)) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    rows["series"] = {
+        for ((cat, list) in feed.seriesRows) {
+            item(key = "row-series-${cat.id}") {
+                HomeRow(cat.name, edge) {
+                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        items(list, key = { it.seriesId }) { s ->
+                            PosterCard(
+                                title = s.name,
+                                image = s.cover,
+                                focusKey = "home:s:${cat.id}:${s.seriesId}",
+                                modifier = Modifier.width(posterWidth),
+                                badge = badgeText(s.qualities()),
+                                favourite = vm.favKeys.contains(favouriteKey(ContentType.SERIES, s.seriesId)),
+                                onClick = { vm.push(Screen.SeriesDetail(s)) },
+                                onLongClick = { vm.toggleFavourite(vm.favouriteOf(s)) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    rows["new-episodes"] = {
+        val fresh = vm.homeExtras?.newEpisodes.orEmpty()
+        if (fresh.isNotEmpty()) {
+            item(key = "row-new-episodes") {
+                // Shows you've been watching that have more since you last watched.
+                HomeRow("New Episodes", edge) {
+                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        items(fresh, key = { it.seriesId }) { s ->
+                            PosterCard(
+                                title = s.name,
+                                image = s.cover,
+                                focusKey = "home:newep:${s.seriesId}",
+                                modifier = Modifier.width(posterWidth),
+                                subtitle = "New episodes",
+                                badge = badgeText(s.qualities()),
+                                favourite = vm.favKeys.contains(favouriteKey(ContentType.SERIES, s.seriesId)),
+                                onClick = { vm.push(Screen.SeriesDetail(s)) },
+                                // Hold to clear it from this row.
+                                onLongClick = { vm.noteSeriesSeen(s.seriesId) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    rows["because"] = {
+        val extras = vm.homeExtras
+        val because = extras?.because.orEmpty()
+        if (extras?.becauseOf != null && because.isNotEmpty()) {
+            item(key = "row-because") {
+                HomeRow("Because You Watched ${extras.becauseOf}", edge) {
+                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        items(because, key = { if (it is Movie) "m${it.streamId}" else "s${(it as Series).seriesId}" }) { item ->
+                            when (item) {
+                                is Movie -> PosterCard(
+                                    title = item.name,
+                                    image = item.poster,
+                                    focusKey = "home:because:m${item.streamId}",
+                                    modifier = Modifier.width(posterWidth),
+                                    subtitle = ratingLabel(item.rating),
+                                    badge = badgeText(item.qualities()),
+                                    favourite = vm.favKeys.contains(favouriteKey(ContentType.MOVIE, item.streamId)),
+                                    watched = vm.movieWatched(item),
+                                    onClick = { vm.push(Screen.MovieDetail(item)) },
+                                    onLongClick = { vm.toggleFavourite(vm.favouriteOf(item)) },
+                                )
+                                is Series -> PosterCard(
+                                    title = item.name,
+                                    image = item.cover,
+                                    focusKey = "home:because:s${item.seriesId}",
+                                    modifier = Modifier.width(posterWidth),
+                                    badge = badgeText(item.qualities()),
+                                    favourite = vm.favKeys.contains(favouriteKey(ContentType.SERIES, item.seriesId)),
+                                    onClick = { vm.push(Screen.SeriesDetail(item)) },
+                                    onLongClick = { vm.toggleFavourite(vm.favouriteOf(item)) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    val hidden = vm.homeHidden
+    for (id in vm.homeRowOrder()) if (id !in hidden) rows[id]?.invoke()
+    item(key = "arrange") {
+        Box(Modifier.fillMaxWidth().padding(top = 28.dp), contentAlignment = Alignment.Center) {
+            GlassButton("Arrange Home", EmberIcons.ChannelList, onClick = onArrange)
         }
     }
 }
@@ -450,6 +550,8 @@ fun HomeSection(vm: AppViewModel) {
     }
     val repo = vm.repo ?: return
     val feedState by rememberHomeFeed(vm, repo)
+    var arranging by remember { mutableStateOf(false) }
+    if (arranging) ArrangeHomeDialog(vm) { arranging = false }
     when (val f = feedState) {
         is LoadResult.Loading -> SkeletonHome()
         is LoadResult.Err -> ErrorView(f.message) { vm.reload() }
@@ -463,7 +565,7 @@ fun HomeSection(vm: AppViewModel) {
                 if (feed.heroes.isNotEmpty()) {
                     item(key = "hero") { TvHero(vm, repo, feed.heroes) }
                 }
-                homeRows(vm, feed, edge = 48.dp, posterWidth = 132.dp, continueWidth = 300.dp, gap = 22.dp)
+                homeRows(vm, feed, edge = 48.dp, posterWidth = 132.dp, continueWidth = 300.dp, gap = 22.dp) { arranging = true }
             }
         }
     }
@@ -541,6 +643,8 @@ fun PhoneHomeTab(vm: AppViewModel) {
     val repo = vm.repo ?: return
     val feedState by rememberHomeFeed(vm, repo)
     val pad = LocalContentPadding.current
+    var arranging by remember { mutableStateOf(false) }
+    if (arranging) ArrangeHomeDialog(vm) { arranging = false }
     when (val f = feedState) {
         is LoadResult.Loading -> SkeletonHome()
         is LoadResult.Err -> ErrorView(f.message) { vm.reload() }
@@ -556,7 +660,7 @@ fun PhoneHomeTab(vm: AppViewModel) {
                 } else {
                     item(key = "top") { Spacer(Modifier.height(pad.calculateTopPadding())) }
                 }
-                homeRows(vm, feed, edge = 16.dp, posterWidth = 112.dp, continueWidth = 240.dp, gap = 12.dp)
+                homeRows(vm, feed, edge = 16.dp, posterWidth = 112.dp, continueWidth = 240.dp, gap = 12.dp) { arranging = true }
             }
         }
     }
@@ -636,6 +740,142 @@ private fun PhoneHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
             Box(Modifier.fillMaxWidth().height(6.dp)) {
                 HeroDots(heroes.size, index, Modifier.align(Alignment.Center))
             }
+        }
+    }
+}
+
+// ---------------- Arrange Home ----------------
+
+/**
+ * Choose which rows Home shows and in what order: tick a row to show or hide it, and use the arrows
+ * to move it up or down. Saved for the current profile.
+ */
+@Composable
+fun ArrangeHomeDialog(vm: AppViewModel, onDone: () -> Unit) {
+    val isTv = LocalIsTv.current
+    val names = remember { HOME_ROWS.toMap() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDone) {
+        DialogBackdropBlur()
+        Column(
+            Modifier
+                .widthIn(max = 520.dp)
+                .fillMaxWidth()
+                .heightIn(max = if (isTv) 520.dp else 600.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(dialogPanelColor())
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            SheetTitle("Arrange Home", eyebrow = vm.profile?.name, subtitle = "Tick the rows you want, and move them up or down")
+            Spacer(Modifier.height(14.dp))
+            val order = vm.homeRowOrder()
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                order.forEachIndexed { i, id ->
+                    // Keyed by row, so focus stays on the arrow you pressed as the row moves.
+                    androidx.compose.runtime.key(id) {
+                        ArrangeRow(
+                            name = names[id] ?: id,
+                            shown = id !in vm.homeHidden,
+                            canUp = i > 0,
+                            canDown = i < order.lastIndex,
+                            first = i == 0,
+                            id = id,
+                            onToggle = { vm.toggleHomeRow(id) },
+                            onUp = { vm.moveHomeRow(id, -1) },
+                            onDown = { vm.moveHomeRow(id, 1) },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                GlassButton("Reset", EmberIcons.Restart) { vm.resetHomeRows() }
+                GlassButton("Done", EmberIcons.Check, onClick = onDone)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArrangeRow(
+    name: String,
+    shown: Boolean,
+    canUp: Boolean,
+    canDown: Boolean,
+    first: Boolean,
+    id: String,
+    onToggle: () -> Unit,
+    onUp: () -> Unit,
+    onDown: () -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        FocusBox(
+            modifier = Modifier.weight(1f).height(52.dp),
+            focusKey = "arrange:$id",
+            shape = RoundedCornerShape(16.dp),
+            focusedScale = 1.03f,
+            color = Color(0x14FFFFFF),
+            focusedColor = Color.White,
+            autoFocus = first,
+            onClick = onToggle,
+        ) { focused ->
+            Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Apple-style tick circle: filled white when shown.
+                Box(
+                    Modifier
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(if (shown) (if (focused) Color.Black else Ember.Text) else Color.Transparent)
+                        .then(if (shown) Modifier else Modifier.border(1.5.dp, if (focused) Color(0xFF88888F) else Ember.Faint, CircleShape)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (shown) androidx.compose.material3.Icon(EmberIcons.Check, contentDescription = "Shown", tint = if (focused) Color.White else Color.Black, modifier = Modifier.size(14.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    name,
+                    style = Txt.Label,
+                    color = if (focused) Color.Black else if (shown) Ember.Text else Ember.Faint,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        ArrowButton(EmberIcons.ChevronUp, "Move up", "arrange:$id:up", enabled = canUp, onClick = onUp)
+        Spacer(Modifier.width(6.dp))
+        ArrowButton(EmberIcons.ChevronDown, "Move down", "arrange:$id:down", enabled = canDown, onClick = onDown)
+    }
+}
+
+@Composable
+private fun ArrowButton(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, focusKey: String, enabled: Boolean, onClick: () -> Unit) {
+    FocusBox(
+        modifier = Modifier.size(44.dp),
+        focusKey = focusKey,
+        shape = CircleShape,
+        focusedScale = 1.1f,
+        color = Color(0x14FFFFFF),
+        focusedColor = Color.White,
+        onClick = { if (enabled) onClick() },
+    ) { focused ->
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            androidx.compose.material3.Icon(
+                icon,
+                contentDescription = description,
+                tint = when {
+                    focused -> Color.Black
+                    enabled -> Ember.Text
+                    else -> Color(0x33FFFFFF)
+                },
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }

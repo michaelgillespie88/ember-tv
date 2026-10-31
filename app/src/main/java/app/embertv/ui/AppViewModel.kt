@@ -638,6 +638,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         startTeamWatcher()
         audioLanguage = prefs.audioLanguage
         subtitleMode = prefs.subtitleMode
+        seriesSeen = prefs.seriesSeen
+        lastWatched = prefs.lastWatched
+        homeOrder = prefs.homeOrder
+        homeHidden = prefs.homeHidden
+        homeExtras = null
         applyCategoryFilter()
         reloadToken++
     }
@@ -1109,6 +1114,152 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var homeFor: Pair<Repository, Int>? = null
 
     /** Loads Home if it hasn't been for this sign-in and refresh yet (or the last try failed). */
+    // ---- Home: New Episodes, Because You Watched, and the row order ----
+
+    /** When each series was last watched (epoch ms). */
+    private var seriesSeen: Map<Int, Long> = emptyMap()
+
+    /** The last film ("m:<id>") or series ("s:<id>") watched. */
+    var lastWatched by mutableStateOf("")
+        private set
+
+    /** Home's extra rows, worked out in the background. */
+    class HomeExtras(val newEpisodes: List<Series>, val becauseOf: String?, val because: List<Any>)
+
+    var homeExtras by mutableStateOf<HomeExtras?>(null)
+        private set
+    private var homeExtrasFor: Any? = null
+    private var homeExtrasJob: kotlinx.coroutines.Job? = null
+
+    /** Marks a series as just watched, so it leaves New Episodes until something newer arrives. */
+    fun noteSeriesSeen(sid: Int) {
+        val now = System.currentTimeMillis()
+        val was = seriesSeen[sid]
+        val extras = homeExtras
+        if (extras != null && extras.newEpisodes.any { it.seriesId == sid || it.versions.any { v -> v.seriesId == sid } }) {
+            homeExtras = HomeExtras(
+                extras.newEpisodes.filterNot { it.seriesId == sid || it.versions.any { v -> v.seriesId == sid } },
+                extras.becauseOf,
+                extras.because,
+            )
+        }
+        // Saved at most once a minute while watching.
+        if (was != null && now - was < 60_000L) return
+        var next = seriesSeen + (sid to now)
+        if (next.size > 400) next = next.entries.sortedByDescending { it.value }.take(400).associate { it.key to it.value }
+        seriesSeen = next
+        prefs.seriesSeen = next
+    }
+
+    /** Works out New Episodes and Because You Watched, once per change of lists or of what was watched. */
+    fun ensureHomeExtras() {
+        val r = repo ?: return
+        val key = listOf(r, reloadToken, vodVersion, lastWatched, profile?.id)
+        if (homeExtrasFor == key) return
+        homeExtrasFor = key
+        homeExtrasJob?.cancel()
+        homeExtrasJob = viewModelScope.launch {
+            val fresh = newEpisodesFor(r)
+            val (becauseOf, because) = becauseYouWatched(r)
+            if (repo === r) homeExtras = HomeExtras(fresh, becauseOf, because)
+        }
+    }
+
+    private suspend fun newEpisodesFor(r: Repository): List<Series> {
+        // Series watched before this was added count from their Up Next entry.
+        val seen = HashMap(seriesSeen)
+        for (h in history) if (h.type == ContentType.SERIES && h.seriesId > 0 && h.seriesId !in seen) seen[h.seriesId] = h.updatedAt
+        if (seen.isEmpty()) return emptyList()
+        val all = try {
+            r.allSeries()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return emptyList()
+        } catch (e: OutOfMemoryError) {
+            return emptyList()
+        }
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            all.mapNotNull { s ->
+                val copies = listOf(s) + s.versions
+                val watchedAt = copies.mapNotNull { seen[it.seriesId] }.maxOrNull() ?: return@mapNotNull null
+                val updatedMs = copies.maxOf { it.updated } * 1000L
+                // A minute's grace, as the provider's clock and ours never quite agree.
+                if (updatedMs > watchedAt + 60_000L) s to updatedMs else null
+            }.sortedByDescending { it.second }.take(20).map { it.first }
+        }
+    }
+
+    private suspend fun becauseYouWatched(r: Repository): Pair<String?, List<Any>> {
+        val last = lastWatched
+        val id = last.substringAfter(':').toIntOrNull() ?: return null to emptyList()
+        return try {
+            if (last.startsWith("m:")) {
+                val movie = r.loadedMovies().firstOrNull { m -> m.streamId == id || m.versions.any { it.streamId == id } }
+                    ?: r.allMovies().firstOrNull { m -> m.streamId == id || m.versions.any { it.streamId == id } }
+                    ?: return null to emptyList()
+                val extras = try { movieExtras(movie, r.peekMovieInfo(movie.streamId)) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+                val picks = moreLikeThis(movie, extras).filter { it.streamId != movie.streamId && !movieWatched(it) }.take(20)
+                Versions.cleanTitle(movie.name) to picks
+            } else {
+                val show = r.loadedSeries().firstOrNull { s -> s.seriesId == id || s.versions.any { it.seriesId == id } }
+                    ?: r.allSeries().firstOrNull { s -> s.seriesId == id || s.versions.any { it.seriesId == id } }
+                    ?: return null to emptyList()
+                val extras = try { seriesExtras(show, r.peekSeriesInfo(show.seriesId)) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+                val picks = moreLikeThis(show, extras).filter { it.seriesId != show.seriesId }.take(20)
+                Versions.cleanTitle(show.name) to picks
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null to emptyList()
+        } catch (e: OutOfMemoryError) {
+            null to emptyList()
+        }
+    }
+
+    /** Home's rows in this profile's chosen order. */
+    var homeOrder by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** Home rows this profile has turned off. */
+    var homeHidden by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** Every row, in the profile's order: saved ones first, then any not yet placed, in their usual spot. */
+    fun homeRowOrder(): List<String> {
+        val known = HOME_ROWS.map { it.first }
+        val saved = homeOrder.filter { it in known }
+        if (saved.isEmpty()) return known
+        val out = saved.toMutableList()
+        for ((i, id) in known.withIndex()) if (id !in out) out.add(i.coerceAtMost(out.size), id)
+        return out
+    }
+
+    fun moveHomeRow(id: String, by: Int) {
+        val order = homeRowOrder().toMutableList()
+        val from = order.indexOf(id)
+        val to = from + by
+        if (from < 0 || to !in order.indices) return
+        order.removeAt(from)
+        order.add(to, id)
+        homeOrder = order
+        prefs.homeOrder = order
+    }
+
+    fun toggleHomeRow(id: String) {
+        val next = if (id in homeHidden) homeHidden - id else homeHidden + id
+        homeHidden = next
+        prefs.homeHidden = next
+    }
+
+    fun resetHomeRows() {
+        homeOrder = emptyList()
+        homeHidden = emptySet()
+        prefs.homeOrder = emptyList()
+        prefs.homeHidden = emptySet()
+    }
+
     // ---- Keeping films and series up to date ----
 
     /** Goes up each time the film and series lists are updated in the background; screens re-read quietly. */
@@ -1139,8 +1290,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 vodVersion++
                 val films = fresh.newMovies.coerceAtLeast(0)
                 val shows = fresh.newSeries.coerceAtLeast(0)
+                refreshHomeQuietly()
                 if (films + shows > 0) {
-                    refreshHomeQuietly()
                     // Not in the middle of something: a player or a detail page.
                     if (stack.lastOrNull() is Screen.Home) {
                         val parts = listOfNotNull(
@@ -1643,6 +1794,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val eid = item.episodeId
         if (sid != null && eid != null) prefs.setLastEpisode(sid, eid)
         updateHistory(item, positionMs, durationMs)
+        // For New Episodes and Because You Watched on Home.
+        if (sid != null) noteSeriesSeen(sid)
+        val watched = if (sid != null) "s:$sid" else if (item.contentId > 0) "m:${item.contentId}" else null
+        if (watched != null && watched != lastWatched) {
+            lastWatched = watched
+            prefs.lastWatched = watched
+        }
     }
 
     // ---- Catch-up ----
@@ -2229,3 +2387,19 @@ val PICTURE_MODES = listOf("Fit", "Zoom", "Stretch")
 
 /** How often films and series are checked for new additions. */
 private const val VOD_UPDATE_EVERY_MS = 3 * 60 * 60_000L
+
+/** Home's rows that can be moved or turned off, with their names, in their usual order. */
+val HOME_ROWS = listOf(
+    "sport" to "Live Sport Now",
+    "teams" to "Your Teams",
+    "continue" to "Up Next",
+    "new-episodes" to "New Episodes",
+    "recently-added" to "Recently Added",
+    "because" to "Because You Watched",
+    "recent-channels" to "Recently Watched channels",
+    "fav-channels" to "Your Channels",
+    "mylist" to "My List",
+    "live" to "Live channels",
+    "movies" to "Film categories",
+    "series" to "Series categories",
+)
