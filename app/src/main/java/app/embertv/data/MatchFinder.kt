@@ -1,5 +1,7 @@
 package app.embertv.data
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -56,11 +58,20 @@ object MatchFinder {
         "itv4", "itv 4", "channel 4", "s4c", "stv", "bbc scotland", "main event", "premier league", "football",
     )
 
+    // Built once: making these afresh for every channel name froze the app when there was football on.
+    private val MARKS = Regex("\\p{M}+")
+    private val NON_WORD = Regex("[^a-z0-9+]+")
+    private val TAGS = Regex("\\b(uk|hd|fhd|uhd|sd|4k|hevc|h265|backup|raw|vip|50fps|60fps)\\b")
+    private val SPACES = Regex("\\s+")
+    private val Q_UHD = Regex("\\b(4k|uhd)\\b")
+    private val Q_FHD = Regex("\\bfhd\\b")
+    private val Q_HD = Regex("\\bhd\\b")
+
     fun normalize(s: String): String =
         Normalizer.normalize(s.lowercase(), Normalizer.Form.NFD)
-            .replace(Regex("\\p{M}+"), "")
+            .replace(MARKS, "")
             .replace("&", " and ")
-            .replace(Regex("[^a-z0-9+]+"), " ")
+            .replace(NON_WORD, " ")
             .trim()
 
     /** Names a team might go by in a channel name or guide listing. */
@@ -74,22 +85,39 @@ object MatchFinder {
         return out.filter { it.length >= 3 }
     }
 
-    private fun mentions(text: String, aliases: List<String>): Boolean =
-        aliases.any { a -> Regex("\\b" + Regex.escape(a) + "\\b").containsMatchIn(text) }
+    private fun patterns(aliases: List<String>): List<Regex> = aliases.map { a -> Regex("\\b" + Regex.escape(a) + "\\b") }
+
+    private fun mentions(text: String, patterns: List<Regex>): Boolean = patterns.any { it.containsMatchIn(text) }
 
     /** Groups copies of the same channel (HD, FHD, backup…) so the guide is read once. */
     internal fun baseName(name: String): String =
-        normalize(name).replace(Regex("\\b(uk|hd|fhd|uhd|sd|4k|hevc|h265|backup|raw|vip|50fps|60fps)\\b"), " ")
-            .replace(Regex("\\s+"), " ").trim()
+        normalize(name).replace(TAGS, " ").replace(SPACES, " ").trim()
 
     internal fun qualityRank(name: String): Int {
         val n = normalize(name)
         return when {
-            Regex("\\b(4k|uhd)\\b").containsMatchIn(n) -> 0
-            Regex("\\bfhd\\b").containsMatchIn(n) -> 1
-            Regex("\\bhd\\b").containsMatchIn(n) -> 2
+            Q_UHD.containsMatchIn(n) -> 0
+            Q_FHD.containsMatchIn(n) -> 1
+            Q_HD.containsMatchIn(n) -> 2
             else -> 3
         }
+    }
+
+    // Channel names tidied for matching, kept between searches (the channel list rarely changes).
+    @Volatile private var namesFor: List<Channel>? = null
+    @Volatile private var namesCache: Map<Int, String> = emptyMap()
+
+    private suspend fun normalizedNames(channels: List<Channel>): Map<Int, String> {
+        val cached = namesFor
+        if (cached != null && cached.size == channels.size && cached.firstOrNull() == channels.firstOrNull() &&
+            cached.lastOrNull() == channels.lastOrNull()
+        ) {
+            return namesCache
+        }
+        val map = withContext(Dispatchers.Default) { channels.associate { it.streamId to normalize(it.name) } }
+        namesCache = map
+        namesFor = channels
+        return map
     }
 
     /**
@@ -102,8 +130,8 @@ object MatchFinder {
         now: Long,
         onProgress: (Int, Int, List<MatchHit>) -> Unit,
     ): List<MatchHit> {
-        val home = aliases(match.home)
-        val away = aliases(match.away)
+        val home = patterns(aliases(match.home))
+        val away = patterns(aliases(match.away))
         val channels = try {
             repo.allChannels()
         } catch (e: CancellationException) {
@@ -127,25 +155,30 @@ object MatchFinder {
         fun sorted(): List<MatchHit> =
             hits.values.sortedWith(compareBy<MatchHit>({ -it.score }, { qualityRank(it.channel.name) }, { it.channel.num }, { it.channel.name }))
 
-        // 1. Channel names: event channels like "EPL 03: Arsenal v Chelsea 17:30".
-        for (c in channels) {
-            val n = normalize(c.name)
-            val h = mentions(n, home)
-            val a = mentions(n, away)
-            when {
-                h && a -> add(c, null, 10)
-                (h || a) && c.categoryId in sportCats -> add(c, null, 3)
+        // The heavy text work happens off the main thread, so the screen never freezes.
+        val names = normalizedNames(channels)
+        val (nameHits, candidates, toCheck) = withContext(Dispatchers.Default) {
+            // 1. Channel names: event channels like "EPL 03: Arsenal v Chelsea 17:30".
+            val found = ArrayList<Pair<Channel, Int>>()
+            for (c in channels) {
+                val n = names[c.streamId] ?: continue
+                val h = mentions(n, home)
+                val a = mentions(n, away)
+                when {
+                    h && a -> found += c to 10
+                    (h || a) && c.categoryId in sportCats -> found += c to 3
+                }
             }
+            // 2. The guide on sports channels, broadcasters first, one copy of each.
+            val broadcasters = channels.filter { c -> names[c.streamId]?.let { n -> BROADCASTERS.any { n.contains(it) } } == true }
+            val inSportCats = channels.filter { it.categoryId in sportCats }
+            val groups = (broadcasters + inSportCats)
+                .distinctBy { it.streamId }
+                .groupBy { it.epgId.ifEmpty { baseName(it.name) } }
+            Triple(found, groups, groups.values.map { copies -> copies.minBy { qualityRank(it.name) } }.take(90))
         }
+        for ((c, score) in nameHits) add(c, null, score)
         onProgress(0, 0, sorted())
-
-        // 2. The guide on sports channels, broadcasters first, one copy of each.
-        val broadcasters = channels.filter { c -> normalize(c.name).let { n -> BROADCASTERS.any { n.contains(it) } } }
-        val inSportCats = channels.filter { it.categoryId in sportCats }
-        val candidates = (broadcasters + inSportCats)
-            .distinctBy { it.streamId }
-            .groupBy { it.epgId.ifEmpty { baseName(it.name) } }
-        val toCheck = candidates.values.map { copies -> copies.minBy { qualityRank(it.name) } }.take(90)
 
         val live = match.state == MatchState.LIVE
         val from = if (live) now else match.kickoff / 1000 - 15 * 60
@@ -164,20 +197,22 @@ object MatchFinder {
                         emptyList()
                     }
                     val key = c.epgId.ifEmpty { baseName(c.name) }
-                    for (p in guide) {
-                        if (p.end <= from || p.start >= to) continue
-                        val text = normalize(p.title + " " + p.description)
-                        val h = mentions(text, home)
-                        val a = mentions(text, away)
-                        val score = when {
-                            h && a -> 8
-                            h || a -> 4
-                            else -> 0
+                    val scored = withContext(Dispatchers.Default) {
+                        guide.mapNotNull { p ->
+                            if (p.end <= from || p.start >= to) return@mapNotNull null
+                            val text = normalize(p.title + " " + p.description)
+                            val h = mentions(text, home)
+                            val a = mentions(text, away)
+                            when {
+                                h && a -> p to 8
+                                h || a -> p to 4
+                                else -> null
+                            }
                         }
-                        if (score > 0) {
-                            // Every copy of this channel is showing it too.
-                            for (copy in candidates[key].orEmpty()) add(copy, p, score)
-                        }
+                    }
+                    for ((p, score) in scored) {
+                        // Every copy of this channel is showing it too.
+                        for (copy in candidates[key].orEmpty()) add(copy, p, score)
                     }
                     checked++
                     onProgress(checked, toCheck.size, sorted())

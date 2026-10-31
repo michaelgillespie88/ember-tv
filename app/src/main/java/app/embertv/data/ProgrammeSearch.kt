@@ -37,13 +37,13 @@ object ProgrammeSearch {
         }
         val rank = first.withIndex().associate { (i, id) -> id to i }
         // One copy of each channel: the guide is the same for HD, FHD and backups.
-        val toCheck = channels
+        val toCheck = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { channels
             .filter { it.epgId.isNotEmpty() || it.streamId in rank }
             .groupBy { it.epgId.ifEmpty { MatchFinder.baseName(it.name) } }
             .values
             .map { copies -> copies.minWith(compareBy({ rank[it.streamId] ?: Int.MAX_VALUE }, { MatchFinder.qualityRank(it.name) })) }
             .sortedWith(compareBy({ rank[it.streamId] ?: Int.MAX_VALUE }, { if (it.num > 0) it.num else Int.MAX_VALUE }, { it.name }))
-            .take(MAX_CHANNELS)
+            .take(MAX_CHANNELS) }
 
         val from = now - 7 * 86_400L
         val to = now + 8 * 86_400L
@@ -62,8 +62,8 @@ object ProgrammeSearch {
                         } catch (e: Exception) {
                             emptyList()
                         }
-                        val matches = guide.filter { p ->
-                            p.end > from && p.start < to && MatchFinder.normalize(p.title).contains(q)
+                        val matches = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                            guide.filter { p -> p.end > from && p.start < to && MatchFinder.normalize(p.title).contains(q) }
                         }
                         val snapshot = synchronized(lock) {
                             checked++
