@@ -675,40 +675,65 @@ fun RemoteHints(hints: List<Hint>, modifier: Modifier = Modifier, always: Boolea
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
         for (h in hints) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                KeyCap(h.key)
-                Spacer(Modifier.width(7.dp))
-                Text(h.label, style = Txt.Caption, color = Ember.Faint, maxLines = 1)
+                // "HOLD OK" is the OK button with "Hold" in front of what it does.
+                val hold = h.key == "HOLD OK"
+                KeyCap(if (hold) "OK" else h.key)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (hold) "Hold · ${h.label}" else h.label,
+                    style = Txt.Caption.copy(fontWeight = FontWeight.Medium),
+                    color = Ember.Dim,
+                    maxLines = 1,
+                )
             }
         }
     }
 }
 
+/**
+ * A remote button drawn like the real thing: OK is the white select button with "OK" on it, Back
+ * is a round frosted button with a back arrow, and the arrows and guide are round frosted buttons too.
+ */
 @Composable
 private fun KeyCap(key: String) {
-    val icons: List<androidx.compose.ui.graphics.vector.ImageVector>? = when (key) {
-        "◀" -> listOf(EmberIcons.ChevronLeft)
-        "▶" -> listOf(EmberIcons.ChevronRight)
-        "▲" -> listOf(EmberIcons.ChevronUp)
-        "▼" -> listOf(EmberIcons.ChevronDown)
-        "▲▼" -> listOf(EmberIcons.ChevronUp, EmberIcons.ChevronDown)
-        "◀▶" -> listOf(EmberIcons.ChevronLeft, EmberIcons.ChevronRight)
-        "◀◀" -> listOf(EmberIcons.Rewind)
-        "▶▶" -> listOf(EmberIcons.FastForward)
-        "◀◀▶▶" -> listOf(EmberIcons.Rewind, EmberIcons.FastForward)
-        "☰" -> listOf(EmberIcons.Guide)
-        else -> null
-    }
-    Row(
-        Modifier
-            .height(22.dp)
-            .glassSurface(RoundedCornerShape(7.dp), Color(0x1FFFFFFF))
-            .padding(horizontal = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (icons != null) {
-            icons.forEach { Icon(it, contentDescription = null, tint = Ember.Dim, modifier = Modifier.size(13.dp)) }
-        } else {
-            Text(key, style = Txt.Caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp), color = Ember.Dim)
+    val size = 24.dp
+    when (key) {
+        "OK" -> Box(
+            Modifier.size(size).clip(CircleShape).background(Color(0xF2FFFFFF)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("OK", style = Txt.Caption.copy(fontSize = 8.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp), color = Color.Black, maxLines = 1)
+        }
+        else -> {
+            val icons: List<androidx.compose.ui.graphics.vector.ImageVector> = when (key) {
+                "BACK" -> listOf(EmberIcons.Back)
+                "◀" -> listOf(EmberIcons.ChevronLeft)
+                "▶" -> listOf(EmberIcons.ChevronRight)
+                "▲" -> listOf(EmberIcons.ChevronUp)
+                "▼" -> listOf(EmberIcons.ChevronDown)
+                "▲▼" -> listOf(EmberIcons.ChevronUp, EmberIcons.ChevronDown)
+                "◀▶" -> listOf(EmberIcons.ChevronLeft, EmberIcons.ChevronRight)
+                "◀◀" -> listOf(EmberIcons.Rewind)
+                "▶▶" -> listOf(EmberIcons.FastForward)
+                "◀◀▶▶" -> listOf(EmberIcons.Rewind, EmberIcons.FastForward)
+                "☰" -> listOf(EmberIcons.Guide)
+                else -> emptyList()
+            }
+            Row(
+                Modifier
+                    .height(size)
+                    .then(if (icons.size <= 1) Modifier.width(size) else Modifier)
+                    .glassSurface(RoundedCornerShape(12.dp), Color(0x2EFFFFFF))
+                    .padding(horizontal = if (icons.size <= 1) 0.dp else 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                if (icons.isEmpty()) {
+                    Text(key, style = Txt.Caption.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold), color = Ember.Text, maxLines = 1)
+                } else {
+                    icons.forEach { Icon(it, contentDescription = null, tint = Ember.Text, modifier = Modifier.size(13.dp)) }
+                }
+            }
         }
     }
 }
