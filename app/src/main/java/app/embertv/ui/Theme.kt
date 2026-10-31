@@ -70,14 +70,43 @@ val InterDisplay = FontFamily(
     Font(R.font.inter_display_bold, FontWeight.Bold),
 )
 
+/** Text sizes to choose from in Settings, with how much bigger each makes the text. */
+val TEXT_SIZES = listOf("Normal" to 1f, "Large" to 1.12f, "Extra large" to 1.25f)
+
+/** The app's text styles, scaled by the chosen text size (Settings → Text size). */
 object Txt {
-    val LargeTitle = TextStyle(fontFamily = InterDisplay, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp, lineHeight = 36.sp)
-    val Hero = TextStyle(fontFamily = InterDisplay, fontSize = 40.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp, lineHeight = 46.sp)
-    val Title = TextStyle(fontFamily = InterDisplay, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, lineHeight = 32.sp)
-    val Headline = TextStyle(fontFamily = Inter, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, lineHeight = 23.sp)
-    val Body = TextStyle(fontFamily = Inter, fontSize = 15.sp, lineHeight = 22.sp)
-    val Label = TextStyle(fontFamily = Inter, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-    val Caption = TextStyle(fontFamily = Inter, fontSize = 12.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp)
+    /** 1 is normal. Reading a style from a screen redraws it when this changes. */
+    var scale by androidx.compose.runtime.mutableStateOf(1f)
+
+    private class Styles(s: Float) {
+        val largeTitle = TextStyle(fontFamily = InterDisplay, fontSize = (30f * s).sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp, lineHeight = (36f * s).sp)
+        val hero = TextStyle(fontFamily = InterDisplay, fontSize = (40f * s).sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp, lineHeight = (46f * s).sp)
+        val title = TextStyle(fontFamily = InterDisplay, fontSize = (26f * s).sp, fontWeight = FontWeight.SemiBold, lineHeight = (32f * s).sp)
+        val headline = TextStyle(fontFamily = Inter, fontSize = (18f * s).sp, fontWeight = FontWeight.SemiBold, lineHeight = (23f * s).sp)
+        val body = TextStyle(fontFamily = Inter, fontSize = (15f * s).sp, lineHeight = (22f * s).sp)
+        val label = TextStyle(fontFamily = Inter, fontSize = (15f * s).sp, fontWeight = FontWeight.Medium)
+        val caption = TextStyle(fontFamily = Inter, fontSize = (12f * s).sp, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp)
+    }
+
+    private var made = Styles(1f)
+    private var madeFor = 1f
+
+    private fun styles(): Styles {
+        val s = scale
+        if (s != madeFor) {
+            made = Styles(s)
+            madeFor = s
+        }
+        return made
+    }
+
+    val LargeTitle: TextStyle get() = styles().largeTitle
+    val Hero: TextStyle get() = styles().hero
+    val Title: TextStyle get() = styles().title
+    val Headline: TextStyle get() = styles().headline
+    val Body: TextStyle get() = styles().body
+    val Label: TextStyle get() = styles().label
+    val Caption: TextStyle get() = styles().caption
 }
 
 @Composable

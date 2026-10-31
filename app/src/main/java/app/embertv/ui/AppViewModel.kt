@@ -643,6 +643,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         homeOrder = prefs.homeOrder
         homeHidden = prefs.homeHidden
         Ember.backdrop = BACKDROPS.firstOrNull { it.id == prefs.backdrop } ?: BACKDROPS[0]
+        Txt.scale = prefs.textScale.coerceIn(1f, 1.25f)
+        HintsSetting.show = prefs.showHints
+        autoplayNext = prefs.autoplayNext
         homeExtras = null
         applyCategoryFilter()
         reloadToken++
@@ -1252,6 +1255,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val next = if (id in homeHidden) homeHidden - id else homeHidden + id
         homeHidden = next
         prefs.homeHidden = next
+    }
+
+    /** Steps through Normal, Large and Extra large text. */
+    fun cycleTextSize() {
+        val i = TEXT_SIZES.indexOfFirst { kotlin.math.abs(it.second - Txt.scale) < 0.01f }
+        val next = TEXT_SIZES[(i + 1) % TEXT_SIZES.size].second
+        Txt.scale = next
+        prefs.textScale = next
+    }
+
+    val textSizeLabel: String
+        get() = TEXT_SIZES.firstOrNull { kotlin.math.abs(it.second - Txt.scale) < 0.01f }?.first ?: "Normal"
+
+    fun toggleHints() {
+        HintsSetting.show = !HintsSetting.show
+        prefs.showHints = HintsSetting.show
+    }
+
+    /** Whether the next episode starts by itself after a short countdown. */
+    var autoplayNext by mutableStateOf(true)
+        private set
+
+    fun toggleAutoplayNext() {
+        autoplayNext = !autoplayNext
+        prefs.autoplayNext = autoplayNext
     }
 
     /** Changes this profile's background colours. */

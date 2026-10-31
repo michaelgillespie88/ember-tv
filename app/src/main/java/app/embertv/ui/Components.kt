@@ -655,6 +655,11 @@ internal fun glyphIcon(glyph: String): androidx.compose.ui.graphics.vector.Image
 
 // ---------- Remote hints, Apple style ----------
 
+/** Whether [RemoteHints] are shown (Settings → Remote hints). */
+object HintsSetting {
+    var show by mutableStateOf(true)
+}
+
 /** One remote button and what it does, for [RemoteHints]. Keys: OK, Hold OK, ◀ ▶ ▲ ▼ ▲▼ ◀▶ ◀◀ ▶▶ ☰. */
 class Hint(val key: String, val label: String)
 
@@ -664,6 +669,8 @@ class Hint(val key: String, val label: String)
  */
 @Composable
 fun RemoteHints(hints: List<Hint>, modifier: Modifier = Modifier) {
+    // Settings → Remote hints can turn them off once you know your way around.
+    if (!HintsSetting.show) return
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
         for (h in hints) {
             Row(verticalAlignment = Alignment.CenterVertically) {

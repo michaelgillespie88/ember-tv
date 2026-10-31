@@ -478,6 +478,20 @@ fun SettingsSection(vm: AppViewModel) {
                     "The colour behind everything, and the glow at the top of each page",
                     focusKey = "set:backdrop",
                 ) { pickingBackdrop = true }
+                SettingRow(
+                    "Text size",
+                    vm.textSizeLabel,
+                    "Bigger text is easier to read from across the room",
+                    focusKey = "set:textsize",
+                ) { vm.cycleTextSize() }
+                if (LocalIsTv.current) {
+                    SettingRow(
+                        "Remote hints",
+                        if (HintsSetting.show) "On" else "Off",
+                        "The little OK, arrow and Back guides on screen. Turn them off once you know your way around",
+                        focusKey = "set:hints",
+                    ) { vm.toggleHints() }
+                }
             }
             val p = vm.profile
             if (!kids && p != null) {
@@ -523,6 +537,12 @@ fun SettingsSection(vm: AppViewModel) {
                 if (LocalIsTv.current) "Zoom fills the screen on channels with black bars. Also in the player: press OK" else "Zoom fills the screen on channels with black bars. Pinch the picture to change it too",
                 focusKey = "set:picture",
             ) { vm.cyclePicture(announce = false) }
+            SettingRow(
+                "Play next episode automatically",
+                if (vm.autoplayNext) "On" else "Off",
+                if (vm.autoplayNext) "Up Next counts down at the end of an episode, then plays the next one" else "Stops at the end of each episode, with the next one ready to play",
+                focusKey = "set:autoplay",
+            ) { vm.toggleAutoplayNext() }
             SettingRow(
                 "Quality to play",
                 when (vm.qualityChoice) {

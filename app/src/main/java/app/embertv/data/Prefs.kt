@@ -164,7 +164,7 @@ class Prefs(context: Context) {
         val e = sp.edit()
         for (key in sp.all.keys) {
             val belongs = if (id == MAIN_PROFILE) {
-                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams", "watched", "hidden_channels", "sport_leagues", "sport_others", "series_seen", "last_watched", "home_order", "home_hidden", "backdrop") ||
+                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams", "watched", "hidden_channels", "sport_leagues", "sport_others", "series_seen", "last_watched", "home_order", "home_hidden", "backdrop", "text_scale", "show_hints", "autoplay_next") ||
                     key.startsWith("pos_") || key.startsWith("last_ep_")
             } else {
                 key.startsWith("p_${id}_")
@@ -520,6 +520,27 @@ class Prefs(context: Context) {
         get() = sp.getString(pk("backdrop"), "warm") ?: "warm"
         set(value) {
             sp.edit().putString(pk("backdrop"), value).apply()
+        }
+
+    /** This profile's text size (1 is normal). */
+    var textScale: Float
+        get() = sp.getInt(pk("text_scale"), 100) / 100f
+        set(value) {
+            sp.edit().putInt(pk("text_scale"), (value * 100).toInt()).apply()
+        }
+
+    /** Whether this profile sees the little remote-button hints. */
+    var showHints: Boolean
+        get() = sp.getBoolean(pk("show_hints"), true)
+        set(value) {
+            sp.edit().putBoolean(pk("show_hints"), value).apply()
+        }
+
+    /** Whether the next episode starts by itself after a short countdown. */
+    var autoplayNext: Boolean
+        get() = sp.getBoolean(pk("autoplay_next"), true)
+        set(value) {
+            sp.edit().putBoolean(pk("autoplay_next"), value).apply()
         }
 
     /** Home rows this profile has turned off. */

@@ -48,6 +48,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -1760,12 +1761,28 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
         showOverlay()
     }
 
-    fun nextEpisode() {
+    fun nextEpisode(finished: Boolean = false) {
         if (exo.hasNextMediaItem()) {
+            // From Up Next at the end: this one counts as watched, as if it had played out.
+            if (finished) items.getOrNull(exo.currentMediaItemIndex)?.let {
+                vm.saveProgress(it, 0L, 0L)
+                vm.markFinished(it)
+            }
             exo.seekToNextMediaItem()
             exo.play()
         }
     }
+
+    // ---- Up Next: the next episode, with a countdown (Settings → Play next episode automatically) ----
+    var upNextCancelled by remember(current) { mutableStateOf(false) }
+    // With autoplay off (or cancelled), stop at the end of each episode instead of rolling on.
+    LaunchedEffect(vm.autoplayNext, upNextCancelled) { exo.pauseAtEndOfMediaItems = !vm.autoplayNext || upNextCancelled }
+    val hasNextItem = current < items.lastIndex
+    val remainingMs = duration - position
+    val atEnd = duration > 0 && remainingMs <= 1_200 && !playing
+    val counting = vm.autoplayNext && !upNextCancelled && playing && remainingMs in 1..UP_NEXT_MS
+    val upNext = hasNextItem && duration > 120_000 && error == null && !vm.inPip && (counting || atEnd)
+    BackHandler(enabled = upNext && counting) { upNextCancelled = true }
 
     fun skipBy(deltaMs: Long) {
         val d = exo.duration
@@ -1784,6 +1801,11 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
         if (showTracks || scoresOpen) return false
         val native = ev.nativeKeyEvent
         val code = native.keyCode
+        // Up Next showing: OK plays the next episode now.
+        if (upNext && !controlsOpen && isSelectKey(code)) {
+            if (ev.type == KeyEventType.KeyDown && native.repeatCount == 0) nextEpisode(finished = true)
+            return true
+        }
         if (controlsOpen) {
             // The buttons have the remote; only the media keys still work directly.
             if (ev.type != KeyEventType.KeyDown) return false
@@ -1939,6 +1961,25 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
         ) {
             Box(Modifier.fillMaxHeight()) {
                 ScoresPanel(programmeTitle = null, onClose = { scoresOpen = false })
+            }
+        }
+
+        AnimatedVisibility(
+            visible = upNext && panel == null && !scoresOpen,
+            enter = fadeIn() + androidx.compose.animation.slideInHorizontally { it / 3 },
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = if (isTv) 48.dp else 16.dp, bottom = if (isTv) 150.dp else 110.dp),
+        ) {
+            val next = items.getOrNull(current + 1)
+            if (next != null) {
+                UpNextCard(
+                    next = next,
+                    secondsLeft = if (counting) ((remainingMs + 999) / 1000).toInt() else null,
+                    onPlay = { nextEpisode(finished = true) },
+                    onCancel = { upNextCancelled = true },
+                )
             }
         }
 
@@ -2233,6 +2274,65 @@ private fun SkipButton(forward: Boolean, seconds: Int, onClick: () -> Unit) {
             modifier = Modifier.size(32.dp),
         )
         Text("$seconds", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(top = 3.dp))
+    }
+}
+
+/** How long before the end the Up Next countdown starts. */
+private const val UP_NEXT_MS = 15_000L
+
+/**
+ * Apple TV's Up Next: a frosted card with the next episode's picture and name. Counting down, it
+ * starts by itself; with autoplay off (or cancelled), it waits for you at the end.
+ */
+@Composable
+private fun UpNextCard(next: VodItem, secondsLeft: Int?, onPlay: () -> Unit, onCancel: () -> Unit) {
+    val isTv = LocalIsTv.current
+    Row(
+        Modifier
+            .width(if (isTv) 440.dp else 340.dp)
+            .glassSurface(RoundedCornerShape(22.dp), Color(0xE0141418))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .width(if (isTv) 150.dp else 112.dp)
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0x1FFFFFFF))
+        ) {
+            NetImage(next.image.ifBlank { next.seriesCover }, Modifier.fillMaxSize())
+            Box(
+                Modifier.align(Alignment.Center).size(34.dp).glassSurface(CircleShape, Color(0x59000000)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(EmberIcons.Play, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
+            }
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (secondsLeft != null) "UP NEXT IN $secondsLeft" else "UP NEXT",
+                style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.1.sp),
+                color = Ember.Dim,
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(next.subtitle.substringBefore("  ").ifBlank { next.title }, style = Txt.Label.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val name = next.subtitle.substringAfter("  ", "").trim()
+            if (name.isNotEmpty()) Text(name, style = Txt.Caption, color = Ember.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(8.dp))
+            if (isTv) {
+                RemoteHints(
+                    if (secondsLeft != null) listOf(Hint("OK", "Play now"), Hint("BACK", "Cancel"))
+                    else listOf(Hint("OK", "Play next episode"))
+                )
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PillButton("Play", icon = EmberIcons.Play, primary = true, onClick = onPlay)
+                    if (secondsLeft != null) PillButton("Cancel", onClick = onCancel)
+                }
+            }
+        }
     }
 }
 
