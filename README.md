@@ -9,7 +9,7 @@ The same app gives TVs a remote-friendly layout and phones a touch layout.
 - **Home** – opens first: a featured banner, Continue Watching, your channels, My List and the latest movies and series
 - **Live TV** – categories, channel logos, now/next with progress, quick channel list, number keys to jump to a channel
 - **Live preview (TVs)** – the highlighted channel plays muted in a small window in Live TV and the guide (Settings → Live preview)
-- **TiviMate-style guide (TVs)** – full screen, with the highlighted programme and a live picture across the top and about ten channels and two and a half hours underneath; move left and right to scroll through the day, pick a group or day from the buttons above the channels (Settings → Guide and channel list for bigger rows)
+- **TiviMate-style guide (TVs)** – full screen, with the highlighted programme and a live picture across the top, channel groups down the left, and about ten channels and two and a half hours in the grid; move left and right to scroll through the day (left at "now" goes to the groups), and pick a day from the button above the channels
 - **Guide over live TV (TVs)** – press ☰ (or Guide) while watching: the full guide fills the screen with the channel still playing in the top-right corner, like TiviMate
 - **Playback controls (TVs)** – press OK while watching for Pause, skip back 10s / on 30s, Live, TV guide, Channels and Live scores
 - **Pause and rewind live TV** – on channels with catch-up, play/pause pauses and rewind / fast-forward skip back 10 seconds and on 30, as far back as your provider keeps, using your provider's own rewind (nothing is saved to the device). Settings → Watching → Pause & rewind live TV

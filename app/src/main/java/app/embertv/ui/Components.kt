@@ -1,5 +1,6 @@
 package app.embertv.ui
 
+import androidx.compose.ui.unit.Dp
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -435,9 +436,11 @@ fun CategoryRail(
     onFocusCategory: (Category) -> Unit,
     onSelectCategory: (Category) -> Unit,
     modifier: Modifier = Modifier,
+    width: Dp = 232.dp,
+    rowHeight: Dp = 46.dp,
 ) {
     LazyColumn(
-        modifier = modifier.width(232.dp).fillMaxHeight(),
+        modifier = modifier.width(width).fillMaxHeight(),
         state = state,
         contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp, start = 4.dp, end = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -445,7 +448,7 @@ fun CategoryRail(
         items(categories, key = { it.id }) { c ->
             val selected = c.id == selectedId
             FocusBox(
-                modifier = Modifier.fillMaxWidth().height(46.dp),
+                modifier = Modifier.fillMaxWidth().height(rowHeight),
                 focusKey = "$keyPrefix:cat:${c.id}",
                 shape = RoundedCornerShape(10.dp),
                 focusedScale = 1.03f,
@@ -467,7 +470,7 @@ fun CategoryRail(
                     }
                     Text(
                         c.name,
-                        style = Txt.Label,
+                        style = if (rowHeight < 44.dp) Txt.Label.copy(fontSize = 14.sp) else Txt.Label,
                         color = when {
                             focused -> Color.Black
                             selected -> Ember.Text

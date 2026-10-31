@@ -64,6 +64,9 @@ internal const val WINDOW_MINUTES = 150
 /** How far the guide goes back and forward, in half-hour steps: a week each way. */
 internal const val MAX_STEPS = 7 * 48
 internal val CHANNEL_COLUMN = 214.dp
+/** The TV guide's channel column, narrower to make room for the groups down the left. */
+private val GUIDE_CHANNEL_COLUMN = 178.dp
+private val RAIL_WIDTH = 188.dp
 private val INFO_HEIGHT = 140.dp
 private val ROW_HEIGHT = 48.dp
 /** Compact rows fit about ten channels on a TV instead of seven. */
@@ -90,6 +93,7 @@ fun GuideSection(vm: AppViewModel) {
                 listOf(Category(FAVOURITES, "★  Favourites"), Category(ALL, "All channels")) + c.value
             }
             val selectedId = section.categoryId ?: c.value.firstOrNull()?.id ?: ALL
+            val select = rememberCategorySelector(section)
             // Half-hour steps away from now: negative is earlier (catch-up), positive is later.
             var step by remember { mutableIntStateOf(0) }
             GuideGrid(
@@ -97,7 +101,8 @@ fun GuideSection(vm: AppViewModel) {
                 repo = repo,
                 categories = categories,
                 categoryId = selectedId,
-                onCategory = { section.categoryId = it },
+                onCategory = { select(it, true) },
+                onFocusCategory = { select(it, false) },
                 step = step,
                 onStep = { step = it.coerceIn(-MAX_STEPS, MAX_STEPS) },
                 modifier = Modifier.fillMaxSize(),
@@ -113,6 +118,7 @@ private fun GuideGrid(
     categories: List<Category>,
     categoryId: String,
     onCategory: (String) -> Unit,
+    onFocusCategory: (String) -> Unit,
     step: Int,
     onStep: (Int) -> Unit,
     modifier: Modifier,
@@ -162,12 +168,28 @@ private fun GuideGrid(
             when (val r = load) {
                 is LoadResult.Loading -> LoadingView(Modifier.weight(1f))
                 is LoadResult.Err -> ErrorView(r.message, Modifier.weight(1f)) { vm.reload() }
-                is LoadResult.Ok -> {
+                is LoadResult.Ok -> Row(Modifier.fillMaxWidth().weight(1f)) {
+                    // Channel groups down the left, like TiviMate. Highlighting one shows it.
+                    CategoryRail(
+                        categories = categories,
+                        selectedId = categoryId,
+                        state = vm.guide.rail,
+                        keyPrefix = "guide",
+                        onFocusCategory = { c ->
+                            vm.guideFullScreen = true
+                            onFocusCategory(c.id)
+                        },
+                        onSelectCategory = { c -> onCategory(c.id) },
+                        width = RAIL_WIDTH,
+                        rowHeight = 38.dp,
+                        modifier = Modifier.padding(top = 34.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
                     val channels = r.value
                     val compact = vm.compactLists
                     val rowHeight = if (compact) COMPACT_ROW_HEIGHT else ROW_HEIGHT
-                    BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-                        val gridWidth = maxWidth - CHANNEL_COLUMN
+                    BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                        val gridWidth = maxWidth - GUIDE_CHANNEL_COLUMN
                         val dpPerMinute = gridWidth / WINDOW_MINUTES
                         Column(Modifier.fillMaxSize()) {
                             TimeHeader(
@@ -178,6 +200,8 @@ private fun GuideGrid(
                                 onGroup = { pickingGroup = true },
                                 onDay = { pickingDay = true },
                                 onFocusHeader = { vm.guideFullScreen = false },
+                                showGroup = false,
+                                channelColumn = GUIDE_CHANNEL_COLUMN,
                             )
                             if (channels.isEmpty()) {
                                 EmptyView(
@@ -192,7 +216,7 @@ private fun GuideGrid(
                                     verticalArrangement = Arrangement.spacedBy(ROW_GAP),
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .onPreviewKeyEvent { ev -> guideKey(ev, focus?.programme, windowStart, windowEnd, step, onStep) },
+                                        .onPreviewKeyEvent { ev -> guideKey(ev, focus?.programme, windowStart, windowEnd, step, onStep, leftExits = true) },
                                 ) {
                                     itemsIndexed(channels, key = { _, ch -> ch.streamId }) { index, ch ->
                                         GuideRow(
@@ -206,6 +230,7 @@ private fun GuideGrid(
                                             dpPerMinute = dpPerMinute,
                                             gridWidth = gridWidth,
                                             now = now,
+                                            channelColumn = GUIDE_CHANNEL_COLUMN,
                                             onFocus = { p ->
                                                 focus = GuideFocus(ch, p)
                                                 vm.guideFullScreen = true
@@ -259,6 +284,7 @@ internal fun guideKey(
     windowEnd: Long,
     step: Int,
     onStep: (Int) -> Unit,
+    leftExits: Boolean = false,
 ): Boolean {
     if (ev.type != KeyEventType.KeyDown) return false
     return when (ev.nativeKeyEvent.keyCode) {
@@ -266,7 +292,8 @@ internal fun guideKey(
             onStep(step + 1)
             true
         } else false
-        AndroidKeyEvent.KEYCODE_DPAD_LEFT -> if (p != null && p.start <= windowStart && step > -MAX_STEPS) {
+        // At "now", left goes to the channel groups beside the guide (when there are any); further on, back in time.
+        AndroidKeyEvent.KEYCODE_DPAD_LEFT -> if (p != null && p.start <= windowStart && step > -MAX_STEPS && !(leftExits && step <= 0)) {
             onStep(step - 1)
             true
         } else false
@@ -373,15 +400,17 @@ internal fun TimeHeader(
     onDay: () -> Unit,
     onFocusHeader: () -> Unit,
     showChips: Boolean = true,
+    showGroup: Boolean = true,
+    channelColumn: Dp = CHANNEL_COLUMN,
 ) {
     Box(Modifier.fillMaxWidth().height(34.dp)) {
         val today = startOfDay(windowStart) == startOfDay(now)
         if (showChips) Row(
-            Modifier.width(CHANNEL_COLUMN - 10.dp).fillMaxHeight(),
+            Modifier.width(channelColumn - 10.dp).fillMaxHeight(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            HeaderChip(groupName, "guide:group", Modifier.weight(1f, fill = false), onFocus = onFocusHeader, onClick = onGroup)
+            if (showGroup) HeaderChip(groupName, "guide:group", Modifier.weight(1f, fill = false), onFocus = onFocusHeader, onClick = onGroup)
             HeaderChip(if (today) "Today" else formatDay(windowStart, now), "guide:day", accent = !today, onFocus = onFocusHeader, onClick = onDay)
         } else {
             Text(
@@ -399,7 +428,7 @@ internal fun TimeHeader(
             // Leave room for the orange "now" time rather than printing over it.
             if (showNow && x > nowOffset - 56.dp && x < nowOffset + 30.dp) continue
             Row(
-                Modifier.offset(x = CHANNEL_COLUMN + dpPerMinute * (slot * 30).toFloat()).fillMaxHeight(),
+                Modifier.offset(x = channelColumn + dpPerMinute * (slot * 30).toFloat()).fillMaxHeight(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.width(1.dp).height(12.dp).background(Color(0x33FFFFFF)))
@@ -410,7 +439,7 @@ internal fun TimeHeader(
         if (showNow) {
             Box(
                 Modifier
-                    .offset(x = CHANNEL_COLUMN + nowOffset - 22.dp, y = 7.dp)
+                    .offset(x = channelColumn + nowOffset - 22.dp, y = 7.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .background(Ember.Accent)
                     .padding(horizontal = 5.dp, vertical = 2.dp)
@@ -470,6 +499,7 @@ internal fun GuideRow(
     onPick: (Programme?) -> Unit,
     onLongPick: (Programme?) -> Unit,
     autoFocusLive: Boolean = false,
+    channelColumn: Dp = CHANNEL_COLUMN,
 ) {
     // Once a row has needed the whole guide it keeps it, so scrolling back doesn't reload it.
     var full by remember { mutableStateOf(false) }
@@ -479,7 +509,7 @@ internal fun GuideRow(
     Row(Modifier.fillMaxWidth().height(rowHeight)) {
         Row(
             Modifier
-                .width(CHANNEL_COLUMN)
+                .width(channelColumn)
                 .fillMaxHeight()
                 .padding(end = 6.dp)
                 .clip(RoundedCornerShape(8.dp))
@@ -853,7 +883,7 @@ fun PlayerGuide(vm: AppViewModel, channels: List<Channel>, current: Int, onZap: 
                         verticalArrangement = Arrangement.spacedBy(ROW_GAP),
                         modifier = Modifier
                             .fillMaxSize()
-                            .onPreviewKeyEvent { ev -> guideKey(ev, focus?.programme, windowStart, windowEnd, step) { step = it.coerceIn(-MAX_STEPS, MAX_STEPS) } },
+                            .onPreviewKeyEvent { ev -> guideKey(ev, focus?.programme, windowStart, windowEnd, step, onStep = { step = it.coerceIn(-MAX_STEPS, MAX_STEPS) }) },
                     ) {
                         itemsIndexed(channels, key = { _, ch -> ch.streamId }) { i, ch ->
                             GuideRow(
