@@ -394,6 +394,7 @@ fun SettingsSection(vm: AppViewModel) {
     var confirmSignOut by remember { mutableStateOf(false) }
     var managingCategories by remember { mutableStateOf(false) }
     var managingChannels by remember { mutableStateOf(false) }
+    var pickingLeagues by remember { mutableStateOf(false) }
     var pickingTeams by remember { mutableStateOf(false) }
     var choosingPlayer by remember { mutableStateOf(false) }
     var editingTmdb by remember { mutableStateOf(false) }
@@ -454,6 +455,19 @@ fun SettingsSection(vm: AppViewModel) {
                 "Football on now across your channels, with the score",
                 focusKey = "set:sport",
             ) { vm.toggleSportOnHome() }
+            if (!kids && vm.sportOnHome) {
+                val names = app.embertv.data.LEAGUES.filter { it.code in vm.sportLeagues }.map { it.name }
+                SettingRow(
+                    "My leagues",
+                    when {
+                        names.isEmpty() -> "None chosen"
+                        names.size <= 2 -> names.joinToString(", ")
+                        else -> "${names.take(2).joinToString(", ")} + ${names.size - 2}"
+                    },
+                    "Shown first in Live Sport Now" + if (vm.sportOthers) ", then other leagues" else " (others hidden)",
+                    focusKey = "set:leagues",
+                ) { pickingLeagues = true }
+            }
             val p = vm.profile
             if (!kids && p != null) {
                 val hidden = vm.categoryRules(p).keys.size
@@ -679,6 +693,9 @@ fun SettingsSection(vm: AppViewModel) {
     }
 
     val managed = vm.profile
+    if (pickingLeagues) {
+        LeaguePicker(vm) { pickingLeagues = false }
+    }
     if (managingChannels) {
         ChannelManager(vm) { managingChannels = false }
     }
@@ -770,6 +787,70 @@ private fun SettingRow(title: String, value: String, hint: String?, focusKey: St
                 if (hint != null) {
                     Spacer(Modifier.height(2.dp))
                     Text(hint, style = Txt.Caption, color = Ember.Faint)
+                }
+            }
+        }
+    }
+}
+
+/** Settings → My leagues: tick the competitions Live Sport Now shows first. */
+@Composable
+private fun LeaguePicker(vm: AppViewModel, onDone: () -> Unit) {
+    val isTv = LocalIsTv.current
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDone) {
+        DialogBackdropBlur()
+        Column(
+            Modifier
+                .width(if (isTv) 560.dp else 440.dp)
+                .heightIn(max = if (isTv) 520.dp else 640.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(dialogPanelColor())
+                .padding(if (isTv) 8.dp else 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            SheetTitle("My leagues", eyebrow = "Live Sport Now", subtitle = "Ticked competitions come first on Home")
+            Spacer(Modifier.height(16.dp))
+            androidx.compose.foundation.lazy.LazyColumn(
+                Modifier.width(if (isTv) 400.dp else 400.dp).weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(vertical = 6.dp),
+            ) {
+                item(key = "english") {
+                    SheetOption(
+                        "Just English football",
+                        focusKey = "leagues:english",
+                        subtitle = "Premier League, the EFL and the cups",
+                        autoFocus = isTv,
+                    ) {
+                        vm.setSportLeagues(app.embertv.data.DEFAULT_SPORT_LEAGUES)
+                    }
+                }
+                items(app.embertv.data.LEAGUES, key = { it.code }) { l ->
+                    val on = l.code in vm.sportLeagues
+                    SheetOption(
+                        l.name,
+                        focusKey = "leagues:${l.code}",
+                        trailing = { dark ->
+                            Text(
+                                if (on) "✓" else "",
+                                style = Txt.Label.copy(fontWeight = FontWeight.Bold),
+                                color = if (dark) Color.Black else Ember.Accent,
+                            )
+                        },
+                    ) { vm.setSportLeague(l.code, !on) }
+                }
+                item(key = "others") {
+                    SheetOption(
+                        "Other leagues too",
+                        focusKey = "leagues:others",
+                        subtitle = if (vm.sportOthers) "Shown after yours" else "Hidden: only your leagues",
+                        trailing = { dark ->
+                            Text(if (vm.sportOthers) "On" else "Off", style = Txt.Label, color = if (dark) Color.Black else Ember.Dim)
+                        },
+                    ) { vm.toggleSportOthers() }
+                }
+                item(key = "done") {
+                    SheetOption("Done", focusKey = "leagues:done", primary = true, onClick = onDone)
                 }
             }
         }

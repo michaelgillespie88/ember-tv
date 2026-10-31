@@ -438,6 +438,7 @@ fun SportCard(item: AppViewModel.LiveSport, width: Dp, focusKey: String, onClick
                 Spacer(Modifier.width(6.dp))
                 Text(
                     when {
+                        channel == null && item.searching -> "Finding channels…"
                         channel == null -> "Find the channel"
                         others > 0 -> "On ${channel.name} + $others more"
                         else -> "On ${channel.name}"

@@ -164,7 +164,7 @@ class Prefs(context: Context) {
         val e = sp.edit()
         for (key in sp.all.keys) {
             val belongs = if (id == MAIN_PROFILE) {
-                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams", "watched", "hidden_channels") ||
+                key in setOf("favourites", "history", "recent_channels", "audio_lang", "subs", "reminders", "category_rules", "teams", "watched", "hidden_channels", "sport_leagues", "sport_others") ||
                     key.startsWith("pos_") || key.startsWith("last_ep_")
             } else {
                 key.startsWith("p_${id}_")
@@ -249,6 +249,20 @@ class Prefs(context: Context) {
         get() = sp.getString("tmdb_key", "") ?: ""
         set(value) {
             sp.edit().putString("tmdb_key", value).apply()
+        }
+
+    /** The football competitions shown first in Live Sport Now (ESPN codes). English football to start with. */
+    var sportLeagues: Set<String>
+        get() = sp.getStringSet(pk("sport_leagues"), null)?.toSet() ?: DEFAULT_SPORT_LEAGUES
+        set(value) {
+            sp.edit().putStringSet(pk("sport_leagues"), value).apply()
+        }
+
+    /** Also show other competitions after your own in Live Sport Now. */
+    var sportOthers: Boolean
+        get() = sp.getBoolean(pk("sport_others"), true)
+        set(value) {
+            sp.edit().putBoolean(pk("sport_others"), value).apply()
         }
 
     /** Show the Live Sport Now row on Home. */
@@ -455,3 +469,6 @@ class Prefs(context: Context) {
         sp.edit().putInt(pk("last_ep_$seriesId"), episodeId).apply()
     }
 }
+
+/** English football: the Premier League, the EFL and the domestic cups. */
+val DEFAULT_SPORT_LEAGUES = setOf("eng.1", "eng.2", "eng.3", "eng.4", "eng.fa", "eng.league_cup")

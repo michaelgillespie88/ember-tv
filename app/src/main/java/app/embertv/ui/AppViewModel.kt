@@ -632,6 +632,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         watchedKeys = prefs.watched
         followedTeams.clear()
         followedTeams.addAll(prefs.followedTeams)
+        sportLeagues = prefs.sportLeagues
+        sportOthers = prefs.sportOthers
         startTeamWatcher()
         audioLanguage = prefs.audioLanguage
         subtitleMode = prefs.subtitleMode
@@ -1716,7 +1718,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Live Sport Now and the score bug ----
 
     /** A match on now, and the channels found showing it (best first). */
-    data class LiveSport(val match: Match, val hits: List<MatchHit>)
+    /** A match for the Home row; [searching] while its channels are still being looked for. */
+    data class LiveSport(val match: Match, val hits: List<MatchHit>, val searching: Boolean = false)
+
+    /** Your leagues, shown first in Live Sport Now. */
+    var sportLeagues by mutableStateOf(prefs.sportLeagues)
+        private set
+    var sportOthers by mutableStateOf(prefs.sportOthers)
+        private set
+
+    fun setSportLeague(code: String, on: Boolean) = setSportLeagues(if (on) sportLeagues + code else sportLeagues - code)
+
+    fun setSportLeagues(codes: Set<String>) {
+        if (codes == sportLeagues) return
+        sportLeagues = codes
+        prefs.sportLeagues = codes
+        restartLiveSport()
+    }
+
+    fun toggleSportOthers() {
+        sportOthers = !sportOthers
+        prefs.sportOthers = sportOthers
+        restartLiveSport()
+    }
+
+    private fun restartLiveSport() {
+        if (sportJob != null) watchLiveSport(true)
+    }
 
     var sportOnHome by mutableStateOf(prefs.sportOnHome)
         private set
@@ -1740,24 +1768,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (!active || !sportOnHome || profile?.kids == true) return
         val r = repo ?: return
         sportJob = viewModelScope.launch {
-            // Let Home's own rows load first; the sport search can wait a few seconds.
+            // Let Home's own rows start first; the sport search can wait a moment.
             var waited = 0
-            while (homeFeed is LoadResult.Loading && waited < 20_000) {
+            while (homeFeed is LoadResult.Loading && waited < 6_000) {
                 kotlinx.coroutines.delay(500)
                 waited += 500
             }
             while (true) {
                 val nowMs = System.currentTimeMillis()
+                val mine = sportLeagues
+                // Your leagues, plus the usual ones too unless you've said only yours.
+                val leagues = (app.embertv.data.LEAGUES.filter { it.code in mine } +
+                    (if (sportOthers) app.embertv.data.POPULAR_LEAGUES else emptyList())).distinctBy { it.code }
                 val matches = try {
-                    ScoresClient.today(app.embertv.data.POPULAR_LEAGUES)
+                    ScoresClient.today(leagues)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     emptyList()
                 }.filter {
                     it.state == MatchState.LIVE || (it.state == MatchState.UPCOMING && it.kickoff - nowMs in 0..15 * 60_000L)
-                }.take(6)
+                }.sortedWith(compareBy({ if (it.league.code in mine) 0 else 1 }, { if (it.state == MatchState.LIVE) 0 else 1 }, { it.kickoff }))
+                    .take(8)
+                // Every card straight away, with channels filled in as each search finishes.
                 val out = ArrayList<LiveSport>()
+                val start = matches.map { m ->
+                    val cached = sportHits[m.id]
+                    if (cached != null && nowMs - cached.first < 10 * 60_000L) LiveSport(m, cached.second) else LiveSport(m, emptyList(), searching = true)
+                }
+                liveSport = sortSport(start)
                 for (m in matches) {
                     val cached = sportHits[m.id]
                     val hits = if (cached != null && nowMs - cached.first < 10 * 60_000L) cached.second else {
@@ -1774,7 +1813,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     out += LiveSport(m, hits)
                     // Show what's ready so far rather than waiting for every search.
-                    liveSport = sortSport(out)
+                    liveSport = sortSport(out + start.filter { s -> out.none { it.match.id == s.match.id } })
                 }
                 liveSport = sortSport(out)
                 kotlinx.coroutines.delay(60_000)
@@ -1782,8 +1821,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // Your leagues first, then what's live, then soonest; the order doesn't jump about as channels are found.
     private fun sortSport(list: List<LiveSport>): List<LiveSport> =
-        list.sortedWith(compareBy({ if (it.hits.isEmpty()) 1 else 0 }, { if (it.match.state == MatchState.LIVE) 0 else 1 }, { it.match.kickoff }))
+        list.sortedWith(
+            compareBy(
+                { if (it.match.league.code in sportLeagues) 0 else 1 },
+                { if (it.match.state == MatchState.LIVE) 0 else 1 },
+                { it.match.kickoff },
+            )
+        )
 
     /** A match whose score sits in the corner of the screen. */
     var pinnedMatch by mutableStateOf<Match?>(null)
