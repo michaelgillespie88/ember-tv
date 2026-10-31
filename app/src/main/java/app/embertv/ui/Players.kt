@@ -30,6 +30,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -889,43 +890,62 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         }
 
         if (!isTv) {
+            // Phones: Apple TV app layout. Back and a few tools along the top, play controls in the
+            // middle, a channel rocker on the right; everything else is in the ⋯ sheet.
             AnimatedVisibility(
-                visible = overlayVisible && !listOpen && !scoresOpen,
+                visible = (overlayVisible || paused) && !listOpen && !scoresOpen,
                 enter = fadeIn(),
                 exit = fadeOut(),
-                modifier = Modifier.align(Alignment.TopCenter),
+                modifier = Modifier.fillMaxSize(),
             ) {
-                val fav = vm.isFavourite(ContentType.LIVE, channel.streamId)
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(Brush.verticalGradient(listOf(Color(0xAA000000), Color.Transparent)))
-                        .windowInsetsPadding(WindowInsets.displayCutout)
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    IconCircleButton(EmberIcons.Back, "Back", background = ControlBg, glass = true) { vm.pop() }
-                    Spacer(Modifier.weight(1f))
-                    if (vm.timeshiftOn) {
-                        IconCircleButton(if (paused) EmberIcons.Play else EmberIcons.Pause, if (paused) "Play" else "Pause", background = ControlBg, glass = true) { togglePause() }
-                    }
-                    if (enterPip != null) IconCircleButton(EmberIcons.Pip, "Picture in picture", background = ControlBg, glass = true) { enterPip() }
-                    IconCircleButton(EmberIcons.Football, "Live scores", background = ControlBg, glass = true) { scoresOpen = true }
-                    IconCircleButton(EmberIcons.Restart, "Previous channel", background = ControlBg, glass = true) { previousChannel() }
-                    IconCircleButton(EmberIcons.ChevronUp, "Channel up", background = ControlBg, glass = true) { zap(upStep) }
-                    IconCircleButton(EmberIcons.ChevronDown, "Channel down", background = ControlBg, glass = true) { zap(-upStep) }
-                    IconCircleButton(EmberIcons.ChannelList, "Channel list", background = ControlBg, glass = true) { listOpen = true }
-                    IconCircleButton(
-                        if (fav) EmberIcons.StarFilled else EmberIcons.Star,
-                        "Favourite",
-                        background = ControlBg, glass = true,
-                        tint = if (fav) Ember.Accent else Ember.Text,
+                Box(Modifier.fillMaxSize()) {
+                    Row(
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(listOf(Color(0xAA000000), Color.Transparent)))
+                            .windowInsetsPadding(WindowInsets.displayCutout)
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        vm.toggleFavourite(vm.favouriteOf(channel))
-                        showOverlay()
+                        IconCircleButton(EmberIcons.Back, "Back", background = ControlBg, glass = true) { vm.pop() }
+                        Spacer(Modifier.weight(1f))
+                        IconCircleButton(EmberIcons.Football, "Live scores", background = ControlBg, glass = true) { scoresOpen = true }
+                        if (enterPip != null) IconCircleButton(EmberIcons.Pip, "Picture in picture", background = ControlBg, glass = true) { enterPip() }
+                        IconCircleButton(EmberIcons.ChannelList, "Channel list", background = ControlBg, glass = true) { listOpen = true }
+                        IconCircleButton(EmberIcons.More, "More options", background = ControlBg, glass = true) { optionsOpen = true }
                     }
-                    IconCircleButton(EmberIcons.More, "More options", background = ControlBg, glass = true) { optionsOpen = true }
+                    if (vm.timeshiftOn) {
+                        Row(
+                            Modifier.align(Alignment.Center),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(40.dp),
+                        ) {
+                            if (canRewind) SkipButton("−10") { seekBy(-10_000L) }
+                            IconCircleButton(
+                                if (paused) EmberIcons.Play else EmberIcons.Pause,
+                                if (paused) "Play" else "Pause",
+                                size = 76.dp,
+                                background = Color(0x59000000),
+                                glass = true,
+                            ) { togglePause() }
+                            if (canRewind) SkipButton("+30") { seekBy(30_000L) }
+                        }
+                    }
+                    // Channel up / down, like a remote's rocker.
+                    Column(
+                        Modifier
+                            .align(Alignment.CenterEnd)
+                            .windowInsetsPadding(WindowInsets.displayCutout)
+                            .padding(end = 16.dp)
+                            .glassSurface(RoundedCornerShape(28.dp), ControlBg),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        IconCircleButton(EmberIcons.ChevronUp, "Channel up", size = 52.dp) { zap(upStep) }
+                        Text("CH", style = Txt.Caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold), color = Ember.Faint)
+                        IconCircleButton(EmberIcons.ChevronDown, "Channel down", size = 52.dp) { zap(-upStep) }
+                    }
                 }
             }
         }
@@ -966,6 +986,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             channel,
             onOpenElsewhere = { vm.openElsewhere(Screen.PlayLive(channels, index)) },
             onMultiView = { vm.push(Screen.MultiView(listOf(channels[index]), channels)) },
+            onPrevious = if (previousIndex != null) ({ previousChannel() }) else null,
         ) { optionsOpen = false }
     }
 }
@@ -1038,11 +1059,9 @@ private fun TimeshiftPanel(
                 color = Ember.Faint,
             )
         } else {
+            // The big play and skip buttons are in the middle of the screen; just the way back to live here.
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PillButton("−10s", onClick = onBack)
-                PillButton("Play", icon = EmberIcons.Play, primary = true, onClick = onPlay)
-                PillButton("+30s", onClick = onForward)
-                PillButton("Live", onClick = onLive)
+                PillButton("Back to live", onClick = onLive)
             }
         }
     }
@@ -1328,19 +1347,39 @@ private fun SleepBadge(minutes: Int, modifier: Modifier = Modifier) {
 
 /** Phone "more" sheet for the live player: sleep timer, audio and subtitles. */
 @Composable
-private fun LiveOptionsDialog(vm: AppViewModel, channel: Channel, onOpenElsewhere: () -> Unit, onMultiView: () -> Unit, onDismiss: () -> Unit) {
+private fun LiveOptionsDialog(
+    vm: AppViewModel,
+    channel: Channel,
+    onOpenElsewhere: () -> Unit,
+    onMultiView: () -> Unit,
+    onPrevious: (() -> Unit)? = null,
+    onDismiss: () -> Unit,
+) {
     Dialog(onDismissRequest = onDismiss) {
         DialogBackdropBlur()
         Column(
             Modifier
                 .width(420.dp)
+                // A sideways phone is short: scroll rather than cut options off.
+                .heightIn(max = 560.dp)
                 .clip(RoundedCornerShape(28.dp))
                 .background(dialogPanelColor())
+                .verticalScroll(androidx.compose.foundation.rememberScrollState())
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             SheetTitle(channel.name, eyebrow = "Options")
             Spacer(Modifier.height(8.dp))
+            val fav = vm.isFavourite(ContentType.LIVE, channel.streamId)
+            ZapAction(if (fav) EmberIcons.StarFilled else EmberIcons.Star, if (fav) "Remove from favourites" else "Add to favourites", "") {
+                vm.toggleFavourite(vm.favouriteOf(channel))
+            }
+            if (onPrevious != null) {
+                ZapAction(EmberIcons.Restart, "Previous channel", "") {
+                    onDismiss()
+                    onPrevious()
+                }
+            }
             CatchupActions(vm, channel, onDismiss)
             ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
                 onDismiss()
