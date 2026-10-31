@@ -340,12 +340,26 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
                 )
                 Spacer(Modifier.height(16.dp))
             }
+            // Channels whose name or guide names both teams. Only if there are none, the weaker guesses.
+            val certain = hits.filter { it.score >= 8 }
+            val shown = (certain.ifEmpty { hits }).take(40)
+            val guessing = certain.isEmpty() && shown.isNotEmpty()
+            if (guessing && done) {
+                Text(
+                    "None of your channels name both teams yet. These mention one of them, so check before settling in.",
+                    style = Txt.Caption,
+                    color = Ember.Dim,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+                Spacer(Modifier.height(10.dp))
+            }
             LazyColumn(
                 Modifier.weight(1f, fill = false),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
             ) {
-                itemsIndexed(hits.take(40), key = { _, h -> h.channel.streamId }) { i, h ->
+                itemsIndexed(shown, key = { _, h -> h.channel.streamId }) { i, h ->
                     val p = h.programme
                     SheetOption(
                         title = h.channel.name,
@@ -363,7 +377,7 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
                                 Text("Best match", style = Txt.Caption, color = if (dark) Color.Black else Ember.Accent)
                             }
                         } else null,
-                    ) { vm.playFound(hits.take(40), i) }
+                    ) { vm.playFound(shown, i) }
                 }
                 item(key = "pin") {
                     Spacer(Modifier.height(6.dp))

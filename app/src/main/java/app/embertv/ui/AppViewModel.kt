@@ -1756,7 +1756,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     emptyList()
                 }.filter {
                     it.state == MatchState.LIVE || (it.state == MatchState.UPCOMING && it.kickoff - nowMs in 0..15 * 60_000L)
-                }.take(10)
+                }.take(6)
                 val out = ArrayList<LiveSport>()
                 for (m in matches) {
                     val cached = sportHits[m.id]
@@ -1767,7 +1767,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             throw e
                         } catch (e: Exception) {
                             emptyList()
-                        }.filter { it.score >= 4 }.take(30)
+                        }.filter { it.score >= 8 }.take(30)
                         sportHits[m.id] = nowMs to found
                         found
                     }

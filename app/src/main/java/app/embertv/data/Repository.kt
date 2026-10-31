@@ -48,7 +48,7 @@ class Repository(val client: XtreamClient) {
 
     private val epg = HashMap<Int, EpgEntry>()
     private val fullEpg = HashMap<Int, EpgEntry>()
-    private val epgGate = Semaphore(6)
+    private val epgGate = Semaphore(2)
 
     fun clearCaches() {
         liveCats = null

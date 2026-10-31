@@ -217,6 +217,8 @@ object MatchFinder {
         fun sorted(): List<MatchHit> =
             hits.values.sortedWith(
                 compareBy<MatchHit>(
+                    // Channels certainly showing it (both teams named) before guesses, whatever the country.
+                    { if (it.score >= 8) 0 else 1 },
                     { h -> regionRanks.getOrPut(h.channel.streamId) { regionRank(h.channel, catNames[h.channel.categoryId]) } },
                     { -it.score },
                     { qualityRank(it.channel.name) },
@@ -225,6 +227,7 @@ object MatchFinder {
                 )
             )
 
+        val live = match.state == MatchState.LIVE
         // The heavy text work happens off the main thread, so the screen never freezes.
         val names = normalizedNames(channels)
         val (nameHits, candidates, toCheck) = withContext(Dispatchers.Default) {
@@ -249,13 +252,13 @@ object MatchFinder {
             val picks = groups.values
                 .map { copies -> copies.minWith(compareBy({ regionRank(it, catNames[it.categoryId]) }, { qualityRank(it.name) })) }
                 .sortedBy { regionRank(it, catNames[it.categoryId]) }
-                .take(150)
+                // Kept small: each one is a request to the provider.
+                .take(if (live) 40 else 60)
             Triple(found, groups, picks)
         }
         for ((c, score) in nameHits) add(c, null, score)
         onProgress(0, 0, sorted())
 
-        val live = match.state == MatchState.LIVE
         val from = if (live) now else match.kickoff / 1000 - 15 * 60
         val to = if (live) now + 60 else match.kickoff / 1000 + 105 * 60
         val soon = match.kickoff / 1000 - now < 18 * 3600

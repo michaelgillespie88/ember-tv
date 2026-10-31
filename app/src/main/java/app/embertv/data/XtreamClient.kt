@@ -1,5 +1,6 @@
 package app.embertv.data
 
+import kotlinx.coroutines.sync.withPermit
 import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -131,7 +132,15 @@ class XtreamClient(val account: Account, private val userAgent: String) {
         throw XtreamException("The server redirected too many times.")
     }
 
-    private suspend fun call(action: String? = null, extra: String = ""): Any? = withContext(Dispatchers.IO) {
+    /**
+     * At most a few requests to the provider at once, across the whole app. Providers often block
+     * an account for a while if it sends lots of requests together, and then nothing loads.
+     */
+    private val gate = kotlinx.coroutines.sync.Semaphore(3)
+
+    private suspend fun call(action: String? = null, extra: String = ""): Any? = gate.withPermit { callNow(action, extra) }
+
+    private suspend fun callNow(action: String? = null, extra: String = ""): Any? = withContext(Dispatchers.IO) {
         val sb = StringBuilder(base).append("/player_api.php?username=").append(queryUser).append("&password=").append(queryPass)
         if (action != null) sb.append("&action=").append(action)
         sb.append(extra)
@@ -146,6 +155,9 @@ class XtreamClient(val account: Account, private val userAgent: String) {
                 throw XtreamException("The server refused this login (HTTP $code). Check your username and password.")
             }
             if (code == 404) throw XtreamException("No Xtream server found at that address (HTTP 404).")
+            if (code == 429 || code == 503) {
+                throw XtreamException("Your provider is busy or limiting requests (HTTP $code). Wait a minute, then try again.")
+            }
             if (code !in 200..299) throw XtreamException("The server returned an error (HTTP $code).")
             val text = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }.trim()
             if (text.isEmpty()) null else JSONTokener(text).nextValue()
