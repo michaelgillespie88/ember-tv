@@ -1762,7 +1762,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val cached = sportHits[m.id]
                     val hits = if (cached != null && nowMs - cached.first < 10 * 60_000L) cached.second else {
                         val found = try {
-                            app.embertv.data.MatchFinder.find(r, m, nowSeconds()) { _, _, _ -> }
+                            // Home: channel names, plus the guides of just a handful of channels.
+                            app.embertv.data.MatchFinder.find(r, m, nowSeconds(), guideBudget = 10) { _, _, _ -> }
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {

@@ -185,6 +185,8 @@ object MatchFinder {
         repo: Repository,
         match: Match,
         now: Long,
+        /** How many channel guides to read (each is a request to the provider). Channel names are always checked. */
+        guideBudget: Int = 40,
         onProgress: (Int, Int, List<MatchHit>) -> Unit,
     ): List<MatchHit> {
         val home = patterns(aliases(match.home))
@@ -251,9 +253,15 @@ object MatchFinder {
             // Your own country's channels are checked first, so they're never left out by the limit.
             val picks = groups.values
                 .map { copies -> copies.minWith(compareBy({ regionRank(it, catNames[it.categoryId]) }, { qualityRank(it.name) })) }
-                .sortedBy { regionRank(it, catNames[it.categoryId]) }
+                // Your country first, and within it the big sports broadcasters (Sky Sports, TNT…) first.
+                .sortedWith(
+                    compareBy(
+                        { regionRank(it, catNames[it.categoryId]) },
+                        { c -> if (names[c.streamId]?.let { n -> BROADCASTERS.take(7).any { n.contains(it) } } == true) 0 else 1 },
+                    )
+                )
                 // Kept small: each one is a request to the provider.
-                .take(if (live) 40 else 60)
+                .take(guideBudget)
             Triple(found, groups, picks)
         }
         for ((c, score) in nameHits) add(c, null, score)

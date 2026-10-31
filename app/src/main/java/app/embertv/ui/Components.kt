@@ -94,7 +94,17 @@ fun <T> rememberLoad(vararg keys: Any?, block: suspend () -> T): State<LoadResul
     produceState<LoadResult<T>>(LoadResult.Loading, *keys) {
         value = LoadResult.Loading
         value = try {
-            LoadResult.Ok(block())
+            LoadResult.Ok(
+                try {
+                    block()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Providers sometimes refuse a request for a moment: try once more before giving up.
+                    delay(2_000)
+                    block()
+                }
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
