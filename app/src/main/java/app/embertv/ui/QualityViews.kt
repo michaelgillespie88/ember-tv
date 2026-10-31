@@ -64,32 +64,39 @@ fun QualityChips(qualities: List<Quality>, modifier: Modifier = Modifier) {
     if (qualities.isEmpty()) return
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         for (q in qualities) {
+            // Apple style: small frosted tags rather than outlined boxes.
             Box(
                 Modifier
-                    .border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(6.dp))
+                    .glassSurface(RoundedCornerShape(7.dp), Color(0x1FFFFFFF))
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
-                Text(q.badge, style = Txt.Caption.copy(fontWeight = FontWeight.Bold), color = Ember.Text)
+                Text(q.badge, style = Txt.Caption.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp), color = Ember.Text)
             }
         }
-        if (qualities.size > 1) Text("You'll choose when you press play", style = Txt.Caption, color = Ember.Faint)
+        if (qualities.size > 1) {
+            Spacer(Modifier.width(2.dp))
+            Text("Choose when you play", style = Txt.Caption, color = Ember.Dim)
+        }
     }
 }
 
 /** The "4K" / "FHD" tag at the start of a quality choice. */
 @Composable
 private fun QualityTag(q: Quality, dark: Boolean) {
+    // A frosted tag on the dark card, a soft grey one on the white highlight.
     Box(
         Modifier
-            .width(56.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (dark) Color(0x1F000000) else Color(0x1FFFFFFF))
-            .padding(vertical = 6.dp),
+            .width(58.dp)
+            .height(34.dp)
+            .then(
+                if (dark) Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0x14000000))
+                else Modifier.glassSurface(RoundedCornerShape(10.dp), Color(0x1FFFFFFF))
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            q.badge.ifEmpty { "–" },
-            style = Txt.Label.copy(fontWeight = FontWeight.Bold),
+            q.badge.ifEmpty { "SD" },
+            style = Txt.Label.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
             color = if (dark) Color.Black else Ember.Text,
             textAlign = TextAlign.Center,
         )
@@ -133,24 +140,33 @@ fun VersionPickerDialog(vm: AppViewModel, choice: VersionChoice) {
                     val name = choice.names[i]
                     SheetOption(
                         title = (listOf(q.title) + Versions.extras(name)).joinToString(" · "),
-                        subtitle = name,
+                        subtitle = if (i == 0) "Best available" else name,
                         focusKey = "version:$i",
                         autoFocus = isTv && i == 0,
-                        primary = i == 0,
                         leading = { dark -> QualityTag(q, dark) },
                     ) { pick(i) }
                 }
                 item {
                     Spacer(Modifier.height(6.dp))
-                    SheetOption("Cancel", focusKey = "version:cancel", onClick = close)
+                    SheetOption(
+                        "Cancel",
+                        focusKey = "version:cancel",
+                        leading = { dark ->
+                            Box(Modifier.width(58.dp), contentAlignment = Alignment.Center) {
+                                androidx.compose.material3.Icon(EmberIcons.Close, contentDescription = null, tint = if (dark) Color.Black else Ember.Dim, modifier = Modifier.size(18.dp))
+                            }
+                        },
+                        onClick = close,
+                    )
                 }
             }
             Spacer(Modifier.height(14.dp))
             Text(
-                "To skip this question, pick a quality in Settings → Quality to play.",
+                "To always play one quality without asking, choose it in Settings under Quality to play.",
                 style = Txt.Caption,
                 color = Ember.Faint,
                 textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
     }
