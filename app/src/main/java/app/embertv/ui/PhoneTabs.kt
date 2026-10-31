@@ -104,7 +104,7 @@ private fun CategorySection(
 private fun rememberChannels(vm: AppViewModel, repo: Repository, categoryId: String): LoadResult<List<Channel>> {
     val favSnapshot = if (categoryId == FAVOURITES) vm.favourites.filter { it.type == ContentType.LIVE } else null
     val load by rememberLoad(repo, categoryId, vm.reloadToken, favSnapshot) {
-        favSnapshot?.map { it.toChannel() } ?: repo.channels(categoryId)
+        favSnapshot?.let { favs -> repo.resolveAll(favs.map { it.toChannel() }) } ?: repo.channels(categoryId)
     }
     return load
 }

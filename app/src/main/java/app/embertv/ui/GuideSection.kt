@@ -119,7 +119,7 @@ private fun GuideGrid(
 ) {
     val favSnapshot = if (categoryId == FAVOURITES) vm.favourites.filter { it.type == ContentType.LIVE } else null
     val load by rememberLoad(repo, categoryId, vm.reloadToken, favSnapshot) {
-        favSnapshot?.map { it.toChannel() } ?: repo.channels(categoryId)
+        favSnapshot?.let { favs -> repo.resolveAll(favs.map { it.toChannel() }) } ?: repo.channels(categoryId)
     }
     var focus by remember { mutableStateOf<GuideFocus?>(null) }
     var details by remember { mutableStateOf<GuideFocus?>(null) }

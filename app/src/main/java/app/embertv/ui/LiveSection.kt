@@ -91,7 +91,7 @@ private fun ChannelList(
 ) {
     val favSnapshot = if (categoryId == FAVOURITES) vm.favourites.filter { it.type == ContentType.LIVE } else null
     val load by rememberLoad(repo, categoryId, vm.reloadToken, favSnapshot) {
-        favSnapshot?.map { it.toChannel() } ?: repo.channels(categoryId)
+        favSnapshot?.let { favs -> repo.resolveAll(favs.map { it.toChannel() }) } ?: repo.channels(categoryId)
     }
     when (val r = load) {
         is LoadResult.Loading -> LoadingView(modifier)

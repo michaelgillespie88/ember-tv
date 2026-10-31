@@ -1001,8 +1001,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         notify("Sending to ${target.tv.name}…")
         viewModelScope.launch {
             val error = TvLinkClient.play(target.tv, target.token, spec)
-            notify(error ?: "Playing on ${target.tv.name}")
-            if (error == null) showRemote = true
+            when {
+                error == null -> {
+                    notify("Playing on ${target.tv.name}")
+                    showRemote = true
+                }
+                // TV off or out of range: play it here, and stop sending to it until it's picked again.
+                error.startsWith("Couldn't reach") -> {
+                    notify("Couldn't reach ${target.tv.name}, so playing on this phone")
+                    castTarget = null
+                    pushHere(screen)
+                }
+                else -> notify(error)
+            }
         }
     }
 
@@ -1093,6 +1104,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             sendToTv(screen, target)
             return
         }
+        pushHere(screen)
+    }
+
+    /** Opens [screen] on this device (or in the chosen other player). */
+    private fun pushHere(screen: Screen) {
         val pkg = externalPlayer
         if (pkg.isNotEmpty() && (screen is Screen.PlayLive || screen is Screen.PlayVod)) {
             if (openExternally(screen, pkg)) return

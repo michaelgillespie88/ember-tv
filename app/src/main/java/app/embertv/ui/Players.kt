@@ -444,7 +444,12 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         zapTo(((index + delta) % n + n) % n)
     }
 
-    val canRewind = vm.timeshiftOn && channel.hasArchive
+    // Favourites and recent channels don't remember whether they have catch-up: look it up.
+    val repoForResolve = vm.repo
+    val resolved by produceState(channel, channel.streamId) {
+        value = repoForResolve?.resolve(channel) ?: channel
+    }
+    val canRewind = vm.timeshiftOn && resolved.hasArchive
 
     /** The moment on screen, as wall-clock milliseconds. */
     fun viewingWall(): Long {
@@ -480,7 +485,9 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         val targetSec = targetMs / 1000
         var startSec = targetSec / 60 * 60
         if (roundUp && startSec < targetSec) startSec += 60
-        if (startSec >= nowSec - 60) return goLive()
+        if (roundUp && startSec > nowSec - 60) return goLive()
+        // The provider's rewind needs a start at least a minute ago; start earlier and move on to the moment.
+        while (startSec > nowSec - 60) startSec -= 60
         val minutes = ((nowSec - startSec) / 60 + 2).toInt()
         val url = vm.timeshiftUrl(ch, startSec, minutes) ?: return
         shiftStart = startSec
@@ -496,8 +503,13 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
 
     fun seekBy(ms: Long) {
         if (!canRewind) return cantRewind()
+        // Already live: nothing further forward to go.
+        if (ms > 0 && shiftStart == null && !paused) {
+            vm.notify("You're watching live")
+            return
+        }
         val nowMs = System.currentTimeMillis()
-        val days = if (channel.archiveDays > 0) channel.archiveDays else 7
+        val days = if (resolved.archiveDays > 0) resolved.archiveDays else 7
         val target = (viewingWall() + ms).coerceAtLeast(nowMs - days * 86_400_000L)
         val start = shiftStart
         when {
@@ -602,6 +614,8 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 buffering = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_READY) {
                     error = null
+                    // Playing again: later dropouts get their own fresh retries.
+                    retries = 0
                     // Rewound to a moment inside a minute: move on to it if the stream allows.
                     val seek = pendingSeek
                     if (shiftStart != null && seek > 1_000 && exo.isCurrentMediaItemSeekable) exo.seekTo(seek)
@@ -610,7 +624,15 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                 // The rewound stream reached its end: carry on from there, or back to live.
                 if (playbackState == Player.STATE_ENDED && shiftStart != null) {
                     val at = viewingWall()
-                    if (System.currentTimeMillis() - at < 90_000) goLive() else startShift(at)
+                    when {
+                        System.currentTimeMillis() - at < 90_000 -> goLive()
+                        // Ended almost at once: the provider has nothing there, so don't keep asking.
+                        exo.currentPosition < 5_000 -> {
+                            vm.notify("Your provider's rewind has nothing there, so back to live")
+                            goLive()
+                        }
+                        else -> startShift(at)
+                    }
                 }
             }
         }
