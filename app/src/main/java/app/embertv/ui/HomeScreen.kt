@@ -118,6 +118,11 @@ fun HomeScreen(vm: AppViewModel) {
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // The tabs float in one frosted glass pill, as on Apple TV.
+                Row(
+                    Modifier.glassSurface(RoundedCornerShape(26.dp), Color(0x14FFFFFF)).padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                 TABS.forEachIndexed { i, t ->
                     TabItem(
                         tab = t,
@@ -133,6 +138,7 @@ fun HomeScreen(vm: AppViewModel) {
                         },
                         onClick = { focusManager.moveFocus(FocusDirection.Down) },
                     )
+                }
                 }
             }
             Spacer(Modifier.width(10.dp))

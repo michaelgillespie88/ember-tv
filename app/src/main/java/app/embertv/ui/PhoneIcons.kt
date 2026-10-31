@@ -127,23 +127,25 @@ object EmberIcons {
         moveTo(15.5f, 15.5f); lineTo(20.5f, 20.5f)
     }
 
-    /** A solid gear: easier to spot than thin lines, especially across a room on a TV. */
+    /**
+     * A solid gear in the Apple style (like the Settings app): eight soft, rounded teeth and a round
+     * hole. Solid so it's easy to spot across a room on a TV.
+     */
     val Settings: ImageVector = ImageVector.Builder("settings", 24.dp, 24.dp, 24f, 24f)
         .path(fill = SolidColor(Color.White), pathFillType = androidx.compose.ui.graphics.PathFillType.EvenOdd) {
-            val teeth = 8
-            val outer = 10.5f
-            val inner = 8f
-            for (i in 0 until teeth * 4) {
-                // Each tooth: up the flank, across the top, down, across the gap.
-                val angle = Math.toRadians(i * 360.0 / (teeth * 4) - 90.0 + 360.0 / (teeth * 8))
-                val r = if ((i % 4) == 1 || (i % 4) == 2) outer else inner
-                val x = 12f + r * cos(angle).toFloat()
-                val y = 12f + r * sin(angle).toFloat()
+            val steps = 192
+            val norm = kotlin.math.tanh(2.6)
+            for (i in 0 until steps) {
+                val a = i * 2.0 * Math.PI / steps
+                // tanh of a cosine gives flat-topped teeth with rounded corners.
+                val r = 9.2 + 1.55 * kotlin.math.tanh(2.6 * cos(8 * a + Math.PI / 2)) / norm
+                val x = (12.0 + r * cos(a)).toFloat()
+                val y = (12.0 + r * sin(a)).toFloat()
                 if (i == 0) moveTo(x, y) else lineTo(x, y)
             }
             close()
             // The hole in the middle.
-            circle(12f, 12f, 3.4f)
+            circle(12f, 12f, 3.6f)
         }
         .build()
 
