@@ -58,7 +58,9 @@ object Txt {
 fun EmberTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = Ember.Accent,
+            // Apple style: white for anything selected or switched on.
+            primary = Ember.Text,
+            onPrimary = Color.Black,
             background = Ember.Bg,
             surface = Color(0xFF131318),
             onBackground = Ember.Text,

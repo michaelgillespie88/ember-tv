@@ -89,7 +89,7 @@ fun TeamPicker(vm: AppViewModel, onDone: () -> Unit) {
                             if (vm.followedTeams.isEmpty()) "Follow clubs for goal alerts and their next match on Home."
                             else "Following " + vm.followedTeams.joinToString(", ") { it.shortName },
                             style = Txt.Caption,
-                            color = if (vm.followedTeams.isEmpty()) Ember.Dim else Ember.Accent,
+                            color = if (vm.followedTeams.isEmpty()) Ember.Dim else Ember.Text,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -126,7 +126,7 @@ fun TeamPicker(vm: AppViewModel, onDone: () -> Unit) {
                                     focusKey = "teams:${t.id}",
                                     shape = RoundedCornerShape(12.dp),
                                     focusedScale = 1.04f,
-                                    color = if (on) Ember.Accent.copy(alpha = 0.18f) else Ember.Card,
+                                    color = if (on) Ember.Text.copy(alpha = 0.18f) else Ember.Card,
                                     focusedColor = Color.White,
                                     onClick = { vm.toggleFollow(t) },
                                 ) { focused ->
@@ -146,7 +146,7 @@ fun TeamPicker(vm: AppViewModel, onDone: () -> Unit) {
                                         Icon(
                                             if (on) EmberIcons.StarFilled else EmberIcons.Star,
                                             contentDescription = if (on) "Following" else "Follow",
-                                            tint = if (on) Ember.Accent else if (focused) Color(0xFF55555C) else Ember.Faint,
+                                            tint = if (on) Ember.Text else if (focused) Color(0xFF55555C) else Ember.Faint,
                                             modifier = Modifier.size(20.dp),
                                         )
                                     }
@@ -190,7 +190,7 @@ fun MatchCard(match: Match, width: Dp, focusKey: String, onClick: () -> Unit) {
                     MatchState.UPCOMING -> Text(
                         "${formatDay(match.kickoff / 1000)} · ${formatClock(match.kickoff / 1000)}",
                         style = Txt.Caption,
-                        color = if (focused) Color.Black else Ember.Accent,
+                        color = if (focused) Color.Black else Ember.Text,
                     )
                 }
             }
@@ -371,10 +371,10 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
                         trailing = if (h.score >= 8) { dark ->
                             Box(
                                 Modifier.clip(RoundedCornerShape(6.dp))
-                                    .background(if (dark) Color(0x1F000000) else Ember.Accent.copy(alpha = 0.2f))
+                                    .background(if (dark) Color(0x1F000000) else Ember.Text.copy(alpha = 0.2f))
                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
-                                Text("Best match", style = Txt.Caption, color = if (dark) Color.Black else Ember.Accent)
+                                Text("Best match", style = Txt.Caption, color = if (dark) Color.Black else Ember.Text)
                             }
                         } else null,
                     ) { vm.playFound(shown, i) }
@@ -385,7 +385,7 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
                     SheetOption(
                         if (pinned) "Remove score from the corner" else "Pin score to the corner",
                         focusKey = "find:pin",
-                        leading = { dark -> Icon(EmberIcons.Football, contentDescription = null, tint = if (dark) Color.Black else Ember.Accent, modifier = Modifier.size(20.dp)) },
+                        leading = { dark -> Icon(EmberIcons.Football, contentDescription = null, tint = if (dark) Color.Black else Ember.Text, modifier = Modifier.size(20.dp)) },
                     ) {
                         if (pinned) vm.unpinMatch() else vm.pinMatch(match)
                         close()
@@ -426,7 +426,7 @@ fun SportCard(item: AppViewModel.LiveSport, width: Dp, focusKey: String, onClick
                     Spacer(Modifier.width(5.dp))
                     Text(m.status, style = Txt.Caption, color = if (focused) Color.Black else Ember.Live)
                 } else {
-                    Text("Kick-off ${formatClock(m.kickoff / 1000)}", style = Txt.Caption, color = if (focused) Color.Black else Ember.Accent)
+                    Text("Kick-off ${formatClock(m.kickoff / 1000)}", style = Txt.Caption, color = if (focused) Color.Black else Ember.Text)
                 }
             }
             CardTeam(m.home, m.state, text)
@@ -434,7 +434,7 @@ fun SportCard(item: AppViewModel.LiveSport, width: Dp, focusKey: String, onClick
             val channel = item.hits.firstOrNull()?.channel
             val others = item.hits.size - 1
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(if (channel != null) EmberIcons.Play else EmberIcons.Search, contentDescription = null, tint = if (focused) Color.Black else Ember.Accent, modifier = Modifier.size(13.dp))
+                Icon(if (channel != null) EmberIcons.Play else EmberIcons.Search, contentDescription = null, tint = if (focused) Color.Black else Ember.Text, modifier = Modifier.size(13.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
                     when {
@@ -444,7 +444,7 @@ fun SportCard(item: AppViewModel.LiveSport, width: Dp, focusKey: String, onClick
                         else -> "On ${channel.name}"
                     },
                     style = Txt.Caption,
-                    color = if (focused) Color.Black else Ember.Accent,
+                    color = if (focused) Color.Black else Ember.Text,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

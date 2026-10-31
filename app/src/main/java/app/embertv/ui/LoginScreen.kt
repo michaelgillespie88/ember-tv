@@ -121,7 +121,7 @@ fun LoginScreen(vm: AppViewModel) {
                             Spacer(Modifier.height(4.dp))
                             Text("Scan the code with your phone's camera, or open this address on a phone on the same Wi-Fi:", style = Txt.Caption, color = Ember.Dim)
                             Spacer(Modifier.height(6.dp))
-                            Text(url.removePrefix("http://"), style = Txt.Label, color = Ember.Accent)
+                            Text(url.removePrefix("http://"), style = Txt.Label, color = Ember.Text)
                         }
                     }
                 }
@@ -209,7 +209,7 @@ fun Wordmark(large: Boolean = false) {
         androidx.compose.material3.Icon(
             EmberIcons.Play,
             contentDescription = null,
-            tint = Ember.Accent,
+            tint = Ember.Text,
             modifier = Modifier.size(if (large) 28.dp else 20.dp),
         )
         Spacer(Modifier.width(if (large) 8.dp else 5.dp))

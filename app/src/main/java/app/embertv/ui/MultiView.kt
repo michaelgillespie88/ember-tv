@@ -180,7 +180,7 @@ private fun MultiTile(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (hasAudio) {
-                    Icon(EmberIcons.Live, contentDescription = "Sound on", tint = Ember.Accent, modifier = Modifier.size(14.dp))
+                    Icon(EmberIcons.Live, contentDescription = "Sound on", tint = Ember.Text, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
                 }
                 Text(channel.name, style = Txt.Caption, color = Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -304,7 +304,7 @@ private fun SlotPicker(
                         focusKey = "multi:pick:${c.streamId}",
                         autoFocus = isTv && i == 0,
                         leading = { ChannelLogo(c.icon, c.name, Modifier.size(width = 48.dp, height = 32.dp)) },
-                        trailing = if (c.streamId == current?.streamId) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Accent) } else null,
+                        trailing = if (c.streamId == current?.streamId) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Text) } else null,
                     ) { onPick(c) }
                 }
             }

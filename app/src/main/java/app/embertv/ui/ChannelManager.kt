@@ -91,7 +91,7 @@ fun ChannelManager(vm: AppViewModel, onDone: () -> Unit) {
                         Text(
                             "CHANNELS",
                             style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp),
-                            color = Ember.Accent,
+                            color = Ember.Text,
                         )
                         Text(if (hideMode) "Hide channels" else "Favourites order", style = if (isTv) Txt.Title else Txt.Headline)
                         Text(
@@ -160,7 +160,7 @@ private fun FavouriteOrder(vm: AppViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(if (isTv) 56.dp else 60.dp)
-                    .then(if (isMoving) Modifier.border(2.dp, Ember.Accent, shape) else Modifier)
+                    .then(if (isMoving) Modifier.border(2.dp, Ember.Text, shape) else Modifier)
                     .onPreviewKeyEvent { ev ->
                         if (!isMoving || ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         when (ev.nativeKeyEvent.keyCode) {
@@ -203,7 +203,7 @@ private fun FavouriteOrder(vm: AppViewModel) {
                     Text(f.name, style = Txt.Label, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     if (isTv) {
                         if (isMoving) {
-                            Text("▲▼  Moving", style = Txt.Caption.copy(fontWeight = FontWeight.Bold), color = if (focused) Color.Black else Ember.Accent)
+                            Text("▲▼  Moving", style = Txt.Caption.copy(fontWeight = FontWeight.Bold), color = if (focused) Color.Black else Ember.Text)
                         }
                     } else {
                         // Phones: arrows to move, and a star to remove.
@@ -303,11 +303,11 @@ private fun ChannelToggle(ch: Channel, on: Boolean, onClick: () -> Unit) {
                 Modifier
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(if (on) Ember.Accent else Color.Transparent)
+                    .background(if (on) Ember.Text else Color.Transparent)
                     .then(if (on) Modifier else Modifier.border(1.5.dp, if (focused) Color(0xFF88888F) else Ember.Faint, CircleShape)),
                 contentAlignment = Alignment.Center,
             ) {
-                if (on) Icon(EmberIcons.Check, contentDescription = "Shown", tint = Color.White, modifier = Modifier.size(16.dp))
+                if (on) Icon(EmberIcons.Check, contentDescription = "Shown", tint = Color.Black, modifier = Modifier.size(16.dp))
             }
         }
     }

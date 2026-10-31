@@ -229,7 +229,7 @@ fun PhoneHome(vm: AppViewModel) {
                         verticalArrangement = Arrangement.Center,
                     ) {
                         val color = if (selected) Ember.Text else Ember.Dim
-                        Icon(item.icon, contentDescription = null, tint = if (selected) Ember.Accent else color, modifier = Modifier.size(22.dp))
+                        Icon(item.icon, contentDescription = null, tint = if (selected) Ember.Text else color, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.height(3.dp))
                         Text(
                             item.label,
@@ -418,7 +418,7 @@ private fun PhoneTextField(
             onValueChange = onValueChange,
             singleLine = true,
             textStyle = Txt.Body.copy(color = Ember.Text, fontSize = 17.sp),
-            cursorBrush = SolidColor(Ember.Accent),
+            cursorBrush = SolidColor(Ember.Text),
             visualTransformation = if (password && !reveal) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(
                 keyboardType = if (password) KeyboardType.Password else keyboardType,
@@ -434,7 +434,7 @@ private fun PhoneTextField(
                         .fillMaxWidth()
                         .height(54.dp)
                         .glassSurface(shape, if (focused) Color(0x29FFFFFF) else Color(0x14FFFFFF))
-                        .then(if (focused) Modifier.border(1.5.dp, Ember.Accent, shape) else Modifier)
+                        .then(if (focused) Modifier.border(1.5.dp, Color(0x80FFFFFF), shape) else Modifier)
                         .padding(start = 16.dp, end = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

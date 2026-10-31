@@ -324,7 +324,7 @@ private fun EpisodeCard(episode: Episode, watched: Boolean, watchedMs: Long, onF
                     if (total != null && total > 0) {
                         ProgressBar(watchedMs / 1000f / total, Modifier.fillMaxWidth())
                     } else {
-                        Text("Continue", style = Txt.Caption, color = Ember.Accent)
+                        Text("Continue", style = Txt.Caption, color = Ember.Text)
                     }
                 }
             }

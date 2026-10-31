@@ -182,7 +182,7 @@ fun SheetTitle(title: String, eyebrow: String? = null, subtitle: String? = null,
     val isTv = LocalIsTv.current
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         if (eyebrow != null) {
-            Text(eyebrow, style = Txt.Label, color = Ember.Accent, textAlign = TextAlign.Center)
+            Text(eyebrow, style = Txt.Label, color = Ember.Dim, textAlign = TextAlign.Center)
             Spacer(Modifier.height(6.dp))
         }
         Text(

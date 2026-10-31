@@ -40,12 +40,14 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -82,6 +84,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -403,20 +406,23 @@ private fun BoxScope.Spinner() {
 
 @Composable
 private fun BoxScope.ErrorCard(message: String, hint: String) {
+    // Apple style: a frosted card with a quiet icon, a short title and the reason in grey.
     Column(
         Modifier
             .align(Alignment.Center)
-            .width(520.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xE6141418))
-            .padding(28.dp),
+            .padding(24.dp)
+            .widthIn(max = 480.dp)
+            .glassSurface(RoundedCornerShape(26.dp), Color(0xD9141418))
+            .padding(horizontal = 28.dp, vertical = 26.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Can't play this", style = Txt.Headline)
-        Spacer(Modifier.height(8.dp))
-        Text(message, style = Txt.Body, color = Ember.Dim)
+        Icon(EmberIcons.Alert, contentDescription = null, tint = Ember.Dim, modifier = Modifier.size(34.dp))
         Spacer(Modifier.height(12.dp))
-        Text(hint, style = Txt.Caption, color = Ember.Faint)
+        Text("Can't play this", style = Txt.Headline, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(6.dp))
+        Text(message, style = Txt.Body, color = Ember.Dim, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(12.dp))
+        Text(hint, style = Txt.Caption, color = Ember.Faint, textAlign = TextAlign.Center)
     }
 }
 
@@ -715,15 +721,15 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         delay(8_000)
         controlsOpen = false
     }
-    LaunchedEffect(listOpen, scoresOpen, guideOpen, controlsOpen) {
-        if (!listOpen && !scoresOpen && !guideOpen && !controlsOpen) {
+    LaunchedEffect(listOpen, scoresOpen, guideOpen, controlsOpen, optionsOpen) {
+        if (!listOpen && !scoresOpen && !guideOpen && !controlsOpen && !optionsOpen) {
             delay(60)
             runCatching { focus.requestFocus() }
         }
     }
 
     fun onKey(ev: KeyEvent): Boolean {
-        if (listOpen || scoresOpen || guideOpen || controlsOpen) return false
+        if (listOpen || scoresOpen || guideOpen || controlsOpen || optionsOpen) return false
         val native = ev.nativeKeyEvent
         val code = native.keyCode
         if (ev.type == KeyEventType.KeyUp) {
@@ -894,10 +900,9 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                         controlsOpen = false
                         scoresOpen = true
                     },
-                    pictureLabel = vm.pictureModeLabel,
-                    onPicture = {
-                        controlsToken++
-                        vm.cyclePicture()
+                    onMore = {
+                        controlsOpen = false
+                        optionsOpen = true
                     },
                 )
             }
@@ -1030,17 +1035,26 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             val title = rememberProgrammes(vm.repo!!, channel.streamId)?.firstOrNull { it.isLive(now) }?.title
             ScoresPanel(programmeTitle = listOfNotNull(title, channel.name).joinToString(" "), onClose = { scoresOpen = false })
         }
+
+        AnimatedVisibility(
+            visible = optionsOpen,
+            enter = fadeIn() + androidx.compose.animation.slideInHorizontally { it / 3 },
+            exit = fadeOut() + androidx.compose.animation.slideOutHorizontally { it / 3 },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                LiveOptionsPanel(
+                    vm,
+                    channel,
+                    active = optionsOpen,
+                    onOpenElsewhere = { vm.openElsewhere(Screen.PlayLive(channels, index)) },
+                    onMultiView = { vm.push(Screen.MultiView(listOf(channels[index]), channels)) },
+                    onPrevious = if (previousIndex != null) ({ previousChannel() }) else null,
+                ) { optionsOpen = false }
+            }
+        }
     }
 
-    if (optionsOpen) {
-        LiveOptionsDialog(
-            vm,
-            channel,
-            onOpenElsewhere = { vm.openElsewhere(Screen.PlayLive(channels, index)) },
-            onMultiView = { vm.push(Screen.MultiView(listOf(channels[index]), channels)) },
-            onPrevious = if (previousIndex != null) ({ previousChannel() }) else null,
-        ) { optionsOpen = false }
-    }
 }
 
 private fun clockLength(ms: Long): String {
@@ -1080,7 +1094,7 @@ private fun TimeshiftPanel(
         val fraction = (1f - behindMs.toFloat() / keptMs).coerceIn(0f, 1f)
         Box(Modifier.fillMaxWidth().height(14.dp), contentAlignment = Alignment.CenterStart) {
             Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(Color(0x40FFFFFF)))
-            Box(Modifier.fillMaxWidth(fraction).height(5.dp).clip(RoundedCornerShape(3.dp)).background(Ember.Accent))
+            Box(Modifier.fillMaxWidth(fraction).height(5.dp).clip(RoundedCornerShape(3.dp)).background(Ember.Text))
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 Box(
                     Modifier
@@ -1134,8 +1148,7 @@ private fun LiveControls(
     onGuide: () -> Unit,
     onChannels: () -> Unit,
     onScores: () -> Unit,
-    pictureLabel: String,
-    onPicture: () -> Unit,
+    onMore: () -> Unit,
 ) {
     Row(
         Modifier
@@ -1157,7 +1170,8 @@ private fun LiveControls(
         PlayerButton(EmberIcons.Guide, "TV guide", "live:ctl:guide", onClick = onGuide)
         PlayerButton(EmberIcons.ChannelList, "Channels", "live:ctl:list", onClick = onChannels)
         PlayerButton(EmberIcons.Football, "Scores", "live:ctl:scores", onClick = onScores)
-        PlayerButton(EmberIcons.Zoom, pictureLabel, "live:ctl:picture", onClick = onPicture)
+        // Favourites, catch-up, multi-view, picture zoom, subtitles and the rest.
+        PlayerButton(EmberIcons.More, null, "live:ctl:more", onClick = onMore)
     }
 }
 
@@ -1220,7 +1234,7 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, stats: VideoStats?, 
                         Text(channel.name, style = Txt.Title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         if (isFavourite) {
                             Spacer(Modifier.width(10.dp))
-                            Text("★", color = Ember.Accent, fontSize = 20.sp)
+                            Text("★", color = Ember.Text, fontSize = 20.sp)
                         }
                         val activity = LocalContext.current.findActivity()
                         val tvRate = if (isTv && vm.matchFrameRate && activity != null) {
@@ -1300,7 +1314,7 @@ private fun BoxScope.ZapList(
         ) {
             item(key = "zap-actions") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 10.dp)) {
-                    if (hasPrevious) ZapAction(EmberIcons.Restart, "Previous channel", "", onPrevious)
+                    if (hasPrevious) ZapAction(EmberIcons.Restart, "Previous channel", "", onClick = onPrevious)
                     CatchupActions(vm, channels[current], onClose)
                     ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
                         onClose()
@@ -1370,13 +1384,14 @@ private fun CatchupActions(vm: AppViewModel, channel: Channel, onDone: () -> Uni
 }
 
 @Composable
-private fun ZapAction(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, value: String, onClick: () -> Unit) {
+private fun ZapAction(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, value: String, autoFocus: Boolean = false, onClick: () -> Unit) {
     FocusBox(
-        modifier = Modifier.fillMaxWidth().height(50.dp),
-        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp).height(50.dp),
+        shape = RoundedCornerShape(14.dp),
         focusedScale = 1.03f,
         color = Color(0x14FFFFFF),
         focusedColor = Color.White,
+        autoFocus = autoFocus,
         onClick = onClick,
     ) { focused ->
         Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1401,61 +1416,54 @@ private fun SleepBadge(minutes: Int, modifier: Modifier = Modifier) {
 }
 
 /** Phone "more" sheet for the live player: sleep timer, audio and subtitles. */
+/** Live TV options in the Apple TV side panel: the channel keeps playing while you choose. */
 @Composable
-private fun LiveOptionsDialog(
+private fun BoxScope.LiveOptionsPanel(
     vm: AppViewModel,
     channel: Channel,
+    active: Boolean,
     onOpenElsewhere: () -> Unit,
     onMultiView: () -> Unit,
     onPrevious: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        DialogBackdropBlur()
-        Column(
-            Modifier
-                .width(420.dp)
-                // A sideways phone is short: scroll rather than cut options off.
-                .heightIn(max = 560.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(dialogPanelColor())
-                .verticalScroll(androidx.compose.foundation.rememberScrollState())
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            SheetTitle(channel.name, eyebrow = "Options")
-            Spacer(Modifier.height(8.dp))
-            val fav = vm.isFavourite(ContentType.LIVE, channel.streamId)
-            ZapAction(if (fav) EmberIcons.StarFilled else EmberIcons.Star, if (fav) "Remove from favourites" else "Add to favourites", "") {
-                vm.toggleFavourite(vm.favouriteOf(channel))
-            }
-            if (onPrevious != null) {
-                ZapAction(EmberIcons.Restart, "Previous channel", "") {
-                    onDismiss()
-                    onPrevious()
-                }
-            }
-            CatchupActions(vm, channel, onDismiss)
-            ZapAction(EmberIcons.Zoom, "Picture", vm.pictureModeLabel) { vm.cyclePicture() }
-            ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
+    BackHandler(enabled = active, onBack = onDismiss)
+    SidePanel(onDismiss) {
+        Text(channel.name, style = Txt.Headline, color = Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 4.dp, bottom = 14.dp))
+        SheetSection("Channel")
+        val fav = vm.isFavourite(ContentType.LIVE, channel.streamId)
+        ZapAction(if (fav) EmberIcons.StarFilled else EmberIcons.Star, if (fav) "Remove from favourites" else "Add to favourites", "", autoFocus = true) {
+            vm.toggleFavourite(vm.favouriteOf(channel))
+        }
+        if (onPrevious != null) {
+            ZapAction(EmberIcons.Restart, "Previous channel", "") {
                 onDismiss()
-                onOpenElsewhere()
+                onPrevious()
             }
-            ZapAction(EmberIcons.MultiView, "Multi-view", "") {
-                onDismiss()
-                onMultiView()
-            }
-            if (vm.pinnedMatch != null) ZapAction(EmberIcons.Football, "Remove pinned score", "") { vm.unpinMatch() }
-            val left = vm.sleepMinutesLeft()
-            ZapAction(EmberIcons.Moon, "Sleep timer", if (left == null) "Off" else "$left min") { vm.cycleSleepTimer() }
-            ZapAction(EmberIcons.Subtitles, "Subtitles", if (vm.subtitleMode == "off") "Off" else "English") { vm.cycleSubtitles() }
-            ZapAction(EmberIcons.Series, "Preferred audio", if (vm.audioLanguage.isEmpty()) "Default" else "English") { vm.cycleAudioLanguage() }
-            Text(
-                "Subtitle and audio changes apply from the next channel or video.",
-                style = Txt.Caption,
-                color = Ember.Faint,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+        }
+        CatchupActions(vm, channel, onDismiss)
+        ZapAction(EmberIcons.MultiView, "Multi-view", "") {
+            onDismiss()
+            onMultiView()
+        }
+        if (vm.pinnedMatch != null) ZapAction(EmberIcons.Football, "Remove pinned score", "") { vm.unpinMatch() }
+        Spacer(Modifier.height(14.dp))
+        SheetSection("Picture")
+        PICTURE_MODES.forEachIndexed { i, name ->
+            TrackRow(name, vm.pictureMode == i, autoFocus = false) { vm.setPicture(i, announce = false) }
+        }
+        Spacer(Modifier.height(14.dp))
+        SheetSection("Sound & subtitles")
+        ZapAction(EmberIcons.Subtitles, "Subtitles", if (vm.subtitleMode == "off") "Off" else "English") { vm.cycleSubtitles() }
+        ZapAction(EmberIcons.Language, "Preferred audio", if (vm.audioLanguage.isEmpty()) "Default" else "English") { vm.cycleAudioLanguage() }
+        PanelNote("Subtitle and audio changes apply from the next channel.")
+        Spacer(Modifier.height(14.dp))
+        SheetSection("More")
+        val left = vm.sleepMinutesLeft()
+        ZapAction(EmberIcons.Moon, "Sleep timer", if (left == null) "Off" else "$left min") { vm.cycleSleepTimer() }
+        ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
+            onDismiss()
+            onOpenElsewhere()
         }
     }
 }
@@ -2184,26 +2192,8 @@ private fun BoxScope.TrackPanel(vm: AppViewModel, exo: ExoPlayer, kind: String, 
         onDismiss()
     }
 
-    // Phones: tap outside the panel to close it.
-    if (!isTv) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
-        )
-    }
     val all = kind == "all"
-    Column(
-        Modifier
-            .align(Alignment.CenterEnd)
-            .fillMaxHeight()
-            .padding(if (isTv) 28.dp else 12.dp)
-            .width(if (isTv) 340.dp else 300.dp)
-            .glassSurface(RoundedCornerShape(26.dp), Color(0xE0141418))
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }
-            .verticalScroll(androidx.compose.foundation.rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 20.dp)
-    ) {
+    SidePanel(onDismiss) {
         if (kind == "subs" || (all && subs.isNotEmpty())) {
             SheetSection("Subtitles")
             TrackRow("Off", subtitlesOff, autoFocus = subtitlesOff) { selectSubtitle(null) }
@@ -2239,6 +2229,34 @@ private fun BoxScope.TrackPanel(vm: AppViewModel, exo: ExoPlayer, kind: String, 
             }
         }
     }
+}
+
+/**
+ * The frosted panel that slides in from the right over the picture, Apple TV style. Phones can
+ * tap outside it to close it; Back closes it everywhere (the caller's BackHandler).
+ */
+@Composable
+private fun BoxScope.SidePanel(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val isTv = LocalIsTv.current
+    if (!isTv) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
+        )
+    }
+    Column(
+        Modifier
+            .align(Alignment.CenterEnd)
+            .fillMaxHeight()
+            .padding(if (isTv) 28.dp else 12.dp)
+            .width(if (isTv) 340.dp else 300.dp)
+            .glassSurface(RoundedCornerShape(26.dp), Color(0xE0141418))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 20.dp),
+        content = content,
+    )
 }
 
 @Composable

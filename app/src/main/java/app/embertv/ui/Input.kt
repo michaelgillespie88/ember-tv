@@ -147,7 +147,7 @@ fun TextEntryDialog(
                     onValueChange = onValueChange,
                     singleLine = true,
                     textStyle = Txt.Body.copy(color = Ember.Text, fontSize = 20.sp),
-                    cursorBrush = SolidColor(Ember.Accent),
+                    cursorBrush = SolidColor(Ember.Text),
                     keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
                     keyboardActions = KeyboardActions(onAny = { close() }),
                     modifier = Modifier

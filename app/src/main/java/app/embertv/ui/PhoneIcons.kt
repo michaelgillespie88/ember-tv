@@ -219,6 +219,13 @@ object EmberIcons {
         moveTo(11f, 11f); lineTo(17f, 11f)
     }
 
+    /** A circled exclamation mark, for things that went wrong. */
+    val Alert = outline("alert") {
+        circle(12f, 12f, 9f)
+        moveTo(12f, 7.5f); lineTo(12f, 13f)
+        moveTo(12f, 16.4f); lineTo(12f, 16.5f)
+    }
+
     val Restart = outline("restart") {
         moveTo(4f, 12f)
         arcTo(8f, 8f, 0f, true, true, 6.5f, 17.8f)

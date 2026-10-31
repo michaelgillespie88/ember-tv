@@ -193,7 +193,7 @@ fun ChannelRow(
             }
             if (isFavourite) {
                 Spacer(Modifier.width(8.dp))
-                Text("★", color = Ember.Accent, fontSize = 15.sp)
+                Text("★", color = Ember.Text, fontSize = 15.sp)
             }
         }
     }
@@ -240,7 +240,7 @@ private fun PreviewDetails(vm: AppViewModel, repo: Repository, channel: Channel)
                     Text(
                         if (live) "NOW" else formatClock(p.start),
                         style = Txt.Caption,
-                        color = if (live) Ember.Accent else Ember.Faint,
+                        color = if (live) Ember.Text else Ember.Faint,
                         modifier = Modifier.width(48.dp),
                     )
                     Text(

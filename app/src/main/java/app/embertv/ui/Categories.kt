@@ -238,11 +238,11 @@ private fun CategoryToggle(name: String, on: Boolean, focusKey: String, onClick:
                 Modifier
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(if (on) Ember.Accent else Color.Transparent)
+                    .background(if (on) Ember.Text else Color.Transparent)
                     .then(if (on) Modifier else Modifier.border(1.5.dp, if (focused) Color(0xFF88888F) else Ember.Faint, CircleShape)),
                 contentAlignment = Alignment.Center,
             ) {
-                if (on) Icon(EmberIcons.Check, contentDescription = "Shown", tint = Color.White, modifier = Modifier.size(16.dp))
+                if (on) Icon(EmberIcons.Check, contentDescription = "Shown", tint = Color.Black, modifier = Modifier.size(16.dp))
             }
         }
     }

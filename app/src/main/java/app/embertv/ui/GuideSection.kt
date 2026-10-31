@@ -329,7 +329,7 @@ internal fun guideKey(
 internal fun GuideInfo(focus: GuideFocus?, now: Long) {
     Column(Modifier.fillMaxSize().padding(top = 6.dp)) {
         if (focus == null) {
-            Text("TV GUIDE", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Accent)
+            Text("TV GUIDE", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Dim)
             Spacer(Modifier.height(4.dp))
             Text("What's on", style = Txt.LargeTitle)
             Spacer(Modifier.height(6.dp))
@@ -346,7 +346,7 @@ internal fun GuideInfo(focus: GuideFocus?, now: Long) {
         Text(
             (if (ch.num > 0) "${ch.num}  ·  " else "") + ch.name.uppercase(),
             style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp),
-            color = Ember.Accent,
+            color = Ember.Text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -431,7 +431,7 @@ internal fun TimeHeader(
             Text(
                 (if (today) "TODAY" else formatDay(windowStart, now).uppercase()),
                 style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp),
-                color = if (today) Ember.Dim else Ember.Accent,
+                color = if (today) Ember.Dim else Ember.Text,
                 modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp),
             )
         }
@@ -456,10 +456,10 @@ internal fun TimeHeader(
                 Modifier
                     .offset(x = channelColumn + nowOffset - 22.dp, y = 7.dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(Ember.Accent)
+                    .background(Ember.Live)
                     .padding(horizontal = 5.dp, vertical = 2.dp)
             ) {
-                Text(formatClock(now), style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold), color = Color.Black)
+                Text(formatClock(now), style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold), color = Color.White)
             }
         }
     }
@@ -488,7 +488,7 @@ private fun HeaderChip(
             Text(
                 text,
                 style = Txt.Caption.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-                color = if (focused) Color.Black else if (accent) Ember.Accent else Ember.Text,
+                color = if (focused) Color.Black else Ember.Text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
@@ -594,7 +594,7 @@ internal fun GuideRow(
             }
             if (now in windowStart until windowEnd) {
                 val nowOffset = dpPerMinute * ((now - windowStart) / 60f)
-                Box(Modifier.offset(x = nowOffset).width(1.5.dp).fillMaxHeight().background(Ember.Accent.copy(alpha = 0.5f)))
+                Box(Modifier.offset(x = nowOffset).width(1.5.dp).fillMaxHeight().background(Ember.Live.copy(alpha = 0.7f)))
             }
         }
     }
@@ -643,7 +643,7 @@ private fun ProgrammeBlock(
                         androidx.compose.material3.Icon(
                             EmberIcons.Catchup,
                             contentDescription = "On catch-up",
-                            tint = if (focused) Color.Black else Ember.Accent,
+                            tint = if (focused) Color.Black else Ember.Text,
                             modifier = Modifier.size(if (compact) 12.dp else 14.dp),
                         )
                         Spacer(Modifier.width(5.dp))
@@ -677,7 +677,7 @@ private fun ProgrammeBlock(
                         .align(Alignment.BottomStart)
                         .fillMaxWidth(progress.coerceIn(0f, 1f))
                         .height(2.dp)
-                        .background(Ember.Accent.copy(alpha = 0.85f))
+                        .background(Ember.Text.copy(alpha = 0.85f))
                 )
             }
         }
@@ -710,7 +710,7 @@ private fun GroupPicker(categories: List<Category>, selectedId: String, onDismis
                         c.name.removePrefix("★  "),
                         focusKey = "guide:pick:${c.id}",
                         autoFocus = c.id == selectedId,
-                        trailing = if (c.id == selectedId) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Accent) } else null,
+                        trailing = if (c.id == selectedId) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Text) } else null,
                     ) { onPick(c.id) }
                 }
             }
@@ -752,7 +752,7 @@ internal fun DayPicker(now: Long, showing: Long, onDismiss: () -> Unit, onPick: 
                         label,
                         focusKey = "guide:day:$d",
                         autoFocus = d == current,
-                        trailing = if (d == current) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Accent) } else null,
+                        trailing = if (d == current) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Text) } else null,
                     ) { onPick(d) }
                 }
             }
@@ -839,7 +839,7 @@ internal fun ProgrammeDialog(vm: AppViewModel, focus: GuideFocus, channels: List
             SheetTitle(p.title, eyebrow = eyebrow, subtitle = p.description.takeIf { it.isNotBlank() }, subtitleLines = if (isTv) 4 else 6)
             if (note != null) {
                 Spacer(Modifier.height(10.dp))
-                Text(note, style = Txt.Caption, color = if (reminded) Ember.Accent else Ember.Faint, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(note, style = Txt.Caption, color = if (reminded) Ember.Text else Ember.Faint, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
             Spacer(Modifier.height(24.dp))
             Column(Modifier.width(if (isTv) 380.dp else 480.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

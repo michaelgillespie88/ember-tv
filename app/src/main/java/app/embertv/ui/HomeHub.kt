@@ -493,7 +493,7 @@ private fun TvHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
         Column(
             Modifier.align(Alignment.BottomStart).padding(start = 48.dp, bottom = 22.dp).width(560.dp)
         ) {
-            Text("FEATURED", style = Txt.Caption, color = Ember.Accent)
+            Text("FEATURED", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Dim)
             Spacer(Modifier.height(6.dp))
             Text(movie.name, style = Txt.Hero, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(6.dp))
@@ -628,7 +628,7 @@ private fun PhoneHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
                     if (isFav) "Remove from favourites" else "Add to favourites",
                     size = 48.dp,
                     background = Color(0x1FFFFFFF),
-                    tint = if (isFav) Ember.Accent else Ember.Text,
+                    tint = Ember.Text,
                     glass = true,
                 ) { vm.toggleFavourite(vm.favouriteOf(movie)) }
             }

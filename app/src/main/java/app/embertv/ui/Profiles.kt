@@ -313,7 +313,7 @@ private fun ProfileTile(
         }
         if (kids) {
             Spacer(Modifier.height(4.dp))
-            Text("KIDS", style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp), color = Ember.Accent)
+            Text("KIDS", style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp), color = Ember.Text)
         }
     }
 }
@@ -336,7 +336,7 @@ private fun OptionRow(title: String, value: String, hint: String, focusKey: Stri
                 Text(hint, style = Txt.Caption, color = if (focused) Color(0xFF55555C) else Ember.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(12.dp))
-            Text(value, style = Txt.Label, color = if (focused) Color(0xFF333338) else Ember.Accent)
+            Text(value, style = Txt.Label, color = if (focused) Color(0xFF333338) else Ember.Text)
         }
     }
     Spacer(Modifier.height(8.dp))
@@ -465,7 +465,7 @@ private fun ProfileEditor(vm: AppViewModel, initial: Profile?, onDone: () -> Uni
                 Text(
                     "Tip: give the grown-ups' profiles a PIN so kids can't switch into them.",
                     style = Txt.Caption,
-                    color = Ember.Accent,
+                    color = Ember.Text,
                     modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp),
                 )
             }

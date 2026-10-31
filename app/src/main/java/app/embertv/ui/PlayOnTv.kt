@@ -125,7 +125,7 @@ fun CastSheet(vm: AppViewModel) {
                     "This phone",
                     focusKey = "cast:phone",
                     leading = { dark -> Icon(EmberIcons.Home, null, tint = if (dark) Color.Black else Ember.Text, modifier = Modifier.size(22.dp)) },
-                    trailing = { dark -> if (target == null) Icon(EmberIcons.Check, null, tint = if (dark) Color.Black else Ember.Accent, modifier = Modifier.size(20.dp)) },
+                    trailing = { dark -> if (target == null) Icon(EmberIcons.Check, null, tint = if (dark) Color.Black else Ember.Text, modifier = Modifier.size(20.dp)) },
                 ) {
                     vm.chooseTv(null)
                     vm.showCastSheet = false
@@ -139,7 +139,7 @@ fun CastSheet(vm: AppViewModel) {
                         leading = { dark -> Icon(EmberIcons.Tv, null, tint = if (dark) Color.Black else Ember.Text, modifier = Modifier.size(22.dp)) },
                         trailing = { dark ->
                             if (target?.tv?.name == p.tv.name) {
-                                Icon(EmberIcons.Check, null, tint = if (dark) Color.Black else Ember.Accent, modifier = Modifier.size(20.dp))
+                                Icon(EmberIcons.Check, null, tint = if (dark) Color.Black else Ember.Text, modifier = Modifier.size(20.dp))
                             } else {
                                 Text(
                                     "Forget",

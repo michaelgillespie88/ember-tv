@@ -281,7 +281,7 @@ private fun PhoneGuideInfo(focus: GuideFocus?, now: Long, onWatch: () -> Unit, o
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         if (focus?.programme == null) {
-            Text("TV GUIDE", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Accent)
+            Text("TV GUIDE", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Dim)
             Spacer(Modifier.height(4.dp))
             Text("What's on", style = Txt.Headline.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold))
             Spacer(Modifier.height(4.dp))
@@ -299,7 +299,7 @@ private fun PhoneGuideInfo(focus: GuideFocus?, now: Long, onWatch: () -> Unit, o
         Text(
             (if (ch.num > 0) "${ch.num}  ·  " else "") + ch.name.uppercase(),
             style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp),
-            color = Ember.Accent,
+            color = Ember.Text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -376,7 +376,7 @@ private fun PhoneTimeHeader(dayStart: Long, now: Long, day: Int, scroll: ScrollS
                         else -> formatDay(dayStart + 43_200L, now).take(6)
                     },
                     style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
-                    color = if (day == 0) Ember.Text else Ember.Accent,
+                    color = Ember.Text,
                     maxLines = 1,
                 )
                 Text(" ▾", style = Txt.Caption.copy(fontSize = 9.sp), color = Ember.Dim)
@@ -400,10 +400,10 @@ private fun PhoneTimeHeader(dayStart: Long, now: Long, day: Int, scroll: ScrollS
                         Modifier
                             .offset(x = nowX - 20.dp, y = 6.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Ember.Accent)
+                            .background(Ember.Live)
                             .padding(horizontal = 5.dp, vertical = 2.dp)
                     ) {
-                        Text(formatClock(now), style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp), color = Color.Black)
+                        Text(formatClock(now), style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp), color = Color.White)
                     }
                 }
             }
@@ -505,7 +505,7 @@ private fun PhoneGuideRow(
                                         androidx.compose.material3.Icon(
                                             EmberIcons.Catchup,
                                             "On catch-up",
-                                            tint = if (isSelected) Color.Black else Ember.Accent,
+                                            tint = if (isSelected) Color.Black else Ember.Text,
                                             modifier = Modifier.size(12.dp),
                                         )
                                         Spacer(Modifier.width(4.dp))
@@ -537,14 +537,14 @@ private fun PhoneGuideRow(
                                         .padding(bottom = 1.dp)
                                         .fillMaxWidth(p.progress(now))
                                         .height(2.dp)
-                                        .background(Ember.Accent.copy(alpha = 0.85f))
+                                        .background(Ember.Text.copy(alpha = 0.85f))
                                 )
                             }
                         }
                     }
                 }
                 if (day == 0) {
-                    Box(Modifier.offset(x = P_PER_MINUTE * ((now - dayStart) / 60f)).width(1.5.dp).fillMaxHeight().background(Ember.Accent.copy(alpha = 0.5f)))
+                    Box(Modifier.offset(x = P_PER_MINUTE * ((now - dayStart) / 60f)).width(1.5.dp).fillMaxHeight().background(Ember.Live.copy(alpha = 0.7f)))
                 }
             }
         }

@@ -177,7 +177,7 @@ private fun ProgrammeShelf(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 when {
                                     live -> LiveTag()
-                                    catchup -> Icon(EmberIcons.Catchup, "On catch-up", tint = if (focused) Color.Black else Ember.Accent, modifier = Modifier.size(14.dp))
+                                    catchup -> Icon(EmberIcons.Catchup, "On catch-up", tint = if (focused) Color.Black else Ember.Text, modifier = Modifier.size(14.dp))
                                     else -> {}
                                 }
                                 if (live || catchup) Spacer(Modifier.width(6.dp))
@@ -770,7 +770,7 @@ private fun SettingRow(title: String, value: String, hint: String?, focusKey: St
                 Text(title, style = Txt.Label, color = Ember.Text)
                 if (value.isNotEmpty()) {
                     Spacer(Modifier.height(2.dp))
-                    Text(value, style = Txt.Label.copy(fontSize = Txt.Caption.fontSize), color = Ember.Accent)
+                    Text(value, style = Txt.Label.copy(fontSize = Txt.Caption.fontSize), color = Ember.Text)
                 }
                 if (hint != null) {
                     Spacer(Modifier.height(2.dp))
@@ -822,7 +822,7 @@ private fun LeaguePicker(vm: AppViewModel, onDone: () -> Unit) {
                             Text(
                                 if (on) "✓" else "",
                                 style = Txt.Label.copy(fontWeight = FontWeight.Bold),
-                                color = if (dark) Color.Black else Ember.Accent,
+                                color = if (dark) Color.Black else Ember.Text,
                             )
                         },
                     ) { vm.setSportLeague(l.code, !on) }

@@ -67,7 +67,7 @@ fun CatchupScreen(vm: AppViewModel, channel: Channel) {
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text(channel.name, style = if (isTv) Txt.Title else Txt.Headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("Catch-up TV", style = Txt.Label, color = Ember.Accent)
+                    Text("Catch-up TV", style = Txt.Label, color = Ember.Text)
                 }
             }
             Spacer(Modifier.height(if (isTv) 20.dp else 14.dp))
@@ -183,7 +183,7 @@ private fun CatchupRow(p: Programme, now: Long, focusKey: String, autoFocus: Boo
                     )
                 }
                 if (live) {
-                    Text("Watch from the start", style = Txt.Caption, color = if (focused) Color(0xFF333338) else Ember.Accent)
+                    Text("Watch from the start", style = Txt.Caption, color = if (focused) Color(0xFF333338) else Ember.Text)
                 }
             }
             Spacer(Modifier.width(12.dp))

@@ -99,7 +99,7 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
             .padding(top = if (isTv) 28.dp else 14.dp)
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Icon(EmberIcons.Football, contentDescription = null, tint = Ember.Accent, modifier = Modifier.size(22.dp))
+            androidx.compose.material3.Icon(EmberIcons.Football, contentDescription = null, tint = Ember.Text, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text("Live Scores", style = Txt.Headline)
@@ -208,7 +208,7 @@ private fun MatchRow(m: Match, highlight: Boolean, onClick: () -> Unit) {
         focusKey = "scores:match:${m.id}",
         shape = RoundedCornerShape(12.dp),
         focusedScale = 1.02f,
-        color = if (highlight) Ember.Accent.copy(alpha = 0.16f) else Color(0x10FFFFFF),
+        color = if (highlight) Ember.Text.copy(alpha = 0.16f) else Color(0x10FFFFFF),
         focusedColor = Color(0x33FFFFFF),
         onClick = onClick,
     ) {
