@@ -1,5 +1,7 @@
 package app.embertv.ui
 
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Icon
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
@@ -251,71 +253,72 @@ private fun SeriesShelf(vm: AppViewModel, title: String, series: List<Series>, k
 
 // ---------------- Search ----------------
 
-private class Catalogue(val channels: List<Channel>, val movies: List<Movie>, val series: List<Series>)
-
-private class SearchResults(val channels: List<Channel>, val movies: List<Movie>, val series: List<Series>) {
-    val isEmpty: Boolean get() = channels.isEmpty() && movies.isEmpty() && series.isEmpty()
-}
-
-private suspend fun loadCatalogue(repo: Repository): Catalogue {
-    suspend fun <T> safely(block: suspend () -> List<T>): List<T> = try {
-        block()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        emptyList()
-    }
-    return Catalogue(
-        channels = safely { repo.allChannels() },
-        movies = safely { repo.allMovies() },
-        series = safely { repo.allSeries() },
-    )
-}
-
 @Composable
 fun SearchSection(vm: AppViewModel) {
     val repo = vm.repo ?: return
     val query = vm.searchQuery.trim()
-    // The full catalogue can be large, so only fetch it once someone actually searches.
-    val wanted = query.length >= 2
-    val catalogue by rememberLoad(repo, vm.reloadToken, wanted) {
-        if (wanted) loadCatalogue(repo) else null
-    }
-    var results by remember { mutableStateOf<SearchResults?>(null) }
     var editing by remember { mutableStateOf(false) }
-    val cat = (catalogue as? LoadResult.Ok)?.value
 
-    // What's on TV: programme titles in the guide, found a channel at a time.
+    // Download the full lists as soon as Search opens (channels first: the smallest), so results are
+    // quick by the time anything's typed. Each kind is ready (true) independently.
+    var ready by remember(repo, vm.reloadToken) { mutableStateOf(emptySet<ContentType>()) }
+    LaunchedEffect(repo, vm.reloadToken) {
+        for (kind in listOf(ContentType.LIVE, ContentType.MOVIE, ContentType.SERIES)) {
+            launch {
+                try {
+                    repo.prepareSearch(kind)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Searching will try again (and say if it can't).
+                }
+                ready = ready + kind
+            }
+        }
+    }
+
+    // Results per kind, shown as each arrives. null = still working on it.
+    var channels by remember { mutableStateOf<List<Channel>?>(null) }
+    var movies by remember { mutableStateOf<List<Movie>?>(null) }
+    var series by remember { mutableStateOf<List<Series>?>(null) }
+    LaunchedEffect(query, vm.reloadToken) {
+        channels = null
+        movies = null
+        series = null
+        if (query.length < 2) return@LaunchedEffect
+        delay(250)
+        suspend fun <T> safely(block: suspend () -> List<T>): List<T> = try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+        coroutineScope {
+            launch { channels = safely { repo.searchChannels(query) } }
+            launch { movies = safely { repo.searchMovies(query) } }
+            launch { series = safely { repo.searchSeries(query) } }
+        }
+    }
+
+    // What's on TV: programme titles in the guide, found a channel at a time. Starts once films and
+    // series are in, so it doesn't hold them up.
     var onTv by remember { mutableStateOf<List<app.embertv.data.ProgrammeHit>>(emptyList()) }
     var onTvProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var programmeDetails by remember { mutableStateOf<app.embertv.data.ProgrammeHit?>(null) }
     val now = LocalNow.current
-    LaunchedEffect(query) {
+    val listsReady = movies != null && series != null
+    LaunchedEffect(query, listsReady) {
         onTv = emptyList()
         onTvProgress = null
-        if (query.length < 3) return@LaunchedEffect
-        delay(600)
+        if (query.length < 3 || !listsReady) return@LaunchedEffect
+        delay(400)
         val first = (vm.favourites.filter { it.type == ContentType.LIVE }.map { it.id } + vm.recentChannels.map { it.id }).distinct()
         app.embertv.data.ProgrammeSearch.search(repo, query, now, first) { checked, total, hits ->
             onTv = hits
             onTvProgress = checked to total
         }
         onTvProgress = null
-    }
-
-    LaunchedEffect(query, cat) {
-        if (query.length < 2 || cat == null) {
-            results = null
-            return@LaunchedEffect
-        }
-        delay(250)
-        results = withContext(Dispatchers.Default) {
-            SearchResults(
-                channels = cat.channels.filter { it.name.contains(query, ignoreCase = true) }.take(60),
-                movies = cat.movies.filter { it.name.contains(query, ignoreCase = true) }.take(60),
-                series = cat.series.filter { it.name.contains(query, ignoreCase = true) }.take(60),
-            )
-        }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -328,22 +331,41 @@ fun SearchSection(vm: AppViewModel) {
                 onClick = { editing = true },
             )
         }
-        val r = results
+        val ch = channels
+        val mv = movies
+        val sr = series
+        val stillLooking = ch == null || mv == null || sr == null
+        val anything = !ch.isNullOrEmpty() || !mv.isNullOrEmpty() || !sr.isNullOrEmpty() || onTv.isNotEmpty() || onTvProgress != null
         when {
-            query.length < 2 -> EmptyView("Press OK on the search box and type at least two letters to search everything your provider offers, including what's on TV this week.")
-            catalogue is LoadResult.Loading || (cat != null && r == null) ->
-                LoadingView(text = "Searching your catalogue…")
-            (r != null && !r.isEmpty) || onTv.isNotEmpty() || onTvProgress != null -> LazyColumn(
+            query.length < 2 -> EmptyView(
+                if (ready.size < 3) "Getting your channels, films and series ready to search… You can start typing."
+                else "Press OK on the search box and type at least two letters to search everything your provider offers, including what's on TV this week."
+            )
+            !anything && stillLooking -> LoadingView(
+                text = when {
+                    ContentType.MOVIE !in ready || ContentType.SERIES !in ready -> "Loading your films and series to search (only the first time)…"
+                    else -> "Searching…"
+                }
+            )
+            anything -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = 4.dp, bottom = LocalContentPadding.current.calculateBottomPadding() + 48.dp),
                 verticalArrangement = Arrangement.spacedBy(26.dp),
             ) {
-                if (r != null && r.channels.isNotEmpty()) item(key = "s-ch") { ChannelShelf(vm, "Channels", r.channels, "search") }
+                if (!ch.isNullOrEmpty()) item(key = "s-ch") { ChannelShelf(vm, "Channels", ch, "search") }
                 if (onTv.isNotEmpty() || onTvProgress != null) item(key = "s-tv") {
                     ProgrammeShelf(vm, onTv, onTvProgress, now) { programmeDetails = it }
                 }
-                if (r != null && r.movies.isNotEmpty()) item(key = "s-mv") { MovieShelf(vm, "Movies", r.movies, "search") }
-                if (r != null && r.series.isNotEmpty()) item(key = "s-sr") { SeriesShelf(vm, "Series", r.series, "search") }
+                if (!mv.isNullOrEmpty()) item(key = "s-mv") { MovieShelf(vm, "Movies", mv, "search") }
+                if (!sr.isNullOrEmpty()) item(key = "s-sr") { SeriesShelf(vm, "Series", sr, "search") }
+                if (stillLooking) item(key = "s-more") {
+                    Text(
+                        "Still searching " + listOfNotNull(if (mv == null) "films" else null, if (sr == null) "series" else null, if (ch == null) "channels" else null).joinToString(" and ") + "…",
+                        style = Txt.Caption,
+                        color = Ember.Faint,
+                        modifier = Modifier.padding(start = edgePadding()),
+                    )
+                }
             }
             else -> EmptyView("Nothing matches \"$query\".")
         }

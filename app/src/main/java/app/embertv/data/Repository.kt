@@ -66,6 +66,9 @@ class Repository(val client: XtreamClient) {
         mergedSeries.clear()
         movieIndex = null
         seriesIndex = null
+        channelSearch = null
+        movieSearch = null
+        seriesSearch = null
         epg.clear()
         fullEpg.clear()
     }
@@ -164,6 +167,82 @@ class Repository(val client: XtreamClient) {
 
     fun loadedSeries(): List<Series> =
         ((allSeries ?: emptyList()) + seriesByCat.values.flatten()).filter { filter(ContentType.SERIES, it.categoryId) }
+
+    // ---- Search ----
+    // Each full list with its names already tidied for matching, built once in the background, so
+    // each letter typed only scans plain text. Only the matches are then grouped into qualities.
+
+    private class SearchList<T>(val items: List<T>, val names: Array<String>)
+
+    @Volatile private var channelSearch: SearchList<Channel>? = null
+    @Volatile private var movieSearch: SearchList<Movie>? = null
+    @Volatile private var seriesSearch: SearchList<Series>? = null
+
+    private suspend fun <T> searchList(items: List<T>, name: (T) -> String): SearchList<T> =
+        withContext(Dispatchers.Default) { SearchList(items, Array(items.size) { MatchFinder.normalize(name(items[it])) }) }
+
+    private suspend fun channelSearchList(): SearchList<Channel> =
+        channelSearch ?: searchList(rawAllChannels()) { it.name }.also { channelSearch = it }
+
+    private suspend fun movieSearchList(): SearchList<Movie> =
+        movieSearch ?: searchList(rawAllMovies()) { it.name }.also { movieSearch = it }
+
+    private suspend fun seriesSearchList(): SearchList<Series> =
+        seriesSearch ?: searchList(rawAllSeries()) { it.name }.also { seriesSearch = it }
+
+    /** Downloads what search needs ahead of time (the Search page calls this when it opens). */
+    suspend fun prepareSearch(kind: ContentType) {
+        when (kind) {
+            ContentType.LIVE -> channelSearchList()
+            ContentType.MOVIE -> movieSearchList()
+            ContentType.SERIES -> seriesSearchList()
+        }
+    }
+
+    private fun <T> scan(list: SearchList<T>, q: String, keep: (T) -> Boolean): List<T> {
+        val starts = ArrayList<T>()
+        val contains = ArrayList<T>()
+        for (i in list.items.indices) {
+            val n = list.names[i]
+            if (!n.contains(q)) continue
+            val item = list.items[i]
+            if (!keep(item)) continue
+            // Titles starting with what was typed come first.
+            if (n.startsWith(q) || n.contains(" $q")) starts += item else contains += item
+        }
+        return starts + contains
+    }
+
+    suspend fun searchChannels(query: String, limit: Int = 60): List<Channel> {
+        val q = MatchFinder.normalize(query)
+        if (q.isEmpty()) return emptyList()
+        val list = channelSearchList()
+        return withContext(Dispatchers.Default) {
+            scan(list, q) { filter(ContentType.LIVE, it.categoryId) && it.streamId !in hiddenChannels }.take(limit)
+        }
+    }
+
+    suspend fun searchMovies(query: String, limit: Int = 60): List<Movie> {
+        val q = MatchFinder.normalize(query)
+        if (q.isEmpty()) return emptyList()
+        val list = movieSearchList()
+        val names = if (mergeVersions) movieCategoryNames() else emptyMap()
+        return withContext(Dispatchers.Default) {
+            val found = scan(list, q) { filter(ContentType.MOVIE, it.categoryId) }.take(limit * 4)
+            (if (mergeVersions) Versions.mergeMovies(found, names) else found).take(limit)
+        }
+    }
+
+    suspend fun searchSeries(query: String, limit: Int = 60): List<Series> {
+        val q = MatchFinder.normalize(query)
+        if (q.isEmpty()) return emptyList()
+        val list = seriesSearchList()
+        val names = if (mergeVersions) seriesCategoryNames() else emptyMap()
+        return withContext(Dispatchers.Default) {
+            val found = scan(list, q) { filter(ContentType.SERIES, it.categoryId) }.take(limit * 4)
+            (if (mergeVersions) Versions.mergeSeries(found, names) else found).take(limit)
+        }
+    }
 
     // Every title in the library grouped by its title key, built once in the background, so other
     // qualities can be found wherever the provider keeps them (not only in groups named "4K" etc.).
