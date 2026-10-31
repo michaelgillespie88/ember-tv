@@ -406,6 +406,7 @@ fun TvButton(
     focusKey: String? = null,
     autoFocus: Boolean = false,
     requester: FocusRequester? = null,
+    horizontalPadding: Dp = 26.dp,
     onClick: () -> Unit,
 ) {
     FocusBox(
@@ -420,7 +421,7 @@ fun TvButton(
         onClick = onClick,
     ) { focused ->
         Row(
-            Modifier.fillMaxHeight().padding(horizontal = 26.dp),
+            Modifier.fillMaxHeight().padding(horizontal = horizontalPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {

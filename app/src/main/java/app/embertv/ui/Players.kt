@@ -1,6 +1,8 @@
 package app.embertv.ui
 
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,6 +23,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -309,7 +313,7 @@ private fun rememberExoPlayer(
 }
 
 @Composable
-private fun VideoSurface(exo: ExoPlayer, modifier: Modifier = Modifier.fillMaxSize()) {
+private fun VideoSurface(exo: ExoPlayer, modifier: Modifier = Modifier.fillMaxSize(), pictureMode: Int = 0) {
     AndroidView(
         factory = { ctx ->
             PlayerView(ctx).apply {
@@ -325,7 +329,45 @@ private fun VideoSurface(exo: ExoPlayer, modifier: Modifier = Modifier.fillMaxSi
             }
         },
         modifier = modifier,
+        update = { it.resizeMode = resizeModeFor(pictureMode) },
     )
+}
+
+private fun resizeModeFor(pictureMode: Int): Int = when (pictureMode) {
+    1 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+    2 -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+    else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+}
+
+/** Phones: pinch out to zoom the picture to fill the screen, pinch in to fit it again. */
+private fun Modifier.pinchToZoom(onPinch: (zoomIn: Boolean) -> Unit): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        var startDistance = 0f
+        var done = false
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val down = event.changes.filter { it.pressed }
+            if (down.isEmpty()) break
+            if (down.size < 2) continue
+            val dx = down[0].position.x - down[1].position.x
+            val dy = down[0].position.y - down[1].position.y
+            val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+            if (startDistance == 0f) {
+                startDistance = distance
+            } else if (!done && startDistance > 0f) {
+                val ratio = distance / startDistance
+                if (ratio > 1.2f) {
+                    onPinch(true)
+                    done = true
+                } else if (ratio < 0.83f) {
+                    onPinch(false)
+                    done = true
+                }
+            }
+            // Two fingers are a pinch: don't let them change channel or toggle the controls.
+            event.changes.forEach { it.consume() }
+        }
+    }
 }
 
 private fun describe(e: PlaybackException): String = when (e.errorCode) {
@@ -750,7 +792,8 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             .focusRequester(focus)
             .onKeyEvent { onKey(it) }
             .focusable()
-            // Touch: tap shows or hides the info, swiping up or down changes channel.
+            // Touch: tap shows or hides the info, swiping up or down changes channel, pinching zooms.
+            .pinchToZoom { zoomIn -> vm.setPicture(if (zoomIn) 1 else 0) }
             .pointerInput(Unit) {
                 detectTapGestures(onTap = { if (overlayVisible) overlayVisible = false else showOverlay() })
             }
@@ -793,6 +836,8 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             } else {
                 Modifier.fillMaxSize()
             },
+            // The small guide picture always shows the whole frame.
+            pictureMode = if (guideOpen || vm.inPip) 0 else vm.pictureMode,
         )
         // In picture-in-picture the window is tiny: just the picture.
         if (vm.inPip) return@Box
@@ -846,6 +891,11 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                     onScores = {
                         controlsOpen = false
                         scoresOpen = true
+                    },
+                    pictureLabel = vm.pictureModeLabel,
+                    onPicture = {
+                        controlsToken++
+                        vm.cyclePicture()
                     },
                 )
             }
@@ -1082,6 +1132,8 @@ private fun LiveControls(
     onGuide: () -> Unit,
     onChannels: () -> Unit,
     onScores: () -> Unit,
+    pictureLabel: String,
+    onPicture: () -> Unit,
 ) {
     Row(
         Modifier
@@ -1103,6 +1155,7 @@ private fun LiveControls(
         TvButton("TV guide", icon = "☰", focusKey = "live:ctl:guide", onClick = onGuide)
         TvButton("Channels", icon = "≡", focusKey = "live:ctl:list", onClick = onChannels)
         TvButton("Live scores", focusKey = "live:ctl:scores", onClick = onScores)
+        TvButton("Picture: $pictureLabel", focusKey = "live:ctl:picture", onClick = onPicture)
     }
 }
 
@@ -1381,6 +1434,7 @@ private fun LiveOptionsDialog(
                 }
             }
             CatchupActions(vm, channel, onDismiss)
+            ZapAction(EmberIcons.Zoom, "Picture", vm.pictureModeLabel) { vm.cyclePicture() }
             ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
                 onDismiss()
                 onOpenElsewhere()
@@ -1470,10 +1524,24 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
     var overlayVisible by remember { mutableStateOf(true) }
     var overlayToken by remember { mutableIntStateOf(0) }
     var showTracks by remember { mutableStateOf(false) }
+    // TVs: the row of buttons (play, skip, next episode, live scores) that pausing brings up.
+    var controlsOpen by remember { mutableStateOf(false) }
+    var controlsToken by remember { mutableIntStateOf(0) }
+    var scoresOpen by remember { mutableStateOf(false) }
+    val controlsFocus = remember { FocusRequester() }
+    // What this film or episode offers, so the pause buttons only show what's there.
+    var subtitleTracks by remember { mutableIntStateOf(0) }
+    var audioTracks by remember { mutableIntStateOf(0) }
 
     fun showOverlay() {
         overlayVisible = true
         overlayToken++
+    }
+
+    fun openControls() {
+        controlsToken = 0
+        controlsOpen = true
+        showOverlay()
     }
 
     LaunchedEffect(Unit) {
@@ -1485,8 +1553,9 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
         runCatching { focus.requestFocus() }
     }
 
-    LaunchedEffect(overlayToken, playing, scrub) {
-        if (!playing || scrub != null) return@LaunchedEffect
+    LaunchedEffect(overlayToken, playing, scrub, controlsOpen) {
+        // The pause buttons keep the overlay up; they tuck it away themselves.
+        if (!playing || scrub != null || controlsOpen) return@LaunchedEffect
         delay(4_000)
         overlayVisible = false
     }
@@ -1496,6 +1565,10 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
         while (true) {
             position = exo.currentPosition
             duration = exo.duration.coerceAtLeast(0L)
+            if (isTv && ticks % 4 == 0) {
+                subtitleTracks = trackOptions(exo, C.TRACK_TYPE_TEXT).size
+                audioTracks = trackOptions(exo, C.TRACK_TYPE_AUDIO).size
+            }
             delay(500)
             ticks++
             if (ticks % 20 == 0 && exo.isPlaying) save(exo)
@@ -1560,8 +1633,22 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
         onDispose { save(exo) }
     }
 
-    LaunchedEffect(showTracks) {
-        if (!showTracks) {
+    BackHandler(enabled = scoresOpen) { scoresOpen = false }
+    BackHandler(enabled = controlsOpen && !scoresOpen) { controlsOpen = false }
+    LaunchedEffect(controlsOpen, controlsToken, playing) {
+        if (!controlsOpen) return@LaunchedEffect
+        if (controlsToken == 0) {
+            delay(50)
+            runCatching { controlsFocus.requestFocus() }
+        }
+        // Stays up while paused; tucks itself away a few seconds after playing again.
+        if (!playing) return@LaunchedEffect
+        delay(5_000)
+        controlsOpen = false
+        overlayVisible = false
+    }
+    LaunchedEffect(showTracks, controlsOpen, scoresOpen) {
+        if (!showTracks && !controlsOpen && !scoresOpen) {
             delay(60)
             runCatching { focus.requestFocus() }
         }
@@ -1582,8 +1669,21 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
     }
 
     fun togglePlay() {
-        if (exo.isPlaying) exo.pause() else exo.play()
+        if (exo.isPlaying) {
+            exo.pause()
+            // TVs: pausing brings up the buttons.
+            if (isTv && !controlsOpen) openControls()
+        } else {
+            exo.play()
+        }
         showOverlay()
+    }
+
+    fun nextEpisode() {
+        if (exo.hasNextMediaItem()) {
+            exo.seekToNextMediaItem()
+            exo.play()
+        }
     }
 
     fun skipBy(deltaMs: Long) {
@@ -1600,9 +1700,22 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
     }
 
     fun onKey(ev: KeyEvent): Boolean {
-        if (showTracks) return false
+        if (showTracks || scoresOpen) return false
         val native = ev.nativeKeyEvent
         val code = native.keyCode
+        if (controlsOpen) {
+            // The buttons have the remote; only the media keys still work directly.
+            if (ev.type != KeyEventType.KeyDown) return false
+            when (code) {
+                AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> togglePlay()
+                AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> skipBy(-10_000L)
+                AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> skipBy(30_000L)
+                AndroidKeyEvent.KEYCODE_MEDIA_NEXT -> nextEpisode()
+                else -> return false
+            }
+            controlsToken++
+            return true
+        }
         val back = code == AndroidKeyEvent.KEYCODE_DPAD_LEFT || code == AndroidKeyEvent.KEYCODE_MEDIA_REWIND
         val forward = code == AndroidKeyEvent.KEYCODE_DPAD_RIGHT || code == AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD
         if (ev.type == KeyEventType.KeyUp) {
@@ -1631,9 +1744,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
             code == AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
                 if (overlayVisible) showTracks = true else showOverlay()
             }
-            code == AndroidKeyEvent.KEYCODE_MEDIA_NEXT -> {
-                if (exo.hasNextMediaItem()) exo.seekToNextMediaItem()
-            }
+            code == AndroidKeyEvent.KEYCODE_MEDIA_NEXT -> nextEpisode()
             code == AndroidKeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
                 if (exo.hasPreviousMediaItem()) exo.seekToPreviousMediaItem()
             }
@@ -1651,7 +1762,9 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
             .focusRequester(focus)
             .onKeyEvent { onKey(it) }
             .focusable()
-            // Touch: tap shows or hides the controls; double-tap the left or right side to skip 10 seconds.
+            // Touch: tap shows or hides the controls; double-tap the left or right side to skip 10 seconds;
+            // pinch to zoom the picture.
+            .pinchToZoom { zoomIn -> vm.setPicture(if (zoomIn) 1 else 0) }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { if (overlayVisible) overlayVisible = false else showOverlay() },
@@ -1659,7 +1772,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                 )
             }
     ) {
-        VideoSurface(exo)
+        VideoSurface(exo, pictureMode = if (vm.inPip) 0 else vm.pictureMode)
         if (vm.inPip) return@Box
 
         val err = error
@@ -1669,7 +1782,8 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
             Spinner()
         }
 
-        if (!playing && !buffering && err == null && (isTv || !overlayVisible)) {
+        // Phones: a small paused sign when the controls are tucked away. TVs show the button row instead.
+        if (!isTv && !playing && !buffering && err == null && !overlayVisible) {
             Box(
                 Modifier
                     .align(Alignment.Center)
@@ -1696,6 +1810,19 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                     scrubbing = scrub != null,
                     playing = playing,
                     hasNext = current < items.lastIndex,
+                    controlsOpen = controlsOpen && !scoresOpen,
+                    requester = controlsFocus,
+                    onActivity = { controlsToken++ },
+                    onTogglePlay = { togglePlay() },
+                    onSkip = { skipBy(it) },
+                    onNext = { nextEpisode() },
+                    onTracks = { showTracks = true },
+                    hasSubtitles = subtitleTracks > 0,
+                    hasLanguages = audioTracks > 1,
+                    onScores = {
+                        controlsOpen = false
+                        scoresOpen = true
+                    },
                 )
             } else {
                 VodTouchOverlay(
@@ -1713,10 +1840,16 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                     },
                     onScrubDone = { commitScrub() },
                     onTracks = { showTracks = true },
-                    onNext = { if (exo.hasNextMediaItem()) exo.seekToNextMediaItem() },
+                    onNext = { nextEpisode() },
+                    onScores = { scoresOpen = true },
                     onPip = enterPip,
                 )
             }
+        }
+
+        if (scoresOpen) {
+            if (!isTv) Box(Modifier.fillMaxSize().clickable { scoresOpen = false })
+            ScoresPanel(programmeTitle = null, onClose = { scoresOpen = false })
         }
 
         val sleepLeft = vm.sleepMinutesLeft(LocalNow.current * 1000)
@@ -1735,8 +1868,45 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
     }
 }
 
+/** A round glass button for the TV pause row: white with a black symbol when selected. */
 @Composable
-private fun VodOverlay(item: VodItem, position: Long, duration: Long, scrubbing: Boolean, playing: Boolean, hasNext: Boolean) {
+private fun RoundTvButton(symbol: String, @Suppress("UNUSED_PARAMETER") description: String, focusKey: String, requester: FocusRequester? = null, onClick: () -> Unit) {
+    FocusBox(
+        modifier = Modifier.size(50.dp),
+        focusKey = focusKey,
+        shape = CircleShape,
+        focusedScale = 1.1f,
+        color = Color(0x26FFFFFF),
+        focusedColor = Color.White,
+        requester = requester,
+        onClick = onClick,
+    ) { focused ->
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(symbol, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (focused) Color.Black else Ember.Text)
+        }
+    }
+}
+
+/** TVs: title at the top; progress, times and (when paused) a tidy row of buttons at the bottom. */
+@Composable
+private fun VodOverlay(
+    item: VodItem,
+    position: Long,
+    duration: Long,
+    scrubbing: Boolean,
+    playing: Boolean,
+    hasNext: Boolean,
+    controlsOpen: Boolean,
+    requester: FocusRequester,
+    onActivity: () -> Unit,
+    onTogglePlay: () -> Unit,
+    onSkip: (Long) -> Unit,
+    onNext: () -> Unit,
+    onTracks: () -> Unit,
+    hasSubtitles: Boolean,
+    hasLanguages: Boolean,
+    onScores: () -> Unit,
+) {
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
@@ -1745,6 +1915,10 @@ private fun VodOverlay(item: VodItem, position: Long, duration: Long, scrubbing:
                 .background(Brush.verticalGradient(listOf(Color(0xCC000000), Color.Transparent)))
                 .padding(start = 56.dp, end = 56.dp, top = 36.dp, bottom = 60.dp)
         ) {
+            if (!playing) {
+                Text("PAUSED", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp), color = Ember.Dim)
+                Spacer(Modifier.height(4.dp))
+            }
             Text(item.title, style = Txt.Title, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (item.subtitle.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
@@ -1756,7 +1930,7 @@ private fun VodOverlay(item: VodItem, position: Long, duration: Long, scrubbing:
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000))))
-                .padding(start = 56.dp, end = 56.dp, top = 70.dp, bottom = 36.dp)
+                .padding(start = 48.dp, end = 48.dp, top = 70.dp, bottom = 32.dp)
         ) {
             val fraction = if (duration > 0) position.toFloat() / duration.toFloat() else 0f
             Box(
@@ -1770,24 +1944,48 @@ private fun VodOverlay(item: VodItem, position: Long, duration: Long, scrubbing:
                     Modifier
                         .fillMaxHeight()
                         .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                        .background(if (scrubbing) Ember.Accent else Color.White)
+                        .background(Color.White)
                 )
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(formatMs(position), style = Txt.Label)
                 Spacer(Modifier.weight(1f))
-                Text(
-                    buildString {
-                        append(if (playing) "OK Pause" else "OK Play")
-                        append("    ◀▶ Skip    ▼ Audio & subtitles")
-                        if (hasNext) append("    ⏭ Next episode")
-                    },
-                    style = Txt.Caption,
-                    color = Ember.Faint,
-                )
+                if (!controlsOpen) {
+                    Text(
+                        if (playing) "OK  Pause     ◀ ▶  Skip" else "OK  Play     ▼  More",
+                        style = Txt.Caption,
+                        color = Ember.Faint,
+                    )
+                }
                 Spacer(Modifier.weight(1f))
-                Text(if (duration > 0) "-" + formatMs(duration - position) else "", style = Txt.Label, color = Ember.Dim)
+                Text(if (duration > 0) "−" + formatMs(duration - position) else "", style = Txt.Label, color = Ember.Dim)
+            }
+            AnimatedVisibility(visible = controlsOpen, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 18.dp)
+                        .onPreviewKeyEvent {
+                            onActivity()
+                            false
+                        },
+                    horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Apple TV style: round play and skip buttons, then the extras.
+                    RoundTvButton("◀◀", "Back 10 seconds", "vod:ctl:back") { onSkip(-10_000L) }
+                    RoundTvButton(if (playing) "❙❙" else "▶", if (playing) "Pause" else "Play", "vod:ctl:play", requester = requester, onClick = onTogglePlay)
+                    RoundTvButton("▶▶", "Forward 30 seconds", "vod:ctl:fwd") { onSkip(30_000L) }
+                    Spacer(Modifier.width(14.dp))
+                    if (hasNext) TvButton("Next episode", icon = "▶❙", focusKey = "vod:ctl:next", horizontalPadding = 18.dp, onClick = onNext)
+                    // Subtitles and other languages, when this film or episode has them.
+                    if (hasSubtitles) TvButton("Subtitles", focusKey = "vod:ctl:subs", horizontalPadding = 18.dp, onClick = onTracks)
+                    if (hasLanguages) TvButton("Language", focusKey = "vod:ctl:audio", horizontalPadding = 18.dp, onClick = onTracks)
+                    TvButton("Live scores", focusKey = "vod:ctl:scores", horizontalPadding = 18.dp, onClick = onScores)
+                    // Picture zoom, sleep timer and the rest.
+                    RoundTvButton("•••", "More", "vod:ctl:more", onClick = onTracks)
+                }
             }
         }
     }
@@ -1807,6 +2005,7 @@ private fun VodTouchOverlay(
     onScrubDone: () -> Unit,
     onTracks: () -> Unit,
     onNext: () -> Unit,
+    onScores: () -> Unit,
     onPip: (() -> Unit)? = null,
 ) {
     Box(Modifier.fillMaxSize().background(Color(0x59000000))) {
@@ -1827,6 +2026,8 @@ private fun VodTouchOverlay(
                 }
             }
             Spacer(Modifier.width(10.dp))
+            IconCircleButton(EmberIcons.Football, "Live scores", background = ControlBg, glass = true, onClick = onScores)
+            Spacer(Modifier.width(8.dp))
             if (onPip != null) {
                 IconCircleButton(EmberIcons.Pip, "Picture in picture", background = ControlBg, glass = true, onClick = onPip)
                 Spacer(Modifier.width(8.dp))
@@ -1947,6 +2148,9 @@ private fun TracksDialog(vm: AppViewModel, exo: ExoPlayer, onOpenElsewhere: () -
                 subs.forEach { o ->
                     TrackRow(o.label, o.selected && !subtitlesOff, autoFocus = false) { selectSubtitle(o) }
                 }
+                Spacer(Modifier.height(18.dp))
+                SheetSection("Picture")
+                ZapAction(EmberIcons.Zoom, vm.pictureModeLabel, "Change") { vm.cyclePicture() }
                 Spacer(Modifier.height(18.dp))
                 SheetSection("Sleep timer")
                 val left = vm.sleepMinutesLeft()

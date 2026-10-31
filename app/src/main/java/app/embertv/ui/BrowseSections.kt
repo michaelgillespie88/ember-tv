@@ -502,6 +502,12 @@ fun SettingsSection(vm: AppViewModel) {
                 focusKey = "set:starton",
             ) { vm.cycleStartOn() }
             SettingRow(
+                "Picture zoom",
+                vm.pictureModeLabel,
+                if (LocalIsTv.current) "Zoom fills the screen on channels with black bars. Also in the player: press OK" else "Zoom fills the screen on channels with black bars. Pinch the picture to change it too",
+                focusKey = "set:picture",
+            ) { vm.cyclePicture(announce = false) }
+            SettingRow(
                 "Quality to play",
                 when (vm.qualityChoice) {
                     "best" -> "Best available"

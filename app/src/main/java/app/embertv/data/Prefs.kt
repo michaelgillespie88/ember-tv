@@ -314,6 +314,13 @@ class Prefs(context: Context) {
             sp.edit().putInt("timeshift_min", value).apply()
         }
 
+    /** How the picture fills the screen: 0 fit (black bars), 1 zoom (fills, trims the edges), 2 stretch. */
+    var pictureMode: Int
+        get() = sp.getInt("picture_mode", 0)
+        set(value) {
+            sp.edit().putInt("picture_mode", value).apply()
+        }
+
     /** What the app opens on: "home", "last" (the last channel watched) or "guide". */
     var startOn: String
         get() = sp.getString("start_on", "home") ?: "home"

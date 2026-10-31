@@ -122,6 +122,15 @@ object EmberIcons {
     val Star = outline("star") { star() }
     val StarFilled = solid("star-filled") { star() }
 
+    /** Picture zoom: a screen with arrows pointing out to its corners. */
+    val Zoom = outline("zoom") {
+        moveTo(3f, 5f); lineTo(21f, 5f); lineTo(21f, 19f); lineTo(3f, 19f); close()
+        moveTo(7f, 9f); lineTo(7f, 12f)
+        moveTo(7f, 9f); lineTo(10f, 9f)
+        moveTo(17f, 15f); lineTo(17f, 12f)
+        moveTo(17f, 15f); lineTo(14f, 15f)
+    }
+
     val Search = outline("search") {
         circle(10.5f, 10.5f, 6.5f)
         moveTo(15.5f, 15.5f); lineTo(20.5f, 20.5f)

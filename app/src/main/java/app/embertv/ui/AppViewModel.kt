@@ -1259,6 +1259,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Why the app closed last time, if it crashed; shown once. */
     var crashNote by mutableStateOf<String?>(CrashNote.take(getApplication()))
 
+    /** Picture zoom for live TV and films: 0 fit, 1 zoom, 2 stretch. Remembered. */
+    var pictureMode by mutableStateOf(prefs.pictureMode.coerceIn(0, 2))
+        private set
+
+    val pictureModeLabel: String
+        get() = PICTURE_MODES[pictureMode]
+
+    fun setPicture(mode: Int, announce: Boolean = true) {
+        val m = mode.coerceIn(0, 2)
+        if (m == pictureMode) return
+        pictureMode = m
+        prefs.pictureMode = m
+        if (announce) notify("Picture: ${PICTURE_MODES[m]}")
+    }
+
+    fun cyclePicture(announce: Boolean = true) = setPicture((pictureMode + 1) % 3, announce)
+
     var startOn by mutableStateOf(prefs.startOn)
         private set
     private var startupApplied = false
@@ -2126,3 +2143,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (saved != null) startSession(saved, null)
     }
 }
+
+/** Names for the picture zoom modes, in order. */
+val PICTURE_MODES = listOf("Fit", "Zoom", "Stretch")
