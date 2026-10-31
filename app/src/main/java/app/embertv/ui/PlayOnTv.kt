@@ -254,14 +254,14 @@ fun RemoteScreen(vm: AppViewModel) {
                 RemoteRound("back", onPress = vm::pressRemote) { Icon(EmberIcons.Back, "Back", tint = Ember.Text, modifier = Modifier.size(28.dp)) }
                 RemoteRound("home", onPress = vm::pressRemote) { Icon(EmberIcons.Home, "Home", tint = Ember.Text, modifier = Modifier.size(28.dp)) }
                 RemoteRound("playpause", onPress = vm::pressRemote) {
-                    Text("▶❙❙", style = Txt.Label.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold), color = Ember.Text)
+                    Icon(EmberIcons.PlayPause, "Play or pause", tint = Ember.Text, modifier = Modifier.size(28.dp))
                 }
             }
             Spacer(Modifier.height(22.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(22.dp), verticalAlignment = Alignment.CenterVertically) {
-                RemoteRound("rewind", onPress = vm::pressRemote) { Text("◀◀", style = Txt.Label.copy(fontSize = 16.sp), color = Ember.Text) }
+                RemoteRound("rewind", onPress = vm::pressRemote) { Icon(EmberIcons.Rewind, "Rewind", tint = Ember.Text, modifier = Modifier.size(26.dp)) }
                 ChannelRocker(onPress = vm::pressRemote)
-                RemoteRound("forward", onPress = vm::pressRemote) { Text("▶▶", style = Txt.Label.copy(fontSize = 16.sp), color = Ember.Text) }
+                RemoteRound("forward", onPress = vm::pressRemote) { Icon(EmberIcons.FastForward, "Fast forward", tint = Ember.Text, modifier = Modifier.size(26.dp)) }
             }
             Spacer(Modifier.weight(1f))
             Text(

@@ -202,6 +202,27 @@ object EmberIcons {
         moveTo(9.5f, 1.5f); lineTo(12.5f, 4f); lineTo(9.5f, 6.5f)
     }
 
+    /** Rewind and fast forward: two solid triangles, as on the Apple remote. */
+    val Rewind = solid("rewind") {
+        moveTo(11.5f, 6f); lineTo(3f, 12f); lineTo(11.5f, 18f); close()
+        moveTo(20.5f, 6f); lineTo(12f, 12f); lineTo(20.5f, 18f); close()
+    }
+
+    val FastForward = solid("fast-forward") {
+        moveTo(12.5f, 6f); lineTo(21f, 12f); lineTo(12.5f, 18f); close()
+        moveTo(3.5f, 6f); lineTo(12f, 12f); lineTo(3.5f, 18f); close()
+    }
+
+    /** A plain right chevron, for "next". */
+    val ChevronRight = outline("chevron-right") { moveTo(9f, 5f); lineTo(16f, 12f); lineTo(9f, 19f) }
+
+    /** Play and pause together, for the remote's one play/pause button. */
+    val PlayPause = solid("play-pause") {
+        moveTo(2.5f, 6f); lineTo(11f, 12f); lineTo(2.5f, 18f); close()
+        moveTo(13f, 6f); lineTo(16f, 6f); lineTo(16f, 18f); lineTo(13f, 18f); close()
+        moveTo(18.5f, 6f); lineTo(21.5f, 6f); lineTo(21.5f, 18f); lineTo(18.5f, 18f); close()
+    }
+
     /** A globe, for the spoken language. */
     val Language = outline("language") {
         circle(12f, 12f, 9f)

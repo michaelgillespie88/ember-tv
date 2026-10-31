@@ -428,7 +428,13 @@ fun TvButton(
             horizontalArrangement = Arrangement.Center,
         ) {
             if (icon != null) {
-                Text(icon, fontSize = 15.sp, color = if (focused) Color.Black else Ember.Text)
+                // Apple style: proper icons rather than text symbols, wherever there's a match.
+                val vector = glyphIcon(icon)
+                if (vector != null) {
+                    Icon(vector, contentDescription = null, tint = if (focused) Color.Black else Ember.Text, modifier = Modifier.size(18.dp))
+                } else {
+                    Text(icon, fontSize = 15.sp, color = if (focused) Color.Black else Ember.Text)
+                }
                 Spacer(Modifier.width(10.dp))
             }
             Text(text, style = Txt.Label.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold), color = if (focused) Color.Black else Ember.Text)
@@ -594,4 +600,21 @@ fun GlassButton(text: String, icon: androidx.compose.ui.graphics.vector.ImageVec
             Text(text, style = Txt.Label.copy(fontWeight = FontWeight.SemiBold), color = if (focused) Color.Black else Ember.Text)
         }
     }
+}
+
+/** The icon that matches a text symbol used on a button, or null to keep the symbol. */
+internal fun glyphIcon(glyph: String): androidx.compose.ui.graphics.vector.ImageVector? = when (glyph.trim()) {
+    "▶", "▷" -> EmberIcons.Play
+    "❙❙" -> EmberIcons.Pause
+    "↺", "↻" -> EmberIcons.Restart
+    "✓" -> EmberIcons.Check
+    "★" -> EmberIcons.StarFilled
+    "☆" -> EmberIcons.Star
+    "›", "→" -> EmberIcons.ChevronRight
+    "◀◀" -> EmberIcons.Rewind
+    "▶▶" -> EmberIcons.FastForward
+    "☰" -> EmberIcons.Guide
+    "≡" -> EmberIcons.ChannelList
+    "•••" -> EmberIcons.More
+    else -> null
 }
