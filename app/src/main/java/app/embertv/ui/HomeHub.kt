@@ -1,5 +1,8 @@
 package app.embertv.ui
 
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -80,19 +83,27 @@ private suspend fun <T> orNull(block: suspend () -> T): T? = try {
 }
 
 /** Builds the Home rows from the provider's first few categories. Each piece is optional. */
-internal suspend fun loadHomeFeed(repo: Repository): HomeFeed {
+internal suspend fun loadHomeFeed(repo: Repository): HomeFeed = kotlinx.coroutines.coroutineScope {
+    // The lists are fetched a few at a time rather than one after another, which is much quicker.
+    val gate = kotlinx.coroutines.sync.Semaphore(4)
+    suspend fun <T> limited(block: suspend () -> T): T = gate.withPermit { block() }
+    val movieCats = async { orNull { repo.movieCategories() }.orEmpty().take(8) }
+    val seriesCats = async { orNull { repo.seriesCategories() }.orEmpty().take(5) }
+    val liveCats = async { orNull { repo.liveCategories() }.orEmpty().take(3) }
+    // A few more categories than the rows need, so Recently Added has more to choose from.
+    val movieLists = movieCats.await().map { c -> async { c to limited { orNull { repo.movies(c.id) }.orEmpty() } } }
+    val seriesLists = seriesCats.await().map { c -> async { c to limited { orNull { repo.series(c.id) }.orEmpty() } } }
+    val liveLists = liveCats.await().map { c -> async { c to limited { orNull { repo.channels(c.id) }.orEmpty() } } }
+
     val movieRows = ArrayList<Pair<Category, List<Movie>>>()
     val recentMovies = ArrayList<Movie>()
-    // A few more categories than the rows need, so Recently Added has more to choose from.
-    for (c in orNull { repo.movieCategories() }.orEmpty().take(8)) {
-        val items = orNull { repo.movies(c.id) }.orEmpty()
+    for ((c, items) in movieLists.awaitAll()) {
         recentMovies += items
         if (items.isNotEmpty() && movieRows.size < 3) movieRows.add(c to items.sortedByDescending { it.added }.take(24))
     }
     val seriesRows = ArrayList<Pair<Category, List<Series>>>()
     val recentSeries = ArrayList<Series>()
-    for (c in orNull { repo.seriesCategories() }.orEmpty().take(5)) {
-        val items = orNull { repo.series(c.id) }.orEmpty()
+    for ((c, items) in seriesLists.awaitAll()) {
         recentSeries += items
         if (items.isNotEmpty() && seriesRows.size < 2) seriesRows.add(c to items.take(24))
     }
@@ -100,24 +111,23 @@ internal suspend fun loadHomeFeed(repo: Repository): HomeFeed {
         recentMovies.filter { it.added > 0 }.distinctBy { it.streamId }.map { it.added to (it as Any) } +
             recentSeries.filter { it.updated > 0 }.distinctBy { it.seriesId }.map { it.updated to (it as Any) }
         ).sortedByDescending { it.first }.take(24).map { it.second }
-    var liveRow: Pair<Category, List<Channel>>? = null
-    for (c in orNull { repo.liveCategories() }.orEmpty().take(3)) {
-        val items = orNull { repo.channels(c.id) }.orEmpty()
-        if (items.isNotEmpty()) {
-            liveRow = c to items.take(20)
-            break
-        }
-    }
+    val liveRow: Pair<Category, List<Channel>>? = liveLists.awaitAll().firstOrNull { it.second.isNotEmpty() }?.let { (c, items) -> c to items.take(20) }
     val heroes = movieRows.firstOrNull()?.second.orEmpty().filter { it.poster.isNotBlank() }.take(6)
     if (heroes.isEmpty() && movieRows.isEmpty() && seriesRows.isEmpty() && liveRow == null) {
         throw IllegalStateException("Nothing came back from your provider. Check your connection, then try again.")
     }
-    return HomeFeed(heroes, liveRow, movieRows, seriesRows, recent)
+    HomeFeed(heroes, liveRow, movieRows, seriesRows, recent)
 }
 
+/**
+ * Home's rows, loaded by the app in the background (so switching to Live TV doesn't stop it) and
+ * kept until something changes (profile, categories, a refresh).
+ */
 @Composable
-private fun rememberHomeFeed(vm: AppViewModel, repo: Repository) =
-    rememberLoad(repo, vm.reloadToken) { loadHomeFeed(repo) }
+private fun rememberHomeFeed(vm: AppViewModel, repo: Repository): androidx.compose.runtime.State<LoadResult<HomeFeed>> {
+    LaunchedEffect(repo, vm.reloadToken) { vm.ensureHome() }
+    return androidx.compose.runtime.rememberUpdatedState(vm.homeFeed)
+}
 
 /** Moves through the featured titles every few seconds unless [paused]. */
 @Composable

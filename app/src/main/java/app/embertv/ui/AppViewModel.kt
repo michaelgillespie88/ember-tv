@@ -499,6 +499,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         account = acc
         repo = Repository(XtreamClient(acc, userAgent)).also { it.mergeVersions = mergeVersions }
         applyCategoryFilter()
+        // Start on Home's rows straight away, whichever page is shown first.
+        ensureHome()
         accountInfo = info
         if (info == null) refreshAccountInfo()
         if (!checkedForUpdates) {
@@ -1091,6 +1093,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             val i = list.indexOfFirst { it.streamId == c.streamId }
             if (i >= 0) push(Screen.PlayLive(list, i)) else push(Screen.PlayLive(listOf(c), 0))
+        }
+    }
+
+    // ---- Home ----
+
+    /** Home's rows: loaded in the background and kept, so other pages don't interrupt it. */
+    var homeFeed by mutableStateOf<LoadResult<HomeFeed>>(LoadResult.Loading)
+        private set
+    private var homeJob: kotlinx.coroutines.Job? = null
+    private var homeFor: Pair<Repository, Int>? = null
+
+    /** Loads Home if it hasn't been for this sign-in and refresh yet (or the last try failed). */
+    fun ensureHome() {
+        val r = repo ?: return
+        val key = r to reloadToken
+        if (homeFor == key && homeFeed !is LoadResult.Err) return
+        homeFor = key
+        homeJob?.cancel()
+        homeFeed = LoadResult.Loading
+        homeJob = viewModelScope.launch {
+            homeFeed = try {
+                LoadResult.Ok(loadHomeFeed(r))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                LoadResult.Err(e.message ?: "Something went wrong.")
+            } catch (e: OutOfMemoryError) {
+                LoadResult.Err("That list is too big for this device to load all at once.")
+            }
         }
     }
 
@@ -1709,6 +1740,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (!active || !sportOnHome || profile?.kids == true) return
         val r = repo ?: return
         sportJob = viewModelScope.launch {
+            // Let Home's own rows load first; the sport search can wait a few seconds.
+            var waited = 0
+            while (homeFeed is LoadResult.Loading && waited < 20_000) {
+                kotlinx.coroutines.delay(500)
+                waited += 500
+            }
             while (true) {
                 val nowMs = System.currentTimeMillis()
                 val matches = try {

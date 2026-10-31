@@ -71,7 +71,8 @@ fun Screensaver(vm: AppViewModel) {
 
     val picks by produceState<List<Pick>>(emptyList(), repo) {
         val feed = try {
-            loadHomeFeed(repo)
+            // Reuse Home's rows when they're already loaded.
+            (vm.homeFeed as? LoadResult.Ok)?.value ?: loadHomeFeed(repo)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
