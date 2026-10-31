@@ -98,6 +98,9 @@ fun <T> rememberLoad(vararg keys: Any?, block: suspend () -> T): State<LoadResul
             throw e
         } catch (e: Exception) {
             LoadResult.Err(e.message ?: "Something went wrong.")
+        } catch (e: OutOfMemoryError) {
+            // A provider list too big for this device: say so rather than closing the app.
+            LoadResult.Err("That list is too big for this device to load all at once.")
         }
     }
 

@@ -196,6 +196,8 @@ object ScoresClient {
     /** Today's matches across [leagues], live ones first. */
     suspend fun today(leagues: List<League>): List<Match> = coroutineScope {
         leagues.map { l -> async { matches(l) } }.awaitAll().flatten()
+            // A cup tie can be listed under two competitions; show it once.
+            .distinctBy { it.id }
             .sortedWith(compareBy<Match>({ it.state != MatchState.LIVE }, { it.state == MatchState.FINISHED }, { it.kickoff }))
     }
 }

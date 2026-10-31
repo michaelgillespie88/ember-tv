@@ -1626,7 +1626,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (suggestions.isNotEmpty() && pool.isNotEmpty()) {
             // Match suggestions by a cheap first word before the full title key.
             val wanted = suggestions.associateBy { Versions.key(it.title) }
-            val firstWords = wanted.keys.mapNotNull { it.split(' ').firstOrNull() }.toSet()
+            val firstWords = wanted.keys.mapNotNull { it.split(' ').firstOrNull()?.takeIf { w -> w.length > 1 } }.toSet()
             val found = HashMap<String, T>()
             for (item in pool) {
                 val n = name(item)

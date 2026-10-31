@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,7 +46,7 @@ fun CastRow(cast: List<CastMember>, edge: Dp) {
             contentPadding = PaddingValues(horizontal = edge, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(if (isTv) 22.dp else 14.dp),
         ) {
-            items(cast, key = { it.name + it.role }) { p ->
+            itemsIndexed(cast, key = { i, p -> "$i:${p.name}" }) { _, p ->
                 var focused by remember { mutableStateOf(false) }
                 Column(Modifier.width(size + 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     FocusBox(

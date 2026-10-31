@@ -527,7 +527,9 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             pausedAt = viewingWall()
             paused = true
             // Live: stop (freeing the provider connection), and pick up from the provider's rewind later.
-            if (shiftStart == null) exo.stop() else exo.pause()
+            // (Not playing when ready, so coming back to the app doesn't start it again behind "Paused".)
+            exo.playWhenReady = false
+            if (shiftStart == null) exo.stop()
         }
         showOverlay()
     }

@@ -76,7 +76,13 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
     LaunchedEffect(league) {
         matches = null
         while (true) {
-            val list = if (league.code == "all") ScoresClient.today(ALL_SET) else ScoresClient.today(listOf(league))
+            val list = try {
+                if (league.code == "all") ScoresClient.today(ALL_SET) else ScoresClient.today(listOf(league))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                matches ?: emptyList()
+            }
             matches = list
             updated = System.currentTimeMillis()
             delay(30_000)

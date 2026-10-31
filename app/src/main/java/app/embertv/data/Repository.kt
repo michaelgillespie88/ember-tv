@@ -132,7 +132,8 @@ class Repository(val client: XtreamClient) {
     /** Movies in a category, each film once with its other qualities as [Movie.versions]. */
     suspend fun movies(categoryId: String): List<Movie> {
         if (categoryId == RECENT) {
-            return movies(ALL).filter { it.added > 0 }.sortedByDescending { it.added }.take(RECENT_LIMIT)
+            val all = movies(ALL)
+            return withContext(Dispatchers.Default) { all.filter { it.added > 0 }.sortedByDescending { it.added }.take(RECENT_LIMIT) }
         }
         val raw = rawMovies(categoryId)
         if (!mergeVersions) return raw
@@ -145,7 +146,8 @@ class Repository(val client: XtreamClient) {
 
     suspend fun series(categoryId: String): List<Series> {
         if (categoryId == RECENT) {
-            return series(ALL).filter { it.updated > 0 }.sortedByDescending { it.updated }.take(RECENT_LIMIT)
+            val all = series(ALL)
+            return withContext(Dispatchers.Default) { all.filter { it.updated > 0 }.sortedByDescending { it.updated }.take(RECENT_LIMIT) }
         }
         val raw = rawSeries(categoryId)
         if (!mergeVersions) return raw
@@ -176,6 +178,8 @@ class Repository(val client: XtreamClient) {
             throw e
         } catch (e: Exception) {
             return emptyMap()
+        } catch (e: OutOfMemoryError) {
+            return emptyMap()
         }
         return withContext(Dispatchers.Default) { all.groupBy { Versions.key(it.name) } }.also { movieIndex = it }
     }
@@ -188,6 +192,8 @@ class Repository(val client: XtreamClient) {
             throw e
         } catch (e: Exception) {
             return emptyMap()
+        } catch (e: OutOfMemoryError) {
+            return emptyMap()
         }
         return withContext(Dispatchers.Default) { all.groupBy { Versions.key(it.name) } }.also { seriesIndex = it }
     }
@@ -199,7 +205,12 @@ class Repository(val client: XtreamClient) {
         return withContext(Dispatchers.Default) {
             val pool = ArrayList<Movie>()
             pool += m.versions.ifEmpty { listOf(m) }
-            pool += index[Versions.key(m.name)].orEmpty()
+            if (index.isNotEmpty()) {
+                pool += index[Versions.key(m.name)].orEmpty()
+            } else {
+                // The full list couldn't be loaded: search what has been.
+                moviesByCat.values.forEach { pool += it }
+            }
             val visible = pool.filter { filter(ContentType.MOVIE, it.categoryId) || it.streamId == m.streamId }
             Versions.movieCopies(m.name, visible, names)
         }
@@ -211,7 +222,11 @@ class Repository(val client: XtreamClient) {
         return withContext(Dispatchers.Default) {
             val pool = ArrayList<Series>()
             pool += s.versions.ifEmpty { listOf(s) }
-            pool += index[Versions.key(s.name)].orEmpty()
+            if (index.isNotEmpty()) {
+                pool += index[Versions.key(s.name)].orEmpty()
+            } else {
+                seriesByCat.values.forEach { pool += it }
+            }
             val visible = pool.filter { filter(ContentType.SERIES, it.categoryId) || it.seriesId == s.seriesId }
             Versions.seriesCopies(s.name, visible, names)
         }
