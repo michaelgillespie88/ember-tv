@@ -1,6 +1,8 @@
 package app.embertv.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -89,27 +91,35 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
         }
     }
 
+    // The same floating frosted panel as subtitles and options, Apple TV style.
     Column(
         Modifier
             .align(Alignment.CenterEnd)
-            .width(if (isTv) 440.dp else 380.dp)
-            .fillMaxHeight()
-            .background(Brush.horizontalGradient(listOf(Color(0xCC0B0B0E), Color(0xF20B0B0E))))
             .windowInsetsPadding(WindowInsets.displayCutout)
-            .padding(top = if (isTv) 28.dp else 14.dp)
+            .fillMaxHeight()
+            .padding(if (isTv) 28.dp else 12.dp)
+            .width(if (isTv) 420.dp else 360.dp)
+            .glassSurface(RoundedCornerShape(26.dp), Color(0xE0141418))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }
+            .padding(top = 20.dp)
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Icon(EmberIcons.Football, contentDescription = null, tint = Ember.Text, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.width(10.dp))
+            Box(
+                Modifier.size(38.dp).glassSurface(CircleShape, Color(0x1AFFFFFF)),
+                contentAlignment = Alignment.Center,
+            ) {
+                androidx.compose.material3.Icon(EmberIcons.Football, contentDescription = null, tint = Ember.Text, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("Live Scores", style = Txt.Headline)
+                Text("Live Scores", style = Txt.Headline.copy(fontWeight = FontWeight.Bold))
                 Text(
-                    if (updated == 0L) "Loading…" else "Updated ${formatClock(updated / 1000)}",
+                    if (updated == 0L) "Getting today's matches…" else "Updated ${formatClock(updated / 1000)}",
                     style = Txt.Caption,
                     color = Ember.Faint,
                 )
             }
-            if (!isTv) IconCircleButton(EmberIcons.Close, "Close scores", size = 40.dp, onClick = onClose)
+            if (!isTv) IconCircleButton(EmberIcons.Close, "Close scores", size = 38.dp, background = Color(0x1AFFFFFF), glass = true, onClick = onClose)
         }
         Spacer(Modifier.height(10.dp))
         LazyRow(
@@ -123,7 +133,7 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
                     focusKey = "scores:league:${l.code}",
                     shape = RoundedCornerShape(17.dp),
                     focusedScale = 1.06f,
-                    color = if (selected) Color(0x33FFFFFF) else Color(0x14FFFFFF),
+                    color = if (selected) Color(0x38FFFFFF) else Color(0x14FFFFFF),
                     focusedColor = Color.White,
                     autoFocus = isTv && selected,
                     onClick = { league = l },
@@ -131,7 +141,7 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
                     Box(Modifier.fillMaxHeight().padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
                         Text(
                             l.name,
-                            style = Txt.Label.copy(fontSize = 13.sp),
+                            style = Txt.Label.copy(fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
                             color = when {
                                 focused -> Color.Black
                                 selected -> Ember.Text
@@ -145,7 +155,7 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
         }
         val list = matches
         when {
-            list == null -> LoadingView(Modifier.weight(1f))
+            list == null -> ScoresSkeleton(Modifier.weight(1f))
             list.isEmpty() -> EmptyView("No ${if (league.code == "all") "" else league.name + " "}matches today.", Modifier.weight(1f))
             else -> {
                 val pinned = list.filter { involves(it, programmeTitle) }
@@ -185,11 +195,9 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
             }
         }
         if (isTv) {
-            Text(
-                "OK on a match: find which channel is showing it · Back to close",
-                style = Txt.Caption,
-                color = Ember.Faint,
-                modifier = Modifier.padding(start = 20.dp, bottom = 16.dp),
+            RemoteHints(
+                listOf(Hint("OK", "Find the channel"), Hint("BACK", "Close")),
+                Modifier.padding(start = 20.dp, top = 6.dp, bottom = 18.dp),
             )
         }
     }
@@ -197,36 +205,60 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
 
 @Composable
 private fun ScoresHeader(text: String) {
-    Text(text.uppercase(), style = Txt.Caption, color = Ember.Faint, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp, start = 4.dp))
+    Text(
+        text.uppercase(),
+        style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.1.sp),
+        color = Ember.Dim,
+        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp, start = 4.dp),
+    )
+}
+
+/** Faint match-shaped placeholders while today's scores load. */
+@Composable
+private fun ScoresSkeleton(modifier: Modifier) {
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        repeat(6) {
+            Box(Modifier.fillMaxWidth().height(66.dp).clip(RoundedCornerShape(16.dp)).background(Color(0x12FFFFFF)))
+        }
+    }
 }
 
 @Composable
 private fun MatchRow(m: Match, highlight: Boolean, onClick: () -> Unit) {
     val live = m.state == MatchState.LIVE
     FocusBox(
-        modifier = Modifier.fillMaxWidth().height(64.dp),
+        modifier = Modifier.fillMaxWidth().height(66.dp),
         focusKey = "scores:match:${m.id}",
-        shape = RoundedCornerShape(12.dp),
-        focusedScale = 1.02f,
-        color = if (highlight) Ember.Text.copy(alpha = 0.16f) else Color(0x10FFFFFF),
-        focusedColor = Color(0x33FFFFFF),
+        shape = RoundedCornerShape(16.dp),
+        focusedScale = 1.03f,
+        color = if (highlight) Color(0x26FFFFFF) else Color(0x12FFFFFF),
+        // Apple style: the selected match turns white, like every other list.
+        focusedColor = Color.White,
         onClick = onClick,
-    ) {
-        Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                TeamLine(m.home.shortName, m.home.logo, m.home.score, m.state, winner = (m.home.score.toIntOrNull() ?: 0) > (m.away.score.toIntOrNull() ?: 0))
-                TeamLine(m.away.shortName, m.away.logo, m.away.score, m.state, winner = (m.away.score.toIntOrNull() ?: 0) > (m.home.score.toIntOrNull() ?: 0))
+    ) { focused ->
+        Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                TeamLine(m.home.shortName, m.home.logo, m.home.score, m.state, winner = (m.home.score.toIntOrNull() ?: 0) > (m.away.score.toIntOrNull() ?: 0), dark = focused)
+                TeamLine(m.away.shortName, m.away.logo, m.away.score, m.state, winner = (m.away.score.toIntOrNull() ?: 0) > (m.home.score.toIntOrNull() ?: 0), dark = focused)
             }
-            Spacer(Modifier.width(10.dp))
-            Box(Modifier.width(54.dp), contentAlignment = Alignment.Center) {
+            Spacer(Modifier.width(12.dp))
+            Box(Modifier.width(58.dp), contentAlignment = Alignment.Center) {
                 if (live) {
+                    // A small red LIVE tag with the minute underneath.
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(Modifier.size(6.dp).clip(CircleShape).background(Ember.Live))
-                        Spacer(Modifier.height(3.dp))
-                        Text(m.status, style = Txt.Caption, color = Ember.Live, maxLines = 1, textAlign = TextAlign.Center)
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(Ember.Live)
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text("LIVE", style = Txt.Caption.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp), color = Color.White)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(m.status, style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = if (focused) Color.Black else Ember.Text, maxLines = 1, textAlign = TextAlign.Center)
                     }
                 } else {
-                    Text(m.status, style = Txt.Caption, color = Ember.Faint, maxLines = 1, textAlign = TextAlign.Center)
+                    Text(m.status, style = Txt.Caption, color = if (focused) Color(0xFF55555C) else Ember.Faint, maxLines = 1, textAlign = TextAlign.Center)
                 }
             }
         }
@@ -234,7 +266,7 @@ private fun MatchRow(m: Match, highlight: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun TeamLine(name: String, logo: String, score: String, state: MatchState, winner: Boolean) {
+private fun TeamLine(name: String, logo: String, score: String, state: MatchState, winner: Boolean, dark: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
             NetImage(logo, Modifier.fillMaxSize(), ContentScale.Fit)
@@ -243,12 +275,13 @@ private fun TeamLine(name: String, logo: String, score: String, state: MatchStat
         Text(
             name,
             style = Txt.Label.copy(fontSize = 14.sp, fontWeight = if (winner && state == MatchState.FINISHED) FontWeight.SemiBold else FontWeight.Medium),
+            color = if (dark) Color.Black else Ember.Text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         if (state != MatchState.UPCOMING) {
-            Text(score, style = Txt.Headline.copy(fontSize = 16.sp), color = Ember.Text)
+            Text(score, style = Txt.Headline.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold), color = if (dark) Color.Black else Ember.Text)
         }
     }
 }

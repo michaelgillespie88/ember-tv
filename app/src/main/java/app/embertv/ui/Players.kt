@@ -1029,11 +1029,18 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             )
         }
 
-        if (scoresOpen) {
-            if (!isTv) Box(Modifier.fillMaxSize().clickable { scoresOpen = false })
-            val now = LocalNow.current
-            val title = rememberProgrammes(vm.repo!!, channel.streamId)?.firstOrNull { it.isLive(now) }?.title
-            ScoresPanel(programmeTitle = listOfNotNull(title, channel.name).joinToString(" "), onClose = { scoresOpen = false })
+        if (scoresOpen && !isTv) Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { scoresOpen = false })
+        AnimatedVisibility(
+            visible = scoresOpen,
+            enter = fadeIn() + androidx.compose.animation.slideInHorizontally { it / 3 },
+            exit = fadeOut() + androidx.compose.animation.slideOutHorizontally { it / 3 },
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+        ) {
+            Box(Modifier.fillMaxHeight()) {
+                val now = LocalNow.current
+                val title = rememberProgrammes(vm.repo!!, channel.streamId)?.firstOrNull { it.isLive(now) }?.title
+                ScoresPanel(programmeTitle = listOfNotNull(title, channel.name).joinToString(" "), onClose = { scoresOpen = false })
+            }
         }
 
         AnimatedVisibility(
@@ -1879,9 +1886,16 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
             }
         }
 
-        if (scoresOpen) {
-            if (!isTv) Box(Modifier.fillMaxSize().clickable { scoresOpen = false })
-            ScoresPanel(programmeTitle = null, onClose = { scoresOpen = false })
+        if (scoresOpen && !isTv) Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { scoresOpen = false })
+        AnimatedVisibility(
+            visible = scoresOpen,
+            enter = fadeIn() + androidx.compose.animation.slideInHorizontally { it / 3 },
+            exit = fadeOut() + androidx.compose.animation.slideOutHorizontally { it / 3 },
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+        ) {
+            Box(Modifier.fillMaxHeight()) {
+                ScoresPanel(programmeTitle = null, onClose = { scoresOpen = false })
+            }
         }
 
         val sleepLeft = vm.sleepMinutesLeft(LocalNow.current * 1000)
