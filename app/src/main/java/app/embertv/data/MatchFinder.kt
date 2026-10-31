@@ -245,7 +245,12 @@ object MatchFinder {
             val groups = (broadcasters + inSportCats)
                 .distinctBy { it.streamId }
                 .groupBy { it.epgId.ifEmpty { baseName(it.name) } }
-            Triple(found, groups, groups.values.map { copies -> copies.minBy { qualityRank(it.name) } }.take(90))
+            // Your own country's channels are checked first, so they're never left out by the limit.
+            val picks = groups.values
+                .map { copies -> copies.minWith(compareBy({ regionRank(it, catNames[it.categoryId]) }, { qualityRank(it.name) })) }
+                .sortedBy { regionRank(it, catNames[it.categoryId]) }
+                .take(150)
+            Triple(found, groups, picks)
         }
         for ((c, score) in nameHits) add(c, null, score)
         onProgress(0, 0, sorted())
