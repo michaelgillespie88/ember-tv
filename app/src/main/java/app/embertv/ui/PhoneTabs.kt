@@ -68,7 +68,7 @@ import app.embertv.data.toMovie
 import app.embertv.data.toSeries
 
 private fun withVirtualCategories(cats: List<Category>, allLabel: String, recent: Boolean): List<Category> =
-    listOf(Category(FAVOURITES, "★ Favourites")) +
+    listOf(Category(FAVOURITES, "Favourites")) +
         (if (recent) listOf(Category(RECENT, "Recently added")) else emptyList()) +
         listOf(Category(ALL, allLabel)) + cats
 

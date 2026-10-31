@@ -52,7 +52,7 @@ fun LiveSection(vm: AppViewModel) {
         is LoadResult.Err -> ErrorView(c.message) { vm.reload() }
         is LoadResult.Ok -> {
             val categories = remember(c.value) {
-                listOf(Category(FAVOURITES, "★  Favourites"), Category(ALL, "All channels")) + c.value
+                listOf(Category(FAVOURITES, "Favourites"), Category(ALL, "All channels")) + c.value
             }
             val selectedId = section.categoryId ?: c.value.firstOrNull()?.id ?: ALL
             val select = rememberCategorySelector(section)

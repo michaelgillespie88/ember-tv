@@ -226,6 +226,16 @@ object EmberIcons {
         moveTo(18.5f, 6f); lineTo(21.5f, 6f); lineTo(21.5f, 18f); lineTo(18.5f, 18f); close()
     }
 
+    /** Three sliders, for picture quality. */
+    val Sliders = outline("sliders") {
+        moveTo(4f, 7f); lineTo(20f, 7f)
+        moveTo(4f, 12f); lineTo(20f, 12f)
+        moveTo(4f, 17f); lineTo(20f, 17f)
+        moveTo(9f, 5f); lineTo(9f, 9f)
+        moveTo(15f, 10f); lineTo(15f, 14f)
+        moveTo(7f, 15f); lineTo(7f, 19f)
+    }
+
     /** A globe, for the spoken language. */
     val Language = outline("language") {
         circle(12f, 12f, 9f)

@@ -851,7 +851,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
             ErrorCard(
                 err,
                 "Swipe up or down to try another channel, or tap ⋯ to open it in another player like VLC.",
-                keys = listOf(Hint("▲▼", "Another channel"), Hint("◀", "Options, like VLC")),
+                keys = listOf(Hint("▲▼", "Another channel"), Hint("OK", "Then ••• for VLC")),
             )
         } else if (buffering) {
             Spinner()
@@ -1960,8 +1960,9 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                     onSubtitles = { panel = "subs" },
                     onLanguage = { panel = "audio" },
                     onMore = { panel = "more" },
-                    qualityBadge = qualityChoices.firstOrNull { it.versionId == activeVersion }?.quality?.badge?.ifEmpty { "SD" }
-                        ?: if (qualityChoices.isNotEmpty()) "HD" else null,
+                    // The button shows what's playing (4K, FHD…); if that can't be told, just shows the icon.
+                    hasQualities = qualityChoices.size > 1,
+                    qualityBadge = qualityChoices.firstOrNull { it.versionId == activeVersion }?.quality?.badge?.ifEmpty { "SD" },
                     onQuality = { panel = "quality" },
                     hasSubtitles = subtitleTracks > 0,
                     hasLanguages = audioTracks > 1,
@@ -2150,6 +2151,7 @@ private fun VodOverlay(
     onSubtitles: () -> Unit,
     onLanguage: () -> Unit,
     onMore: () -> Unit,
+    hasQualities: Boolean,
     qualityBadge: String?,
     onQuality: () -> Unit,
     hasSubtitles: Boolean,
@@ -2208,7 +2210,7 @@ private fun VodOverlay(
                     // round buttons, as on Apple TV, so everything fits.
                     if (hasSubtitles) PlayerButton(EmberIcons.Subtitles, null, "vod:ctl:subs", onClick = onSubtitles)
                     if (hasLanguages) PlayerButton(EmberIcons.Language, null, "vod:ctl:audio", onClick = onLanguage)
-                    if (qualityBadge != null) PlayerButton(EmberIcons.Zoom, null, "vod:ctl:quality", text = qualityBadge, onClick = onQuality)
+                    if (hasQualities) PlayerButton(EmberIcons.Sliders, null, "vod:ctl:quality", text = qualityBadge, onClick = onQuality)
                     PlayerButton(EmberIcons.Football, "Scores", "vod:ctl:scores", onClick = onScores)
                     // Picture zoom, sleep timer and the rest.
                     PlayerButton(EmberIcons.More, null, "vod:ctl:more", onClick = onMore)
@@ -2529,11 +2531,9 @@ private fun TrackRow(label: String, selected: Boolean, autoFocus: Boolean, onCli
         onClick = onClick,
     ) { focused ->
         Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (selected) "✓" else "",
-                color = if (focused) Color.Black else Ember.Text,
-                modifier = Modifier.width(24.dp),
-            )
+            Box(Modifier.width(24.dp)) {
+                if (selected) Icon(EmberIcons.Check, contentDescription = "Chosen", tint = if (focused) Color.Black else Ember.Text, modifier = Modifier.size(16.dp))
+            }
             Text(
                 label,
                 style = Txt.Label,
