@@ -180,7 +180,7 @@ fun MovieDetailScreen(vm: AppViewModel, movie: Movie) {
                 }
                 Spacer(Modifier.height(18.dp))
                 when {
-                    load is LoadResult.Loading -> Text("Loading details…", style = Txt.Body, color = Ember.Faint)
+                    load is LoadResult.Loading -> SkeletonLines(Modifier.width(520.dp))
                     info != null && info.plot.isNotBlank() -> Text(
                         info.plot,
                         style = Txt.Body,

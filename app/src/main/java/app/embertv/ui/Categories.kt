@@ -158,7 +158,7 @@ fun CategoryManager(vm: AppViewModel, profile: Profile, onDone: () -> Unit) {
                 Spacer(Modifier.height(10.dp))
 
                 when (val r = load) {
-                    is LoadResult.Loading -> LoadingView(Modifier.weight(1f))
+                    is LoadResult.Loading -> SkeletonRows(Modifier.weight(1f), underHeader = false)
                     is LoadResult.Err -> ErrorView(r.message, Modifier.weight(1f)) { vm.reload() }
                     is LoadResult.Ok -> if (cats.isEmpty()) {
                         EmptyView("Your provider has no categories here.", Modifier.weight(1f))

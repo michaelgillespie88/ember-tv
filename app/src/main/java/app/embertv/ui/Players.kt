@@ -1314,11 +1314,11 @@ private fun LiveInfoBar(
                         Spacer(Modifier.height(8.dp))
                         ProgressBar(current.progress(now), Modifier.width(if (isTv) 420.dp else 280.dp))
                     } else {
-                        Text(
-                            if (programmes == null) "Loading guide…" else "No guide information",
-                            style = Txt.Label,
-                            color = Ember.Dim,
-                        )
+                        if (programmes == null) {
+                            SkeletonLines(Modifier.width(if (isTv) 420.dp else 260.dp), widths = listOf(0.8f, 0.55f))
+                        } else {
+                            Text("No guide information", style = Txt.Label, color = Ember.Dim)
+                        }
                     }
                     if (next != null) {
                         Spacer(Modifier.height(8.dp))

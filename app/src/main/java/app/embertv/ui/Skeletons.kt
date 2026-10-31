@@ -90,10 +90,10 @@ fun SkeletonPosters(modifier: Modifier = Modifier, minSize: Dp = 104.dp, gap: Dp
 
 /** A list of channel rows: a logo square and two lines of text. */
 @Composable
-fun SkeletonRows(modifier: Modifier = Modifier, rows: Int = 10) {
+fun SkeletonRows(modifier: Modifier = Modifier, rows: Int = 10, underHeader: Boolean = true) {
     val pulse = rememberPulse()
     Column(
-        modifier.fillMaxSize().phoneInsets().graphicsLayer { alpha = pulse }.padding(top = 4.dp),
+        modifier.fillMaxSize().then(if (underHeader) Modifier.phoneInsets() else Modifier).graphicsLayer { alpha = pulse }.padding(top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         repeat(rows) { i ->
@@ -162,4 +162,13 @@ fun SkeletonPage(posters: Boolean, modifier: Modifier = Modifier) {
 @Composable
 fun SkeletonPhonePage(posters: Boolean, modifier: Modifier = Modifier) {
     if (posters) SkeletonPosters(modifier) else SkeletonRows(modifier)
+}
+
+/** A few faint, pulsing lines where text (a description, what's on) is still loading. */
+@Composable
+fun SkeletonLines(modifier: Modifier = Modifier, widths: List<Float> = listOf(0.9f, 0.75f, 0.5f), lineHeight: Dp = 12.dp) {
+    val pulse = rememberPulse()
+    Column(modifier.graphicsLayer { alpha = pulse }, verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        for (w in widths) Block(Modifier.fillMaxWidth(w).height(lineHeight), radius = lineHeight / 2)
+    }
 }

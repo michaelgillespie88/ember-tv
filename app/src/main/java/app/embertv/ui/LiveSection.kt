@@ -230,7 +230,7 @@ private fun PreviewDetails(vm: AppViewModel, repo: Repository, channel: Channel)
     Text(channel.name, style = Txt.Headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
     Spacer(Modifier.height(12.dp))
     when {
-        programmes == null -> Text("Loading guide…", style = Txt.Body, color = Ember.Faint)
+        programmes == null -> SkeletonLines(Modifier.fillMaxWidth(), widths = listOf(0.7f, 0.9f, 0.6f, 0.8f))
         programmes.none { it.end > now } -> Text("No guide information for this channel.", style = Txt.Body, color = Ember.Faint)
         else -> {
             val upcoming = programmes.filter { it.end > now }.take(3)

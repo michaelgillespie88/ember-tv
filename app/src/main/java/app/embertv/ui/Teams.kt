@@ -107,7 +107,7 @@ fun TeamPicker(vm: AppViewModel, onDone: () -> Unit) {
                 }
                 Spacer(Modifier.height(12.dp))
                 when (val r = load) {
-                    is LoadResult.Loading -> LoadingView(Modifier.weight(1f))
+                    is LoadResult.Loading -> SkeletonRows(Modifier.weight(1f), underHeader = false)
                     is LoadResult.Err -> ErrorView(r.message, Modifier.weight(1f)) { league = league.copy() }
                     is LoadResult.Ok -> if (r.value.isEmpty()) {
                         EmptyView("Couldn't load the clubs. Check your connection and try again.", Modifier.weight(1f))

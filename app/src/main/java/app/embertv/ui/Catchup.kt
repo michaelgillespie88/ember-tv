@@ -73,7 +73,7 @@ fun CatchupScreen(vm: AppViewModel, channel: Channel) {
             Spacer(Modifier.height(if (isTv) 20.dp else 14.dp))
 
             when (val r = load) {
-                is LoadResult.Loading -> LoadingView(Modifier.weight(1f), text = "Loading recordings…")
+                is LoadResult.Loading -> SkeletonRows(Modifier.weight(1f), underHeader = false)
                 is LoadResult.Err -> ErrorView(r.message, Modifier.weight(1f)) { vm.reload() }
                 is LoadResult.Ok -> {
                     val available = r.value.filter { catchupAvailable(resolved, it, now) }.sortedByDescending { it.start }

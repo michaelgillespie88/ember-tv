@@ -148,7 +148,7 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
                 ) { vm.toggleFavourite(vm.favouriteOf(movie)) }
                 Spacer(Modifier.height(20.dp))
                 when {
-                    load is LoadResult.Loading -> Text("Loading details…", style = Txt.Body, color = Ember.Faint)
+                    load is LoadResult.Loading -> SkeletonLines(Modifier.fillMaxWidth())
                     info != null && info.plot.isNotBlank() -> Text(info.plot, style = Txt.Body, color = Ember.Text.copy(alpha = 0.9f))
                 }
                 if (info != null && info.director.isNotBlank()) {
@@ -235,7 +235,7 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
                 Spacer(Modifier.height(18.dp))
                 val plot = info?.plot?.takeIf { it.isNotBlank() } ?: series.plot
                 when {
-                    load is LoadResult.Loading -> Text("Loading episodes…", style = Txt.Body, color = Ember.Faint)
+                    load is LoadResult.Loading -> SkeletonRows(Modifier.height(260.dp), rows = 4, underHeader = false)
                     load is LoadResult.Err -> Text((load as LoadResult.Err).message, style = Txt.Body, color = Color(0xFFFF8A80))
                     plot.isNotBlank() -> Text(plot, style = Txt.Body, color = Ember.Text.copy(alpha = 0.9f), maxLines = 6, overflow = TextOverflow.Ellipsis)
                 }

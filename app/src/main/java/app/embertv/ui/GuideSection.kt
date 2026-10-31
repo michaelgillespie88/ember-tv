@@ -403,9 +403,9 @@ internal fun GuideInfo(focus: GuideFocus?, now: Long) {
 @Composable
 fun LiveTag() {
     Box(
-        Modifier.clip(RoundedCornerShape(6.dp)).background(Ember.Live).padding(horizontal = 8.dp, vertical = 3.dp)
+        Modifier.clip(RoundedCornerShape(6.dp)).background(Ember.Live).padding(horizontal = 7.dp, vertical = 2.dp)
     ) {
-        Text("LIVE", style = Txt.Caption, color = Color.White)
+        Text("LIVE", style = Txt.Caption.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp), color = Color.White)
     }
 }
 
