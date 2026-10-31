@@ -855,7 +855,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         if (err != null) {
             ErrorCard(
                 err,
-                if (isTv) "Press ▲ or ▼ to try another channel, or ◀ for options like opening it in VLC." else "Swipe up or down to try another channel, or tap ⋯ to open it in another player like VLC.",
+                if (isTv) "Press up or down to try another channel, or left for options like opening it in VLC." else "Swipe up or down to try another channel, or tap ⋯ to open it in another player like VLC.",
             )
         } else if (buffering) {
             Spinner()
@@ -1119,10 +1119,13 @@ private fun TimeshiftPanel(
                 color = Ember.Faint,
             )
         } else if (isTv) {
-            Text(
-                "OK  Play     ◀  Back 10s     ▶  Forward 30s     ◀◀ ▶▶  Skip     Up / Down  Change channel",
-                style = Txt.Caption,
-                color = Ember.Faint,
+            RemoteHints(
+                listOf(
+                    Hint("OK", "Play"),
+                    Hint("◀", "Back 10s"),
+                    Hint("▶", "Forward 30s"),
+                    Hint("▲▼", "Change channel"),
+                )
             )
         } else {
             // The big play and skip buttons are in the middle of the screen; just the way back to live here.
@@ -1187,7 +1190,13 @@ private fun BehindLivePill(behindMs: Long, isTv: Boolean, modifier: Modifier, on
     ) {
         Text("−${clockLength(behindMs)}", style = Txt.Label.copy(fontWeight = FontWeight.SemiBold), color = Ember.Text)
         Spacer(Modifier.width(8.dp))
-        Text(if (isTv) "behind live  ·  ▶▶ to catch up" else "behind live  ·  tap for live", style = Txt.Caption, color = Ember.Dim)
+        if (isTv) {
+            Text("behind live", style = Txt.Caption, color = Ember.Dim)
+            Spacer(Modifier.width(10.dp))
+            RemoteHints(listOf(Hint("▶▶", "Catch up")))
+        } else {
+            Text("behind live  ·  tap for live", style = Txt.Caption, color = Ember.Dim)
+        }
     }
 }
 
@@ -1212,11 +1221,20 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, stats: VideoStats?, 
             )
     ) {
         Column {
-            Text(
-                if (isTv) "OK Controls    ☰ Guide    ▲▼ Channels    ◀ Channel list    ▶ Live scores    Hold OK Favourite" else "Swipe up or down to change channel",
-                style = Txt.Caption,
-                color = Ember.Faint,
-            )
+            if (isTv) {
+                RemoteHints(
+                    listOf(
+                        Hint("OK", "Controls"),
+                        Hint("☰", "Guide"),
+                        Hint("▲▼", "Channels"),
+                        Hint("◀", "Channel list"),
+                        Hint("▶", "Live scores"),
+                        Hint("HOLD OK", "Favourite"),
+                    )
+                )
+            } else {
+                Text("Swipe up or down to change channel", style = Txt.Caption, color = Ember.Faint)
+            }
             Spacer(Modifier.height(if (isTv) 14.dp else 10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ChannelLogo(
@@ -1234,7 +1252,7 @@ private fun LiveInfoBar(vm: AppViewModel, channel: Channel, stats: VideoStats?, 
                         Text(channel.name, style = Txt.Title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         if (isFavourite) {
                             Spacer(Modifier.width(10.dp))
-                            Text("★", color = Ember.Text, fontSize = 20.sp)
+                            StarMark(20.dp)
                         }
                         val activity = LocalContext.current.findActivity()
                         val tvRate = if (isTv && vm.matchFrameRate && activity != null) {
@@ -1789,7 +1807,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
 
         val err = error
         if (err != null) {
-            ErrorCard(err, if (isTv) "Press ▼ for options like opening it in VLC, or Back to leave." else "Tap the screen, then the subtitles button, to open it in another player like VLC.")
+            ErrorCard(err, if (isTv) "Press down for options like opening it in VLC, or Back to leave." else "Tap the screen, then the subtitles button, to open it in another player like VLC.")
         } else if (buffering) {
             Spinner()
         }
@@ -1801,10 +1819,10 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                     .align(Alignment.Center)
                     .size(96.dp)
                     .clip(RoundedCornerShape(48.dp))
-                    .background(Color(0x99000000)),
+                    .glassSurface(RoundedCornerShape(48.dp), Color(0x59000000)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("❚❚", fontSize = 30.sp, color = Color.White)
+                Icon(EmberIcons.Pause, contentDescription = "Paused", tint = Color.White, modifier = Modifier.size(34.dp))
             }
         }
 
@@ -2009,7 +2027,10 @@ private fun VodOverlay(
                 Text(formatMs(position), style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Text)
                 Spacer(Modifier.weight(1f))
                 if (!controlsOpen) {
-                    Text(if (playing) "Press OK to pause" else "Press OK to play  ·  ▼ for more", style = Txt.Caption, color = Ember.Faint)
+                    RemoteHints(
+                        if (playing) listOf(Hint("OK", "Pause"), Hint("◀▶", "Skip"))
+                        else listOf(Hint("OK", "Play"), Hint("▼", "More"))
+                    )
                 }
                 Spacer(Modifier.weight(1f))
                 Text(if (duration > 0) "−" + formatMs(duration - position) else "", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Dim)

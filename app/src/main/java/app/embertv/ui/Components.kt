@@ -430,7 +430,7 @@ fun FavBadge(modifier: Modifier = Modifier) {
         modifier.size(26.dp).clip(CircleShape).background(Color(0xB3000000)),
         contentAlignment = Alignment.Center,
     ) {
-        Text("★", color = Ember.Text, fontSize = 14.sp)
+        StarMark(13.dp)
     }
 }
 
@@ -651,4 +651,68 @@ internal fun glyphIcon(glyph: String): androidx.compose.ui.graphics.vector.Image
     "≡" -> EmberIcons.ChannelList
     "•••" -> EmberIcons.More
     else -> null
+}
+
+// ---------- Remote hints, Apple style ----------
+
+/** One remote button and what it does, for [RemoteHints]. Keys: OK, Hold OK, ◀ ▶ ▲ ▼ ▲▼ ◀▶ ◀◀ ▶▶ ☰. */
+class Hint(val key: String, val label: String)
+
+/**
+ * A quiet row of remote hints: each button drawn as a small frosted key with a proper icon (or
+ * "OK"), then what it does in grey. Replaces lines of text symbols.
+ */
+@Composable
+fun RemoteHints(hints: List<Hint>, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+        for (h in hints) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                KeyCap(h.key)
+                Spacer(Modifier.width(7.dp))
+                Text(h.label, style = Txt.Caption, color = Ember.Faint, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+private fun KeyCap(key: String) {
+    val icons: List<androidx.compose.ui.graphics.vector.ImageVector>? = when (key) {
+        "◀" -> listOf(EmberIcons.ChevronLeft)
+        "▶" -> listOf(EmberIcons.ChevronRight)
+        "▲" -> listOf(EmberIcons.ChevronUp)
+        "▼" -> listOf(EmberIcons.ChevronDown)
+        "▲▼" -> listOf(EmberIcons.ChevronUp, EmberIcons.ChevronDown)
+        "◀▶" -> listOf(EmberIcons.ChevronLeft, EmberIcons.ChevronRight)
+        "◀◀" -> listOf(EmberIcons.Rewind)
+        "▶▶" -> listOf(EmberIcons.FastForward)
+        "◀◀▶▶" -> listOf(EmberIcons.Rewind, EmberIcons.FastForward)
+        "☰" -> listOf(EmberIcons.Guide)
+        else -> null
+    }
+    Row(
+        Modifier
+            .height(22.dp)
+            .glassSurface(RoundedCornerShape(7.dp), Color(0x1FFFFFFF))
+            .padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icons != null) {
+            icons.forEach { Icon(it, contentDescription = null, tint = Ember.Dim, modifier = Modifier.size(13.dp)) }
+        } else {
+            Text(key, style = Txt.Caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp), color = Ember.Dim)
+        }
+    }
+}
+
+/** The tick for a chosen option in a list: an icon, black on the white highlight. */
+@Composable
+fun CheckMark(dark: Boolean) {
+    Icon(EmberIcons.Check, contentDescription = "Chosen", tint = if (dark) Color.Black else Ember.Text, modifier = Modifier.size(18.dp))
+}
+
+/** A small filled star, for favourites. */
+@Composable
+fun StarMark(size: androidx.compose.ui.unit.Dp = 14.dp, tint: Color = Ember.Text) {
+    Icon(EmberIcons.StarFilled, contentDescription = "Favourite", tint = tint, modifier = Modifier.size(size))
 }

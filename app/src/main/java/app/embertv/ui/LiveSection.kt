@@ -193,7 +193,7 @@ fun ChannelRow(
             }
             if (isFavourite) {
                 Spacer(Modifier.width(8.dp))
-                Text("★", color = Ember.Text, fontSize = 15.sp)
+                StarMark(15.dp)
             }
         }
     }

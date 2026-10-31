@@ -829,13 +829,7 @@ private fun LeaguePicker(vm: AppViewModel, onDone: () -> Unit) {
                     SheetOption(
                         l.name,
                         focusKey = "leagues:${l.code}",
-                        trailing = { dark ->
-                            Text(
-                                if (on) "✓" else "",
-                                style = Txt.Label.copy(fontWeight = FontWeight.Bold),
-                                color = if (dark) Color.Black else Ember.Text,
-                            )
-                        },
+                        trailing = { dark -> if (on) CheckMark(dark) },
                     ) { vm.setSportLeague(l.code, !on) }
                 }
                 item(key = "others") {

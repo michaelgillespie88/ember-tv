@@ -304,7 +304,7 @@ private fun SlotPicker(
                         focusKey = "multi:pick:${c.streamId}",
                         autoFocus = isTv && i == 0,
                         leading = { ChannelLogo(c.icon, c.name, Modifier.size(width = 48.dp, height = 32.dp)) },
-                        trailing = if (c.streamId == current?.streamId) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Text) } else null,
+                        trailing = if (c.streamId == current?.streamId) { dark -> CheckMark(dark) } else null,
                     ) { onPick(c) }
                 }
             }

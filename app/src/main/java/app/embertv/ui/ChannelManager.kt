@@ -100,7 +100,7 @@ fun ChannelManager(vm: AppViewModel, onDone: () -> Unit) {
                             } else if (isTv) {
                                 "Select a channel to pick it up, move it with up and down, then select again to put it down. Hold to remove it."
                             } else {
-                                "Use the arrows to move channels. This is the order of ★ Favourites in Live TV, the guide and channel up/down."
+                                "Use the arrows to move channels. This is the order of Favourites in Live TV, the guide and channel up/down."
                             },
                             style = Txt.Caption,
                             color = Ember.Dim,
@@ -203,7 +203,11 @@ private fun FavouriteOrder(vm: AppViewModel) {
                     Text(f.name, style = Txt.Label, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     if (isTv) {
                         if (isMoving) {
-                            Text("▲▼  Moving", style = Txt.Caption.copy(fontWeight = FontWeight.Bold), color = if (focused) Color.Black else Ember.Text)
+                            val tint = if (focused) Color.Black else Ember.Text
+                            androidx.compose.material3.Icon(EmberIcons.ChevronUp, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
+                            androidx.compose.material3.Icon(EmberIcons.ChevronDown, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Moving", style = Txt.Caption.copy(fontWeight = FontWeight.Bold), color = tint)
                         }
                     } else {
                         // Phones: arrows to move, and a star to remove.

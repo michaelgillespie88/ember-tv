@@ -166,7 +166,7 @@ fun MovieDetailScreen(vm: AppViewModel, movie: Movie) {
                 Text(movie.name, style = Txt.Hero, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(12.dp))
                 val meta = listOfNotNull(
-                    if (vm.movieWatched(movie)) "✓ Watched" else null,
+                    if (vm.movieWatched(movie)) "Watched" else null,
                     info?.year?.takeIf { it.isNotBlank() },
                     info?.duration?.takeIf { it.isNotBlank() }?.let { prettyDuration(it) },
                     ratingLabel(info?.rating ?: movie.rating),
@@ -243,7 +243,7 @@ fun MovieDetailScreen(vm: AppViewModel, movie: Movie) {
                 }
                 if (extras?.cast?.isNotEmpty() == true || more.isNotEmpty()) {
                     Spacer(Modifier.height(18.dp))
-                    Text("▼  Cast and more like this", style = Txt.Caption, color = Ember.Faint)
+                    RemoteHints(listOf(Hint("▼", "Cast and more like this")))
                 }
             }
             Spacer(Modifier.width(48.dp))

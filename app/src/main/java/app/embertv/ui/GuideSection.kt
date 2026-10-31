@@ -493,7 +493,8 @@ private fun HeaderChip(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
             )
-            Text(" ▾", style = Txt.Caption.copy(fontSize = 10.sp), color = if (focused) Color.Black else Ember.Dim)
+            Spacer(Modifier.width(4.dp))
+            androidx.compose.material3.Icon(EmberIcons.ChevronDown, contentDescription = null, tint = if (focused) Color.Black else Ember.Dim, modifier = Modifier.size(12.dp))
         }
     }
 }
@@ -710,7 +711,7 @@ private fun GroupPicker(categories: List<Category>, selectedId: String, onDismis
                         c.name.removePrefix("★  "),
                         focusKey = "guide:pick:${c.id}",
                         autoFocus = c.id == selectedId,
-                        trailing = if (c.id == selectedId) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Text) } else null,
+                        trailing = if (c.id == selectedId) { dark -> CheckMark(dark) } else null,
                     ) { onPick(c.id) }
                 }
             }
@@ -752,7 +753,7 @@ internal fun DayPicker(now: Long, showing: Long, onDismiss: () -> Unit, onPick: 
                         label,
                         focusKey = "guide:day:$d",
                         autoFocus = d == current,
-                        trailing = if (d == current) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Text) } else null,
+                        trailing = if (d == current) { dark -> CheckMark(dark) } else null,
                     ) { onPick(d) }
                 }
             }

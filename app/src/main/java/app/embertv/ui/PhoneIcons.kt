@@ -213,6 +213,9 @@ object EmberIcons {
         moveTo(3.5f, 6f); lineTo(12f, 12f); lineTo(3.5f, 18f); close()
     }
 
+    /** A plain left chevron. */
+    val ChevronLeft = outline("chevron-left") { moveTo(15f, 5f); lineTo(8f, 12f); lineTo(15f, 19f) }
+
     /** A plain right chevron, for "next". */
     val ChevronRight = outline("chevron-right") { moveTo(9f, 5f); lineTo(16f, 12f); lineTo(9f, 19f) }
 

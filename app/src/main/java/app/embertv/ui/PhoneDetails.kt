@@ -110,7 +110,7 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
                 Spacer(Modifier.height(6.dp))
                 MetaLine(
                     listOf(
-                        if (vm.movieWatched(movie)) "✓ Watched" else null,
+                        if (vm.movieWatched(movie)) "Watched" else null,
                         info?.year,
                         info?.duration?.takeIf { it.isNotBlank() }?.let { prettyDuration(it) },
                         ratingLabel(info?.rating ?: movie.rating),

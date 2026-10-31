@@ -90,7 +90,7 @@ fun PlayerPickerDialog(
                                 modifier = Modifier.size(20.dp),
                             )
                         },
-                        trailing = if (selected) { dark -> Text("✓", style = Txt.Label, color = if (dark) Color.Black else Ember.Text) } else null,
+                        trailing = if (selected) { dark -> CheckMark(dark) } else null,
                     ) { onPick(p.packageName) }
                 }
                 item(key = "close") {

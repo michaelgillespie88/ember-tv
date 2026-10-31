@@ -381,7 +381,8 @@ private fun PhoneTimeHeader(dayStart: Long, now: Long, day: Int, scroll: ScrollS
                     color = Ember.Text,
                     maxLines = 1,
                 )
-                Text(" ▾", style = Txt.Caption.copy(fontSize = 9.sp), color = Ember.Dim)
+                Spacer(Modifier.width(3.dp))
+                androidx.compose.material3.Icon(EmberIcons.ChevronDown, contentDescription = null, tint = Ember.Dim, modifier = Modifier.size(11.dp))
             }
         }
         Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scroll)) {

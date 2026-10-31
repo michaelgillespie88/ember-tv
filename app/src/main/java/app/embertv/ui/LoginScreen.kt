@@ -100,7 +100,7 @@ fun LoginScreen(vm: AppViewModel) {
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "Use ▲ ▼ to pick a box and press OK to type in it.",
+                    "Press up or down to pick a box, then OK to type in it.",
                     style = Txt.Body,
                     color = Ember.Faint,
                 )

@@ -50,8 +50,8 @@ fun badgeText(qualities: List<Quality>): String? = qualities.takeIf { it.isNotEm
 fun PosterBadge(text: String, modifier: Modifier = Modifier) {
     Box(
         modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xCC0B0B0E))
+            // Apple style: a small frosted tag.
+            .glassSurface(RoundedCornerShape(6.dp), Color(0xA6101014))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
         Text(text, style = Txt.Caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold), color = Color.White, maxLines = 1)
@@ -162,8 +162,7 @@ fun WatchedTick(modifier: Modifier = Modifier) {
     Box(
         modifier
             .size(22.dp)
-            .clip(androidx.compose.foundation.shape.CircleShape)
-            .background(Color(0xCC0B0B0E)),
+            .glassSurface(androidx.compose.foundation.shape.CircleShape, Color(0xA6101014)),
         contentAlignment = Alignment.Center,
     ) {
         androidx.compose.material3.Icon(EmberIcons.Check, contentDescription = "Watched", tint = Color.White, modifier = Modifier.size(14.dp))

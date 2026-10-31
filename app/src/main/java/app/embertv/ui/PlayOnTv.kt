@@ -74,7 +74,7 @@ fun TvPairingDialog(vm: AppViewModel) {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 for (digit in code) {
                     Box(
-                        Modifier.size(width = 72.dp, height = 88.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF2A2A31)),
+                        Modifier.size(width = 72.dp, height = 88.dp).glassSurface(RoundedCornerShape(16.dp), Color(0x1FFFFFFF)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(digit.toString(), style = Txt.LargeTitle.copy(fontSize = 44.sp, fontWeight = FontWeight.Bold), color = Ember.Text)
