@@ -395,6 +395,7 @@ fun SettingsSection(vm: AppViewModel) {
     var managingCategories by remember { mutableStateOf(false) }
     var managingChannels by remember { mutableStateOf(false) }
     var pickingLeagues by remember { mutableStateOf(false) }
+    var choosingAudio by remember { mutableStateOf(false) }
     var pickingTeams by remember { mutableStateOf(false) }
     var choosingPlayer by remember { mutableStateOf(false) }
     var editingTmdb by remember { mutableStateOf(false) }
@@ -437,12 +438,6 @@ fun SettingsSection(vm: AppViewModel) {
         Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // ---- Profile ----
             SettingsHeader("Profile", first = true)
-            SettingRow(
-                "Profile",
-                vm.profile?.name ?: "",
-                "Switch, add or edit profiles",
-                focusKey = "set:profile",
-            ) { vm.switchProfile() }
             SettingRow(
                 "My teams",
                 if (vm.followedTeams.isEmpty()) "None" else vm.followedTeams.joinToString(", ") { it.shortName },
@@ -507,12 +502,6 @@ fun SettingsSection(vm: AppViewModel) {
                 focusKey = "set:starton",
             ) { vm.cycleStartOn() }
             SettingRow(
-                "Video player",
-                vm.externalPlayerName(),
-                "Use VLC or another app if something won't play",
-                focusKey = "set:player",
-            ) { choosingPlayer = true }
-            SettingRow(
                 "Quality to play",
                 when (vm.qualityChoice) {
                     "best" -> "Best available"
@@ -524,30 +513,14 @@ fun SettingsSection(vm: AppViewModel) {
                 focusKey = "set:quality",
             ) { vm.cycleQualityChoice() }
             SettingRow(
-                "Combine versions",
-                if (vm.mergeVersions) "On" else "Off",
-                "Show each film or show once instead of once per quality",
-                focusKey = "set:merge",
-            ) { vm.toggleMergeVersions() }
-            SettingRow(
-                "Subtitles",
-                if (vm.subtitleMode == "off") "Off" else "English",
-                "Switch subtitles on automatically when available",
-                focusKey = "set:subs",
-            ) { vm.cycleSubtitles() }
-            SettingRow(
-                "Preferred audio",
-                if (vm.audioLanguage.isEmpty()) "Stream default" else "English",
-                "Pick English audio when a stream has several",
-                focusKey = "set:audio",
-            ) { vm.cycleAudioLanguage() }
-            val sleepLeft = vm.sleepMinutesLeft()
-            SettingRow(
-                "Sleep timer",
-                if (sleepLeft == null) "Off" else "Stops in $sleepLeft min",
-                "Stop playback after a while",
-                focusKey = "set:sleep",
-            ) { vm.cycleSleepTimer() }
+                "Audio & subtitles",
+                listOf(
+                    if (vm.audioLanguage.isEmpty()) "Default audio" else "English audio",
+                    if (vm.subtitleMode == "off") "subtitles off" else "English subtitles",
+                ).joinToString(" · "),
+                "What to pick when a stream has a choice",
+                focusKey = "set:audiosubs",
+            ) { choosingAudio = true }
             if (isTv) {
                 SettingRow(
                     "Channel up / down",
@@ -605,7 +578,13 @@ fun SettingsSection(vm: AppViewModel) {
 
             // ---- Connection (grown-ups only) ----
             if (!kids) {
-                SettingsHeader("Connection")
+                SettingsHeader("If something won't play")
+                SettingRow(
+                    "Video player",
+                    vm.externalPlayerName(),
+                    "Play in VLC or another app instead",
+                    focusKey = "set:player",
+                ) { choosingPlayer = true }
                 SettingRow(
                     "Stream format",
                     if (vm.streamFormat == "m3u8") "HLS (.m3u8)" else "MPEG-TS (.ts)",
@@ -693,6 +672,9 @@ fun SettingsSection(vm: AppViewModel) {
     }
 
     val managed = vm.profile
+    if (choosingAudio) {
+        AudioSubtitlesSheet(vm) { choosingAudio = false }
+    }
     if (pickingLeagues) {
         LeaguePicker(vm) { pickingLeagues = false }
     }
@@ -852,6 +834,42 @@ private fun LeaguePicker(vm: AppViewModel, onDone: () -> Unit) {
                 item(key = "done") {
                     SheetOption("Done", focusKey = "leagues:done", primary = true, onClick = onDone)
                 }
+            }
+        }
+    }
+}
+
+/** Settings → Audio & subtitles: two choices in one Apple-style sheet. */
+@Composable
+private fun AudioSubtitlesSheet(vm: AppViewModel, onDone: () -> Unit) {
+    val isTv = LocalIsTv.current
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDone) {
+        DialogBackdropBlur()
+        Column(
+            Modifier
+                .width(if (isTv) 520.dp else 440.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(dialogPanelColor())
+                .padding(if (isTv) 8.dp else 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            SheetTitle("Audio & subtitles", eyebrow = "Watching", subtitle = "Used when a channel or video offers a choice. Changes apply from the next one you play.")
+            Spacer(Modifier.height(20.dp))
+            Column(Modifier.width(if (isTv) 380.dp else 400.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SheetOption(
+                    "Audio",
+                    focusKey = "audiosubs:audio",
+                    subtitle = if (vm.audioLanguage.isEmpty()) "The stream's own choice" else "English when there's a choice",
+                    autoFocus = isTv,
+                    trailing = { dark -> Text(if (vm.audioLanguage.isEmpty()) "Default" else "English", style = Txt.Label, color = if (dark) Color.Black else Ember.Dim) },
+                ) { vm.cycleAudioLanguage() }
+                SheetOption(
+                    "Subtitles",
+                    focusKey = "audiosubs:subs",
+                    subtitle = if (vm.subtitleMode == "off") "Off unless you turn them on" else "On automatically when there are English ones",
+                    trailing = { dark -> Text(if (vm.subtitleMode == "off") "Off" else "English", style = Txt.Label, color = if (dark) Color.Black else Ember.Dim) },
+                ) { vm.cycleSubtitles() }
+                SheetOption("Done", focusKey = "audiosubs:done", primary = true, onClick = onDone)
             }
         }
     }
