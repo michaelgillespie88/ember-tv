@@ -438,6 +438,8 @@ fun CategoryRail(
     modifier: Modifier = Modifier,
     width: Dp = 232.dp,
     rowHeight: Dp = 46.dp,
+    /** Apple TV sidebar look: a softly lit pill for the chosen group instead of a dot. */
+    sidebar: Boolean = true,
 ) {
     LazyColumn(
         modifier = modifier.width(width).fillMaxHeight(),
@@ -450,9 +452,9 @@ fun CategoryRail(
             FocusBox(
                 modifier = Modifier.fillMaxWidth().height(rowHeight),
                 focusKey = "$keyPrefix:cat:${c.id}",
-                shape = RoundedCornerShape(10.dp),
-                focusedScale = 1.03f,
-                color = if (selected) Ember.Card else Color.Transparent,
+                shape = RoundedCornerShape(if (sidebar) 12.dp else 10.dp),
+                focusedScale = if (sidebar) 1.05f else 1.03f,
+                color = if (selected) (if (sidebar) Color(0x29FFFFFF) else Ember.Card) else Color.Transparent,
                 focusedColor = Color.White,
                 onFocusChange = { if (it) onFocusCategory(c) },
                 onClick = { onSelectCategory(c) },
@@ -461,7 +463,7 @@ fun CategoryRail(
                     Modifier.fillMaxSize().padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (selected) {
+                    if (selected && !sidebar) {
                         Box(
                             Modifier.size(6.dp).clip(CircleShape)
                                 .background(if (focused) Ember.AccentDeep else Ember.Accent)
@@ -470,7 +472,8 @@ fun CategoryRail(
                     }
                     Text(
                         c.name,
-                        style = if (rowHeight < 44.dp) Txt.Label.copy(fontSize = 14.sp) else Txt.Label,
+                        style = (if (rowHeight < 44.dp) Txt.Label.copy(fontSize = 14.sp) else Txt.Label)
+                            .let { if (sidebar && (selected || focused)) it.copy(fontWeight = FontWeight.SemiBold) else it },
                         color = when {
                             focused -> Color.Black
                             selected -> Ember.Text

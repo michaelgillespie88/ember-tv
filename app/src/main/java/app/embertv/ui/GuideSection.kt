@@ -169,21 +169,36 @@ private fun GuideGrid(
                 is LoadResult.Loading -> LoadingView(Modifier.weight(1f))
                 is LoadResult.Err -> ErrorView(r.message, Modifier.weight(1f)) { vm.reload() }
                 is LoadResult.Ok -> Row(Modifier.fillMaxWidth().weight(1f)) {
-                    // Channel groups down the left, like TiviMate. Highlighting one shows it.
-                    CategoryRail(
-                        categories = categories,
-                        selectedId = categoryId,
-                        state = vm.guide.rail,
-                        keyPrefix = "guide",
-                        onFocusCategory = { c ->
-                            vm.guideFullScreen = true
-                            onFocusCategory(c.id)
-                        },
-                        onSelectCategory = { c -> onCategory(c.id) },
-                        width = RAIL_WIDTH,
-                        rowHeight = 38.dp,
-                        modifier = Modifier.padding(top = 34.dp),
-                    )
+                    // Channel groups down the left, like TiviMate, in an Apple TV style frosted sidebar.
+                    Column(
+                        Modifier
+                            .padding(top = 2.dp, bottom = 12.dp)
+                            .width(RAIL_WIDTH)
+                            .fillMaxHeight()
+                            .glassSurface(RoundedCornerShape(20.dp), Color(0x12FFFFFF))
+                            .padding(horizontal = 6.dp),
+                    ) {
+                        Text(
+                            "GROUPS",
+                            style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp),
+                            color = Ember.Faint,
+                            modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 2.dp),
+                        )
+                        CategoryRail(
+                            categories = categories,
+                            selectedId = categoryId,
+                            state = vm.guide.rail,
+                            keyPrefix = "guide",
+                            onFocusCategory = { c ->
+                                vm.guideFullScreen = true
+                                onFocusCategory(c.id)
+                            },
+                            onSelectCategory = { c -> onCategory(c.id) },
+                            width = RAIL_WIDTH - 12.dp,
+                            rowHeight = 38.dp,
+                            sidebar = true,
+                        )
+                    }
                     Spacer(Modifier.width(10.dp))
                     val channels = r.value
                     val compact = vm.compactLists
