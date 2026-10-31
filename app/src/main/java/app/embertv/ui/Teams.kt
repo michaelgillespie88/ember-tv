@@ -171,7 +171,7 @@ fun MatchCard(match: Match, width: Dp, focusKey: String, onClick: () -> Unit) {
         focusKey = focusKey,
         shape = RoundedCornerShape(16.dp),
         focusedScale = 1.05f,
-        color = if (live) Color(0x2EFF5A50) else Ember.Card,
+        color = if (live) Color(0x1FFFFFFF) else Ember.Card,
         focusedColor = Color.White,
         onClick = onClick,
     ) { focused ->
@@ -411,7 +411,7 @@ fun SportCard(item: AppViewModel.LiveSport, width: Dp, focusKey: String, onClick
         focusKey = focusKey,
         shape = RoundedCornerShape(16.dp),
         focusedScale = 1.06f,
-        color = if (live) Color(0x24FF5A50) else Ember.Card,
+        color = if (live) Color(0x1FFFFFFF) else Ember.Card,
         focusedColor = Color.White,
         onClick = onClick,
         onLongClick = onLongClick,
@@ -448,27 +448,6 @@ fun SportCard(item: AppViewModel.LiveSport, width: Dp, focusKey: String, onClick
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-        }
-    }
-}
-
-/** "Watch them together": the live matches side by side in multi-view. */
-@Composable
-fun SportTogetherCard(count: Int, width: Dp, onClick: () -> Unit) {
-    FocusBox(
-        modifier = Modifier.width(width).height(150.dp),
-        focusKey = "home:sport:together",
-        shape = RoundedCornerShape(16.dp),
-        focusedScale = 1.06f,
-        color = Ember.Card,
-        focusedColor = Color.White,
-        onClick = onClick,
-    ) { focused ->
-        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(EmberIcons.MultiView, contentDescription = null, tint = if (focused) Color.Black else Ember.Accent, modifier = Modifier.size(34.dp))
-            Spacer(Modifier.height(10.dp))
-            Text("Watch $count together", style = Txt.Headline, color = if (focused) Color.Black else Ember.Text, textAlign = TextAlign.Center)
-            Text("Multi-view", style = Txt.Caption, color = if (focused) Color(0xFF55555C) else Ember.Faint)
         }
     }
 }

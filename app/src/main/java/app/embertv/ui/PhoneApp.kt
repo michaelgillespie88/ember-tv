@@ -127,7 +127,13 @@ fun PhoneHome(vm: AppViewModel) {
     )
 
     Box(Modifier.fillMaxSize().background(Ember.Bg)) {
-        Box(Modifier.fillMaxSize().backdropSource(backdrop).background(Ember.Bg)) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .backdropSource(backdrop)
+                .background(Ember.Bg)
+                .background(Brush.verticalGradient(listOf(Color(0xFF1C130E), Color.Transparent), endY = 900f))
+        ) {
             CompositionLocalProvider(LocalContentPadding provides contentPadding, LocalHeaderChips provides chips) {
                 when (tab) {
                     TAB_HOME -> PhoneHomeTab(vm)

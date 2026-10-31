@@ -204,8 +204,7 @@ private fun ChannelPreview(vm: AppViewModel, repo: Repository, channel: Channel?
     Column(
         modifier
             .padding(top = 8.dp, bottom = 24.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Ember.Panel)
+            .glassSurface(RoundedCornerShape(20.dp), Ember.Panel)
             .padding(18.dp)
     ) {
         if (channel == null) {

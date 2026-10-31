@@ -232,6 +232,16 @@ fun FocusBox(
             .then(if (focused) Modifier.border(2.5.dp, Ember.Focus, shape) else Modifier)
             .clip(shape)
             .background(if (focused) focusedColor else color)
+            // Tinted (see-through) surfaces get Apple TV's glass edge: a soft top highlight and a hairline rim.
+            .then(
+                if (!focused && color.alpha > 0f && color.alpha < 0.5f) {
+                    Modifier
+                        .background(Brush.verticalGradient(listOf(Color(0x12FFFFFF), Color.Transparent)))
+                        .border(0.6.dp, Color(0x24FFFFFF), shape)
+                } else {
+                    Modifier
+                }
+            )
             .focusRequester(requester)
             .onFocusChanged { state ->
                 if (state.isFocused != focused) {

@@ -98,7 +98,13 @@ fun HomeScreen(vm: AppViewModel) {
     }
 
     val hideBar = vm.tab == Tabs.GUIDE && vm.guideFullScreen && focusedTab < 0
-    Column(Modifier.fillMaxSize().background(Ember.Bg)) {
+    // The same soft warm glow at the top of every page, like the guide.
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Ember.Bg)
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color(0xFF1C130E), androidx.compose.ui.graphics.Color.Transparent), endY = 620f))
+    ) {
         AnimatedVisibility(visible = !hideBar, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
         Row(
             Modifier.fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 22.dp, bottom = 12.dp),

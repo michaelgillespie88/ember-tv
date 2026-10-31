@@ -385,8 +385,7 @@ fun SettingsSection(vm: AppViewModel) {
     val accountCard: @Composable (Modifier) -> Unit = { modifier ->
         Column(
             modifier
-                .clip(RoundedCornerShape(18.dp))
-                .background(Ember.Panel)
+                .glassSurface(RoundedCornerShape(20.dp), Ember.Panel)
                 .padding(if (isTv) 26.dp else 20.dp)
         ) {
             Text("Account", style = Txt.Headline)

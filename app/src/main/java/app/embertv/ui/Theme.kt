@@ -16,9 +16,10 @@ import app.embertv.R
 
 object Ember {
     val Bg = Color(0xFF09090C)
-    val Panel = Color(0xFF131318)
-    val Card = Color(0xFF1C1C22)
-    val CardHi = Color(0xFF2A2A33)
+    // Tinted glass, Apple TV style: light lets the warm background glow through.
+    val Panel = Color(0x12FFFFFF)
+    val Card = Color(0x17FFFFFF)
+    val CardHi = Color(0x29FFFFFF)
     val Text = Color(0xFFF5F5F7)
     val Dim = Color(0xFFA8A8B3)
     val Faint = Color(0xFF6E6E78)
@@ -59,7 +60,7 @@ fun EmberTheme(content: @Composable () -> Unit) {
         colorScheme = darkColorScheme(
             primary = Ember.Accent,
             background = Ember.Bg,
-            surface = Ember.Panel,
+            surface = Color(0xFF131318),
             onBackground = Ember.Text,
             onSurface = Ember.Text,
         )

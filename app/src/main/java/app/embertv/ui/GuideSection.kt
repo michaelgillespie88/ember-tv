@@ -622,10 +622,11 @@ private fun ProgrammeBlock(
             focusKey = focusKey,
             shape = RoundedCornerShape(if (compact) 7.dp else 9.dp),
             focusedScale = 1f,
+            // Tinted glass, like the rest of the app: brighter for what's on now, fainter for what's finished.
             color = when {
-                live -> Color(0xFF2C2C35)
-                past -> Color(0xFF141418)
-                else -> Color(0xFF1D1D23)
+                live -> Color(0x29FFFFFF)
+                past -> Color(0x0AFFFFFF)
+                else -> Color(0x14FFFFFF)
             },
             focusedColor = Color.White,
             autoFocus = autoFocus,
