@@ -106,14 +106,19 @@ fun MultiViewScreen(vm: AppViewModel, start: List<Channel>, pool: List<Channel>)
                     }
                 }
             }
-            Text(
-                if (isTv) "OK  Full screen   ·   Hold OK  Change channel   ·   Back  Leave multi-view"
-                else "Tap a picture for full screen · press and hold to change it",
-                style = Txt.Caption,
-                color = Ember.Faint,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (isTv) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    RemoteHints(listOf(Hint("OK", "Full screen"), Hint("HOLD OK", "Change channel"), Hint("BACK", "Leave multi-view")))
+                }
+            } else {
+                Text(
+                    "Tap a picture for full screen · press and hold to change it",
+                    style = Txt.Caption,
+                    color = Ember.Faint,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 

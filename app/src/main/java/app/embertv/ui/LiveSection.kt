@@ -210,13 +210,13 @@ private fun ChannelPreview(vm: AppViewModel, repo: Repository, channel: Channel?
         if (channel == null) {
             Text("Pick a channel", style = Txt.Headline)
             Spacer(Modifier.height(8.dp))
-            Text("Press OK to watch. Hold OK to add it to your favourites.", style = Txt.Body, color = Ember.Dim)
+            Text("Choose a channel to see what's on.", style = Txt.Body, color = Ember.Dim)
         } else {
             PreviewDetails(vm, repo, channel)
         }
         Spacer(Modifier.weight(1f))
         Box(Modifier.fillMaxWidth()) {
-            Text("OK  Watch     Hold OK  Favourite", style = Txt.Caption, color = Ember.Faint)
+            RemoteHints(listOf(Hint("OK", "Watch"), Hint("HOLD OK", "Favourite")))
         }
     }
 }

@@ -333,12 +333,17 @@ internal fun GuideInfo(focus: GuideFocus?, now: Long) {
             Spacer(Modifier.height(4.dp))
             Text("What's on", style = Txt.LargeTitle)
             Spacer(Modifier.height(6.dp))
-            Text(
-                "OK on anything airing now starts the channel. Earlier programmes play from catch-up, later ones can remind you.",
-                style = Txt.Body,
-                color = Ember.Dim,
-                maxLines = 2,
-            )
+            if (LocalIsTv.current) {
+                Spacer(Modifier.height(4.dp))
+                RemoteHints(listOf(Hint("OK", "Watch, catch up or remind"), Hint("◀▶", "Earlier and later"), Hint("HOLD OK", "Details")))
+            } else {
+                Text(
+                    "Tap anything airing now to watch. Earlier programmes play from catch-up, later ones can remind you.",
+                    style = Txt.Body,
+                    color = Ember.Dim,
+                    maxLines = 2,
+                )
+            }
             return
         }
         val p = focus.programme

@@ -295,11 +295,13 @@ private fun DPad(onPress: (String) -> Unit) {
         Box(
             Modifier
                 .size(120.dp)
-                .glassSurface(CircleShape, if (pressed) Color(0x40FFFFFF) else Color(0x24FFFFFF))
+                // The white select button, the same as the OK shown in the app's hints.
+                .clip(CircleShape)
+                .background(if (pressed) Color(0xFFD8D8DE) else Color(0xF2FFFFFF))
                 .clickable(interactionSource = source, indication = null) { press("ok") },
             contentAlignment = Alignment.Center,
         ) {
-            Text("OK", style = Txt.Label.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold), color = Ember.Text)
+            Text("OK", style = Txt.Label.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold), color = Color.Black)
         }
     }
 }

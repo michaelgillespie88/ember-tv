@@ -406,7 +406,7 @@ private fun BoxScope.Spinner() {
 }
 
 @Composable
-private fun BoxScope.ErrorCard(message: String, hint: String) {
+private fun BoxScope.ErrorCard(message: String, hint: String, keys: List<Hint> = emptyList()) {
     // Apple style: a frosted card with a quiet icon, a short title and the reason in grey.
     Column(
         Modifier
@@ -422,8 +422,13 @@ private fun BoxScope.ErrorCard(message: String, hint: String) {
         Text("Can't play this", style = Txt.Headline, textAlign = TextAlign.Center)
         Spacer(Modifier.height(6.dp))
         Text(message, style = Txt.Body, color = Ember.Dim, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(12.dp))
-        Text(hint, style = Txt.Caption, color = Ember.Faint, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(14.dp))
+        // TVs: the remote buttons that help, drawn like the remote. Phones: a sentence.
+        if (LocalIsTv.current && keys.isNotEmpty()) {
+            RemoteHints(keys, always = true)
+        } else {
+            Text(hint, style = Txt.Caption, color = Ember.Faint, textAlign = TextAlign.Center)
+        }
     }
 }
 
@@ -845,7 +850,8 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
         if (err != null) {
             ErrorCard(
                 err,
-                if (isTv) "Press up or down to try another channel, or left for options like opening it in VLC." else "Swipe up or down to try another channel, or tap ⋯ to open it in another player like VLC.",
+                "Swipe up or down to try another channel, or tap ⋯ to open it in another player like VLC.",
+                keys = listOf(Hint("▲▼", "Another channel"), Hint("◀", "Options, like VLC")),
             )
         } else if (buffering) {
             Spinner()
@@ -1880,7 +1886,11 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
 
         val err = error
         if (err != null) {
-            ErrorCard(err, if (isTv) "Press down for options like opening it in VLC, or Back to leave." else "Tap the screen, then the subtitles button, to open it in another player like VLC.")
+            ErrorCard(
+                err,
+                "Tap the screen, then the subtitles button, to open it in another player like VLC.",
+                keys = listOf(Hint("▼", "Options, like VLC"), Hint("BACK", "Leave")),
+            )
         } else if (buffering) {
             Spinner()
         }
