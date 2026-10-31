@@ -127,14 +127,26 @@ object EmberIcons {
         moveTo(15.5f, 15.5f); lineTo(20.5f, 20.5f)
     }
 
-    val Settings = outline("settings") {
-        moveTo(4f, 7f); lineTo(10f, 7f)
-        moveTo(16f, 7f); lineTo(20f, 7f)
-        circle(13f, 7f, 2.5f)
-        moveTo(4f, 17f); lineTo(6f, 17f)
-        moveTo(12f, 17f); lineTo(20f, 17f)
-        circle(9f, 17f, 2.5f)
-    }
+    /** A solid gear: easier to spot than thin lines, especially across a room on a TV. */
+    val Settings: ImageVector = ImageVector.Builder("settings", 24.dp, 24.dp, 24f, 24f)
+        .path(fill = SolidColor(Color.White), pathFillType = androidx.compose.ui.graphics.PathFillType.EvenOdd) {
+            val teeth = 8
+            val outer = 10.5f
+            val inner = 8f
+            for (i in 0 until teeth * 4) {
+                // Each tooth: up the flank, across the top, down, across the gap.
+                val angle = Math.toRadians(i * 360.0 / (teeth * 4) - 90.0 + 360.0 / (teeth * 8))
+                val r = if ((i % 4) == 1 || (i % 4) == 2) outer else inner
+                val x = 12f + r * cos(angle).toFloat()
+                val y = 12f + r * sin(angle).toFloat()
+                if (i == 0) moveTo(x, y) else lineTo(x, y)
+            }
+            close()
+            // The hole in the middle.
+            circle(12f, 12f, 3.4f)
+        }
+        .build()
+
 
     val Back = outline("back") {
         moveTo(20f, 12f); lineTo(5f, 12f)
