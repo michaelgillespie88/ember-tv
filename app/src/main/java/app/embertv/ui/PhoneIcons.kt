@@ -188,6 +188,29 @@ object EmberIcons {
         moveTo(16f, 5f); lineTo(19f, 5f); lineTo(19f, 19f); lineTo(16f, 19f); close()
     }
 
+    /** Apple-style skip back: an open circle with the arrow at the top. The seconds go in the middle. */
+    val SkipBack = outline("skip-back") {
+        moveTo(12.5f, 4f)
+        arcTo(8f, 8f, 0f, true, true, 5.07f, 8f)
+        moveTo(14.5f, 1.5f); lineTo(11.5f, 4f); lineTo(14.5f, 6.5f)
+    }
+
+    /** Apple-style skip forward: the mirror of [SkipBack]. */
+    val SkipForward = outline("skip-forward") {
+        moveTo(11.5f, 4f)
+        arcTo(8f, 8f, 0f, true, false, 18.93f, 8f)
+        moveTo(9.5f, 1.5f); lineTo(12.5f, 4f); lineTo(9.5f, 6.5f)
+    }
+
+    /** A globe, for the spoken language. */
+    val Language = outline("language") {
+        circle(12f, 12f, 9f)
+        moveTo(12f, 3f)
+        arcTo(4f, 9f, 0f, false, true, 12f, 21f)
+        arcTo(4f, 9f, 0f, false, true, 12f, 3f)
+        moveTo(3f, 12f); lineTo(21f, 12f)
+    }
+
     val Subtitles = outline("subtitles") {
         moveTo(3f, 5f); lineTo(21f, 5f); lineTo(21f, 19f); lineTo(3f, 19f); close()
         moveTo(7f, 15f); lineTo(11f, 15f)

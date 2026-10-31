@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 import android.view.KeyEvent as AndroidKeyEvent
 import android.app.Activity
 import android.content.Context
@@ -1139,23 +1140,23 @@ private fun LiveControls(
         Modifier
             .fillMaxWidth()
             .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0x99000000))))
-            .padding(start = 56.dp, end = 56.dp, top = 28.dp, bottom = 6.dp)
+            .padding(start = 40.dp, end = 40.dp, top = 28.dp, bottom = 6.dp)
             .onPreviewKeyEvent {
                 onActivity()
                 false
             },
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        TvButton(if (paused) "Play" else "Pause", icon = if (paused) "▶" else "❙❙", focusKey = "live:ctl:pause", requester = requester, onClick = onPause)
-        if (canRewind) {
-            TvButton("10s", icon = "◀◀", focusKey = "live:ctl:back", onClick = onBack)
-            TvButton("30s", icon = "▶▶", focusKey = "live:ctl:fwd", onClick = onForward)
-        }
-        if (behindLive) TvButton("Live", icon = "●", focusKey = "live:ctl:live", onClick = onLive)
-        TvButton("TV guide", icon = "☰", focusKey = "live:ctl:guide", onClick = onGuide)
-        TvButton("Channels", icon = "≡", focusKey = "live:ctl:list", onClick = onChannels)
-        TvButton("Live scores", focusKey = "live:ctl:scores", onClick = onScores)
-        TvButton("Picture: $pictureLabel", focusKey = "live:ctl:picture", onClick = onPicture)
+        if (canRewind) PlayerButton(EmberIcons.SkipBack, null, "live:ctl:back", badge = "10", onClick = onBack)
+        PlayerButton(if (paused) EmberIcons.Play else EmberIcons.Pause, null, "live:ctl:pause", requester = requester, onClick = onPause)
+        if (canRewind) PlayerButton(EmberIcons.SkipForward, null, "live:ctl:fwd", badge = "30", onClick = onForward)
+        if (behindLive) PlayerButton(EmberIcons.Live, "Live", "live:ctl:live", onClick = onLive)
+        Spacer(Modifier.width(12.dp))
+        PlayerButton(EmberIcons.Guide, "TV guide", "live:ctl:guide", onClick = onGuide)
+        PlayerButton(EmberIcons.ChannelList, "Channels", "live:ctl:list", onClick = onChannels)
+        PlayerButton(EmberIcons.Football, "Scores", "live:ctl:scores", onClick = onScores)
+        PlayerButton(EmberIcons.Zoom, pictureLabel, "live:ctl:picture", onClick = onPicture)
     }
 }
 
@@ -1868,26 +1869,76 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
     }
 }
 
-/** A round glass button for the TV pause row: white with a black symbol when selected. */
+/**
+ * Apple TV style player button: frosted glass, an icon, and a label when there's room. Turns white
+ * with a black icon when selected. With no label it's a circle, like the play and skip buttons.
+ */
 @Composable
-private fun RoundTvButton(symbol: String, @Suppress("UNUSED_PARAMETER") description: String, focusKey: String, requester: FocusRequester? = null, onClick: () -> Unit) {
+private fun PlayerButton(
+    icon: ImageVector,
+    label: String?,
+    focusKey: String,
+    requester: FocusRequester? = null,
+    badge: String? = null,
+    onClick: () -> Unit,
+) {
     FocusBox(
-        modifier = Modifier.size(50.dp),
+        modifier = if (label == null) Modifier.size(52.dp) else Modifier.height(52.dp),
         focusKey = focusKey,
-        shape = CircleShape,
-        focusedScale = 1.1f,
-        color = Color(0x26FFFFFF),
+        shape = RoundedCornerShape(26.dp),
+        focusedScale = 1.08f,
+        // Translucent, so FocusBox gives it the glass edge and highlight.
+        color = Color(0x2EFFFFFF),
         focusedColor = Color.White,
         requester = requester,
         onClick = onClick,
     ) { focused ->
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(symbol, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (focused) Color.Black else Ember.Text)
+        val tint = if (focused) Color.Black else Ember.Text
+        Row(
+            Modifier.fillMaxHeight().then(if (label == null) Modifier.fillMaxWidth() else Modifier.padding(horizontal = 18.dp)),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(if (badge != null) 28.dp else 22.dp))
+                // The seconds inside the skip arrows, as on Apple TV.
+                if (badge != null) Text(badge, fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = tint, modifier = Modifier.padding(top = 3.dp))
+            }
+            if (label != null) {
+                Spacer(Modifier.width(9.dp))
+                Text(label, style = Txt.Label.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold), color = tint, maxLines = 1)
+            }
         }
     }
 }
 
-/** TVs: title at the top; progress, times and (when paused) a tidy row of buttons at the bottom. */
+/** Apple TV style progress: a rounded bar, with a playhead when paused or skipping. */
+@Composable
+private fun PlayerScrubber(fraction: Float, showHead: Boolean, modifier: Modifier = Modifier) {
+    val f = fraction.coerceIn(0f, 1f)
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth().height(16.dp), contentAlignment = Alignment.CenterStart) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(Color(0x40FFFFFF))
+        ) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(f).background(Color(0xF2FFFFFF)))
+        }
+        if (showHead) {
+            Box(
+                Modifier
+                    .padding(start = (maxWidth - 16.dp) * f)
+                    .size(16.dp)
+                    .clip(CircleShape)
+                    .background(Color.White)
+            )
+        }
+    }
+}
+
+/** TVs: Apple TV style. Title, progress and times at the bottom, and a row of glass buttons when paused. */
 @Composable
 private fun VodOverlay(
     item: VodItem,
@@ -1910,62 +1961,36 @@ private fun VodOverlay(
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
-                .align(Alignment.TopStart)
-                .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(Color(0xCC000000), Color.Transparent)))
-                .padding(start = 56.dp, end = 56.dp, top = 36.dp, bottom = 60.dp)
-        ) {
-            if (!playing) {
-                Text("PAUSED", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp), color = Ember.Dim)
-                Spacer(Modifier.height(4.dp))
-            }
-            Text(item.title, style = Txt.Title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (item.subtitle.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(item.subtitle, style = Txt.Label, color = Ember.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        Column(
-            Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000))))
-                .padding(start = 48.dp, end = 48.dp, top = 70.dp, bottom = 32.dp)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0x99000000), Color(0xE6000000))))
+                .padding(start = 40.dp, end = 40.dp, top = 90.dp, bottom = 30.dp)
         ) {
-            val fraction = if (duration > 0) position.toFloat() / duration.toFloat() else 0f
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(if (scrubbing) 8.dp else 5.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0x40FFFFFF))
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                        .background(Color.White)
-                )
+            Text(item.title, style = Txt.Headline.copy(fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (item.subtitle.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(item.subtitle, style = Txt.Label, color = Ember.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(14.dp))
+            PlayerScrubber(
+                fraction = if (duration > 0) position.toFloat() / duration.toFloat() else 0f,
+                showHead = scrubbing || !playing,
+            )
+            Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(formatMs(position), style = Txt.Label)
+                Text(formatMs(position), style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Text)
                 Spacer(Modifier.weight(1f))
                 if (!controlsOpen) {
-                    Text(
-                        if (playing) "OK  Pause     ◀ ▶  Skip" else "OK  Play     ▼  More",
-                        style = Txt.Caption,
-                        color = Ember.Faint,
-                    )
+                    Text(if (playing) "Press OK to pause" else "Press OK to play  ·  ▼ for more", style = Txt.Caption, color = Ember.Faint)
                 }
                 Spacer(Modifier.weight(1f))
-                Text(if (duration > 0) "−" + formatMs(duration - position) else "", style = Txt.Label, color = Ember.Dim)
+                Text(if (duration > 0) "−" + formatMs(duration - position) else "", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Dim)
             }
             AnimatedVisibility(visible = controlsOpen, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(top = 18.dp)
+                        .padding(top = 16.dp)
                         .onPreviewKeyEvent {
                             onActivity()
                             false
@@ -1973,18 +1998,17 @@ private fun VodOverlay(
                     horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Apple TV style: round play and skip buttons, then the extras.
-                    RoundTvButton("◀◀", "Back 10 seconds", "vod:ctl:back") { onSkip(-10_000L) }
-                    RoundTvButton(if (playing) "❙❙" else "▶", if (playing) "Pause" else "Play", "vod:ctl:play", requester = requester, onClick = onTogglePlay)
-                    RoundTvButton("▶▶", "Forward 30 seconds", "vod:ctl:fwd") { onSkip(30_000L) }
-                    Spacer(Modifier.width(14.dp))
-                    if (hasNext) TvButton("Next episode", icon = "▶❙", focusKey = "vod:ctl:next", horizontalPadding = 18.dp, onClick = onNext)
+                    PlayerButton(EmberIcons.SkipBack, null, "vod:ctl:back", badge = "10") { onSkip(-10_000L) }
+                    PlayerButton(if (playing) EmberIcons.Pause else EmberIcons.Play, null, "vod:ctl:play", requester = requester, onClick = onTogglePlay)
+                    PlayerButton(EmberIcons.SkipForward, null, "vod:ctl:fwd", badge = "30") { onSkip(30_000L) }
+                    Spacer(Modifier.width(12.dp))
+                    if (hasNext) PlayerButton(EmberIcons.Next, "Next episode", "vod:ctl:next", onClick = onNext)
                     // Subtitles and other languages, when this film or episode has them.
-                    if (hasSubtitles) TvButton("Subtitles", focusKey = "vod:ctl:subs", horizontalPadding = 18.dp, onClick = onTracks)
-                    if (hasLanguages) TvButton("Language", focusKey = "vod:ctl:audio", horizontalPadding = 18.dp, onClick = onTracks)
-                    TvButton("Live scores", focusKey = "vod:ctl:scores", horizontalPadding = 18.dp, onClick = onScores)
+                    if (hasSubtitles) PlayerButton(EmberIcons.Subtitles, "Subtitles", "vod:ctl:subs", onClick = onTracks)
+                    if (hasLanguages) PlayerButton(EmberIcons.Language, "Language", "vod:ctl:audio", onClick = onTracks)
+                    PlayerButton(EmberIcons.Football, "Scores", "vod:ctl:scores", onClick = onScores)
                     // Picture zoom, sleep timer and the rest.
-                    RoundTvButton("•••", "More", "vod:ctl:more", onClick = onTracks)
+                    PlayerButton(EmberIcons.More, null, "vod:ctl:more", onClick = onTracks)
                 }
             }
         }
