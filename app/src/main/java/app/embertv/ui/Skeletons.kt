@@ -50,6 +50,17 @@ private fun rememberPulse(): Float {
     return alpha
 }
 
+/**
+ * Phones: keep clear of the frosted header at the top and the tab bar at the bottom, and leave the
+ * same side margins as the real lists, so the placeholders sit exactly where the content will.
+ */
+@Composable
+private fun Modifier.phoneInsets(): Modifier {
+    if (LocalIsTv.current) return this
+    val pad = LocalContentPadding.current
+    return this.padding(start = 12.dp, end = 12.dp, top = pad.calculateTopPadding() + 10.dp, bottom = pad.calculateBottomPadding())
+}
+
 @Composable
 private fun Block(modifier: Modifier, radius: Dp = 12.dp) {
     Box(modifier.clip(RoundedCornerShape(radius)).background(Fill))
@@ -59,7 +70,7 @@ private fun Block(modifier: Modifier, radius: Dp = 12.dp) {
 @Composable
 fun SkeletonPosters(modifier: Modifier = Modifier, minSize: Dp = 104.dp, gap: Dp = 14.dp) {
     val pulse = rememberPulse()
-    BoxWithConstraints(modifier.fillMaxSize().graphicsLayer { alpha = pulse }) {
+    BoxWithConstraints(modifier.fillMaxSize().phoneInsets().graphicsLayer { alpha = pulse }) {
         val columns = ((maxWidth.value + gap.value) / (minSize.value + gap.value)).toInt().coerceAtLeast(1)
         Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(gap)) {
             repeat(3) {
@@ -82,7 +93,7 @@ fun SkeletonPosters(modifier: Modifier = Modifier, minSize: Dp = 104.dp, gap: Dp
 fun SkeletonRows(modifier: Modifier = Modifier, rows: Int = 10) {
     val pulse = rememberPulse()
     Column(
-        modifier.fillMaxSize().graphicsLayer { alpha = pulse }.padding(top = 4.dp),
+        modifier.fillMaxSize().phoneInsets().graphicsLayer { alpha = pulse }.padding(top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         repeat(rows) { i ->
@@ -106,8 +117,9 @@ fun SkeletonHome(modifier: Modifier = Modifier) {
     val pulse = rememberPulse()
     val isTv = LocalIsTv.current
     val side = if (isTv) 48.dp else 16.dp
+    val top = if (isTv) 12.dp else LocalContentPadding.current.calculateTopPadding() + 12.dp
     Column(
-        modifier.fillMaxSize().graphicsLayer { alpha = pulse }.padding(start = side, end = side, top = 12.dp),
+        modifier.fillMaxSize().graphicsLayer { alpha = pulse }.padding(start = side, end = side, top = top),
     ) {
         Block(Modifier.fillMaxWidth().height(if (isTv) 200.dp else 170.dp), radius = 20.dp)
         repeat(2) {
@@ -146,15 +158,8 @@ fun SkeletonPage(posters: Boolean, modifier: Modifier = Modifier) {
     }
 }
 
-/** Phones: a row of category chips across the top, then the content shape. */
+/** Phones: the category chips live in the frosted header, so this is just the content shape. */
 @Composable
 fun SkeletonPhonePage(posters: Boolean, modifier: Modifier = Modifier) {
-    val pulse = rememberPulse()
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(Modifier.graphicsLayer { alpha = pulse }, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(90.dp, 70.dp, 110.dp, 80.dp).forEach { w -> Block(Modifier.width(w).height(32.dp), radius = 16.dp) }
-        }
-        Spacer(Modifier.height(16.dp))
-        if (posters) SkeletonPosters() else SkeletonRows()
-    }
+    if (posters) SkeletonPosters(modifier) else SkeletonRows(modifier)
 }
