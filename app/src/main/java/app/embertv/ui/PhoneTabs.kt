@@ -85,7 +85,7 @@ private fun CategorySection(
     val repo = vm.repo ?: return
     val cats by rememberLoad(repo, vm.reloadToken, allLabel) { load(repo) }
     when (val c = cats) {
-        is LoadResult.Loading -> LoadingView(text = loadingText)
+        is LoadResult.Loading -> SkeletonPhonePage(posters = allLabel == "All movies" || allLabel == "All series")
         is LoadResult.Err -> ErrorView(c.message) { vm.reload() }
         is LoadResult.Ok -> {
             val categories = remember(c.value) { withVirtualCategories(c.value, allLabel, recent = allLabel != "All channels") }
@@ -115,7 +115,7 @@ private fun rememberChannels(vm: AppViewModel, repo: Repository, categoryId: Str
 fun PhoneLiveTab(vm: AppViewModel) {
     CategorySection(vm, vm.live, "All channels", "Loading channels…", { it.liveCategories() }) { repo, categoryId ->
         when (val r = rememberChannels(vm, repo, categoryId)) {
-            is LoadResult.Loading -> LoadingView()
+            is LoadResult.Loading -> SkeletonRows()
             is LoadResult.Err -> ErrorView(r.message) { vm.reload() }
             is LoadResult.Ok -> {
                 val channels = r.value
@@ -185,7 +185,7 @@ fun PhoneGuideTab(vm: AppViewModel) {
 
     CategorySection(vm, vm.guide, "All channels", "Loading guide…", { it.liveCategories() }) { repo, categoryId ->
         when (val r = rememberChannels(vm, repo, categoryId)) {
-            is LoadResult.Loading -> LoadingView()
+            is LoadResult.Loading -> SkeletonRows()
             is LoadResult.Err -> ErrorView(r.message) { vm.reload() }
             is LoadResult.Ok -> {
                 val channels = r.value
@@ -561,7 +561,7 @@ fun PhoneMoviesTab(vm: AppViewModel) {
             favSnapshot?.map { it.toMovie() } ?: repo.movies(categoryId)
         }
         when (val r = load) {
-            is LoadResult.Loading -> LoadingView()
+            is LoadResult.Loading -> SkeletonPosters()
             is LoadResult.Err -> ErrorView(r.message) { vm.reload() }
             is LoadResult.Ok -> {
                 if (r.value.isEmpty()) {
@@ -607,7 +607,7 @@ fun PhoneSeriesTab(vm: AppViewModel) {
             favSnapshot?.map { it.toSeries() } ?: repo.series(categoryId)
         }
         when (val r = load) {
-            is LoadResult.Loading -> LoadingView()
+            is LoadResult.Loading -> SkeletonPosters()
             is LoadResult.Err -> ErrorView(r.message) { vm.reload() }
             is LoadResult.Ok -> {
                 if (r.value.isEmpty()) {

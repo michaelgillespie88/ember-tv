@@ -40,6 +40,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -973,7 +974,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(40.dp),
                         ) {
-                            if (canRewind) SkipButton("−10") { seekBy(-10_000L) }
+                            if (canRewind) SkipButton(forward = false, seconds = 10) { seekBy(-10_000L) }
                             IconCircleButton(
                                 if (paused) EmberIcons.Play else EmberIcons.Pause,
                                 if (paused) "Play" else "Pause",
@@ -981,7 +982,7 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                                 background = Color(0x59000000),
                                 glass = true,
                             ) { togglePause() }
-                            if (canRewind) SkipButton("+30") { seekBy(30_000L) }
+                            if (canRewind) SkipButton(forward = true, seconds = 30) { seekBy(30_000L) }
                         }
                     }
                     // Channel up / down, like a remote's rocker.
@@ -1524,7 +1525,9 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
     var scrub by remember { mutableStateOf<Long?>(null) }
     var overlayVisible by remember { mutableStateOf(true) }
     var overlayToken by remember { mutableIntStateOf(0) }
-    var showTracks by remember { mutableStateOf(false) }
+    // The side panel that's open: "subs", "audio", "more", or "all" (phones). Null when closed.
+    var panel by remember { mutableStateOf<String?>(null) }
+    val showTracks = panel != null
     // TVs: the row of buttons (play, skip, next episode, live scores) that pausing brings up.
     var controlsOpen by remember { mutableStateOf(false) }
     var controlsToken by remember { mutableIntStateOf(0) }
@@ -1649,10 +1652,10 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
         overlayVisible = false
     }
     LaunchedEffect(showTracks, controlsOpen, scoresOpen) {
-        if (!showTracks && !controlsOpen && !scoresOpen) {
-            delay(60)
-            runCatching { focus.requestFocus() }
-        }
+        if (showTracks || scoresOpen) return@LaunchedEffect
+        delay(60)
+        // Back from a side panel lands on the pause buttons when they're up.
+        runCatching { if (controlsOpen) controlsFocus.requestFocus() else focus.requestFocus() }
     }
 
     fun scrubBy(deltaMs: Long) {
@@ -1743,7 +1746,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
             }
             code == AndroidKeyEvent.KEYCODE_DPAD_UP -> showOverlay()
             code == AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                if (overlayVisible) showTracks = true else showOverlay()
+                if (overlayVisible) panel = "more" else showOverlay()
             }
             code == AndroidKeyEvent.KEYCODE_MEDIA_NEXT -> nextEpisode()
             code == AndroidKeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
@@ -1817,7 +1820,9 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                     onTogglePlay = { togglePlay() },
                     onSkip = { skipBy(it) },
                     onNext = { nextEpisode() },
-                    onTracks = { showTracks = true },
+                    onSubtitles = { panel = "subs" },
+                    onLanguage = { panel = "audio" },
+                    onMore = { panel = "more" },
                     hasSubtitles = subtitleTracks > 0,
                     hasLanguages = audioTracks > 1,
                     onScores = {
@@ -1840,7 +1845,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                         showOverlay()
                     },
                     onScrubDone = { commitScrub() },
-                    onTracks = { showTracks = true },
+                    onTracks = { panel = "all" },
                     onNext = { nextEpisode() },
                     onScores = { scoresOpen = true },
                     onPip = enterPip,
@@ -1854,18 +1859,31 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
         }
 
         val sleepLeft = vm.sleepMinutesLeft(LocalNow.current * 1000)
-        if (sleepLeft != null && overlayVisible) {
+        if (sleepLeft != null && overlayVisible && panel == null) {
             SleepBadge(sleepLeft, Modifier.align(Alignment.TopEnd).padding(top = if (isTv) 34.dp else 76.dp, end = if (isTv) 56.dp else 24.dp))
         }
-    }
 
-    if (showTracks) {
-        TracksDialog(
-            vm = vm,
-            exo = exo,
-            onOpenElsewhere = { vm.openElsewhere(Screen.PlayVod(items, current, exo.currentPosition)) },
-            onDismiss = { showTracks = false },
-        )
+        val open = panel
+        AnimatedVisibility(
+            visible = open != null,
+            enter = fadeIn() + androidx.compose.animation.slideInHorizontally { it / 3 },
+            exit = fadeOut() + androidx.compose.animation.slideOutHorizontally { it / 3 },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            // Keeps showing the last panel while it slides away.
+            var shown by remember { mutableStateOf("more") }
+            if (open != null) shown = open
+            Box(Modifier.fillMaxSize()) {
+                TrackPanel(
+                    vm = vm,
+                    exo = exo,
+                    kind = shown,
+                    active = open != null,
+                    onOpenElsewhere = { vm.openElsewhere(Screen.PlayVod(items, current, exo.currentPosition)) },
+                    onDismiss = { panel = null },
+                )
+            }
+        }
     }
 }
 
@@ -1953,7 +1971,9 @@ private fun VodOverlay(
     onTogglePlay: () -> Unit,
     onSkip: (Long) -> Unit,
     onNext: () -> Unit,
-    onTracks: () -> Unit,
+    onSubtitles: () -> Unit,
+    onLanguage: () -> Unit,
+    onMore: () -> Unit,
     hasSubtitles: Boolean,
     hasLanguages: Boolean,
     onScores: () -> Unit,
@@ -2004,11 +2024,11 @@ private fun VodOverlay(
                     Spacer(Modifier.width(12.dp))
                     if (hasNext) PlayerButton(EmberIcons.Next, "Next episode", "vod:ctl:next", onClick = onNext)
                     // Subtitles and other languages, when this film or episode has them.
-                    if (hasSubtitles) PlayerButton(EmberIcons.Subtitles, "Subtitles", "vod:ctl:subs", onClick = onTracks)
-                    if (hasLanguages) PlayerButton(EmberIcons.Language, "Language", "vod:ctl:audio", onClick = onTracks)
+                    if (hasSubtitles) PlayerButton(EmberIcons.Subtitles, "Subtitles", "vod:ctl:subs", onClick = onSubtitles)
+                    if (hasLanguages) PlayerButton(EmberIcons.Language, "Language", "vod:ctl:audio", onClick = onLanguage)
                     PlayerButton(EmberIcons.Football, "Scores", "vod:ctl:scores", onClick = onScores)
                     // Picture zoom, sleep timer and the rest.
-                    PlayerButton(EmberIcons.More, null, "vod:ctl:more", onClick = onTracks)
+                    PlayerButton(EmberIcons.More, null, "vod:ctl:more", onClick = onMore)
                 }
             }
         }
@@ -2056,7 +2076,7 @@ private fun VodTouchOverlay(
                 IconCircleButton(EmberIcons.Pip, "Picture in picture", background = ControlBg, glass = true, onClick = onPip)
                 Spacer(Modifier.width(8.dp))
             }
-            IconCircleButton(EmberIcons.Subtitles, "Audio and subtitles", background = ControlBg, glass = true, onClick = onTracks)
+            IconCircleButton(EmberIcons.Subtitles, "Subtitles, language and more", background = ControlBg, glass = true, onClick = onTracks)
         }
 
         Row(
@@ -2064,7 +2084,7 @@ private fun VodTouchOverlay(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(40.dp),
         ) {
-            SkipButton("−10") { onSkip(-10_000L) }
+            SkipButton(forward = false, seconds = 10) { onSkip(-10_000L) }
             IconCircleButton(
                 if (playing) EmberIcons.Pause else EmberIcons.Play,
                 if (playing) "Pause" else "Play",
@@ -2073,7 +2093,7 @@ private fun VodTouchOverlay(
                 glass = true,
                 onClick = onTogglePlay,
             )
-            SkipButton("+10") { onSkip(10_000L) }
+            SkipButton(forward = true, seconds = 10) { onSkip(10_000L) }
         }
 
         Column(
@@ -2091,25 +2111,27 @@ private fun VodTouchOverlay(
                 enabled = duration > 0,
                 colors = SliderDefaults.colors(
                     thumbColor = Color.White,
-                    activeTrackColor = Ember.Accent,
+                    // Apple style: a white bar on a faint track.
+                    activeTrackColor = Color(0xF2FFFFFF),
                     inactiveTrackColor = Color(0x40FFFFFF),
                 ),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(formatMs(position), style = Txt.Label)
+                Text(formatMs(position), style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Text)
                 Spacer(Modifier.weight(1f))
                 if (hasNext) {
                     PillButton("Next episode", icon = EmberIcons.Next, onClick = onNext)
                     Spacer(Modifier.width(14.dp))
                 }
-                Text(if (duration > 0) "-" + formatMs(duration - position) else "", style = Txt.Label, color = Ember.Dim)
+                Text(if (duration > 0) "−" + formatMs(duration - position) else "", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Dim)
             }
         }
     }
 }
 
+/** Phones: Apple-style skip button, a circular arrow with the seconds inside, on frosted glass. */
 @Composable
-private fun SkipButton(label: String, onClick: () -> Unit) {
+private fun SkipButton(forward: Boolean, seconds: Int, onClick: () -> Unit) {
     Box(
         Modifier
             .size(56.dp)
@@ -2117,15 +2139,29 @@ private fun SkipButton(label: String, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = Txt.Label, color = Color.White)
+        Icon(
+            if (forward) EmberIcons.SkipForward else EmberIcons.SkipBack,
+            contentDescription = if (forward) "Forward $seconds seconds" else "Back $seconds seconds",
+            tint = Color.White,
+            modifier = Modifier.size(32.dp),
+        )
+        Text("$seconds", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(top = 3.dp))
     }
 }
 
+/**
+ * Apple TV style side panel over the picture: the film keeps playing while you choose.
+ * [kind] is "subs" (subtitles), "audio" (language), "more" (picture, sleep timer, other player)
+ * or "all" (phones: everything in one scrolling panel).
+ */
 @Composable
-private fun TracksDialog(vm: AppViewModel, exo: ExoPlayer, onOpenElsewhere: () -> Unit, onDismiss: () -> Unit) {
-    val audio = remember { trackOptions(exo, C.TRACK_TYPE_AUDIO) }
-    val subs = remember { trackOptions(exo, C.TRACK_TYPE_TEXT) }
-    val subtitlesOff = remember { subs.none { it.selected } }
+private fun BoxScope.TrackPanel(vm: AppViewModel, exo: ExoPlayer, kind: String, active: Boolean, onOpenElsewhere: () -> Unit, onDismiss: () -> Unit) {
+    val isTv = LocalIsTv.current
+    // Read fresh each time it opens, so the ticks match what's playing now.
+    val audio = remember(kind) { trackOptions(exo, C.TRACK_TYPE_AUDIO) }
+    val subs = remember(kind) { trackOptions(exo, C.TRACK_TYPE_TEXT) }
+    val subtitlesOff = remember(kind) { subs.none { it.selected } }
+    BackHandler(enabled = active, onBack = onDismiss)
 
     fun selectAudio(o: TrackOption) {
         val g = o.group ?: return
@@ -2148,46 +2184,66 @@ private fun TracksDialog(vm: AppViewModel, exo: ExoPlayer, onOpenElsewhere: () -
         onDismiss()
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        DialogBackdropBlur()
-        Row(
+    // Phones: tap outside the panel to close it.
+    if (!isTv) {
+        Box(
             Modifier
-                .clip(RoundedCornerShape(28.dp))
-                .background(dialogPanelColor())
-                .padding(28.dp)
-        ) {
-            Column(Modifier.width(300.dp)) {
-                SheetSection("Audio")
-                if (audio.isEmpty()) {
-                    Text("Only one audio track", style = Txt.Body, color = Ember.Faint)
-                }
-                audio.forEachIndexed { i, o ->
-                    TrackRow(o.label, o.selected, autoFocus = o.selected || (i == 0 && audio.none { it.selected })) { selectAudio(o) }
-                }
+                .fillMaxSize()
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
+        )
+    }
+    val all = kind == "all"
+    Column(
+        Modifier
+            .align(Alignment.CenterEnd)
+            .fillMaxHeight()
+            .padding(if (isTv) 28.dp else 12.dp)
+            .width(if (isTv) 340.dp else 300.dp)
+            .glassSurface(RoundedCornerShape(26.dp), Color(0xE0141418))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 20.dp)
+    ) {
+        if (kind == "subs" || (all && subs.isNotEmpty())) {
+            SheetSection("Subtitles")
+            TrackRow("Off", subtitlesOff, autoFocus = subtitlesOff) { selectSubtitle(null) }
+            subs.forEach { o ->
+                TrackRow(o.label, o.selected && !subtitlesOff, autoFocus = o.selected && !subtitlesOff) { selectSubtitle(o) }
             }
-            Spacer(Modifier.width(28.dp))
-            Column(Modifier.width(300.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
-                SheetSection("Subtitles")
-                TrackRow("Off", subtitlesOff, autoFocus = audio.isEmpty()) { selectSubtitle(null) }
-                subs.forEach { o ->
-                    TrackRow(o.label, o.selected && !subtitlesOff, autoFocus = false) { selectSubtitle(o) }
-                }
-                Spacer(Modifier.height(18.dp))
-                SheetSection("Picture")
-                ZapAction(EmberIcons.Zoom, vm.pictureModeLabel, "Change") { vm.cyclePicture() }
-                Spacer(Modifier.height(18.dp))
-                SheetSection("Sleep timer")
-                val left = vm.sleepMinutesLeft()
-                ZapAction(EmberIcons.Moon, if (left == null) "Off" else "Stops in $left min", "Change") { vm.cycleSleepTimer() }
-                Spacer(Modifier.height(18.dp))
-                SheetSection("Won't play properly?")
-                ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
-                    onDismiss()
-                    onOpenElsewhere()
-                }
+            if (subs.isEmpty()) PanelNote("This one doesn't come with subtitles.")
+            if (all) Spacer(Modifier.height(18.dp))
+        }
+        if (kind == "audio" || (all && audio.size > 1)) {
+            SheetSection("Language")
+            audio.forEachIndexed { i, o ->
+                TrackRow(o.label, o.selected, autoFocus = kind == "audio" && (o.selected || (i == 0 && audio.none { it.selected }))) { selectAudio(o) }
+            }
+            if (audio.size <= 1) PanelNote("This one only comes in one language.")
+            if (all) Spacer(Modifier.height(18.dp))
+        }
+        if (kind == "more" || all) {
+            SheetSection("Picture")
+            PICTURE_MODES.forEachIndexed { i, name ->
+                TrackRow(name, vm.pictureMode == i, autoFocus = kind == "more" && vm.pictureMode == i) { vm.setPicture(i, announce = false) }
+            }
+            PanelNote(if (isTv) "Zoom fills the screen when there are black bars." else "Zoom fills the screen when there are black bars. You can also pinch the picture.")
+            Spacer(Modifier.height(18.dp))
+            SheetSection("Sleep timer")
+            val left = vm.sleepMinutesLeft()
+            ZapAction(EmberIcons.Moon, if (left == null) "Off" else "Stops in $left min", "Change") { vm.cycleSleepTimer() }
+            Spacer(Modifier.height(18.dp))
+            SheetSection("Won't play properly?")
+            ZapAction(EmberIcons.OpenExternal, "Open in another player", "") {
+                onDismiss()
+                onOpenElsewhere()
             }
         }
     }
+}
+
+@Composable
+private fun PanelNote(text: String) {
+    Text(text, style = Txt.Caption, color = Ember.Faint, modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 4.dp))
 }
 
 @Composable
@@ -2204,7 +2260,7 @@ private fun TrackRow(label: String, selected: Boolean, autoFocus: Boolean, onCli
         Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (selected) "✓" else "",
-                color = if (focused) Color.Black else Ember.Accent,
+                color = if (focused) Color.Black else Ember.Text,
                 modifier = Modifier.width(24.dp),
             )
             Text(

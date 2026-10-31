@@ -57,7 +57,7 @@ fun SeriesSection(vm: AppViewModel) {
     val section = vm.series
     val cats by rememberLoad(repo, vm.reloadToken) { repo.seriesCategories() }
     when (val c = cats) {
-        is LoadResult.Loading -> LoadingView(text = "Loading series…")
+        is LoadResult.Loading -> SkeletonPage(posters = true)
         is LoadResult.Err -> ErrorView(c.message) { vm.reload() }
         is LoadResult.Ok -> {
             val categories = remember(c.value) {
@@ -88,7 +88,7 @@ private fun SeriesGrid(vm: AppViewModel, repo: Repository, categoryId: String, m
         favSnapshot?.map { it.toSeries() } ?: repo.series(categoryId)
     }
     when (val r = load) {
-        is LoadResult.Loading -> LoadingView(modifier)
+        is LoadResult.Loading -> SkeletonPosters(modifier)
         is LoadResult.Err -> ErrorView(r.message, modifier) { vm.reload() }
         is LoadResult.Ok -> {
             val list = r.value

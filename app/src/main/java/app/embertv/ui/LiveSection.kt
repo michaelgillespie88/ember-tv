@@ -48,7 +48,7 @@ fun LiveSection(vm: AppViewModel) {
     val section = vm.live
     val cats by rememberLoad(repo, vm.reloadToken) { repo.liveCategories() }
     when (val c = cats) {
-        is LoadResult.Loading -> LoadingView(text = "Loading channels…")
+        is LoadResult.Loading -> SkeletonPage(posters = false)
         is LoadResult.Err -> ErrorView(c.message) { vm.reload() }
         is LoadResult.Ok -> {
             val categories = remember(c.value) {
@@ -94,7 +94,7 @@ private fun ChannelList(
         favSnapshot?.let { favs -> repo.resolveAll(favs.map { it.toChannel() }) } ?: repo.channels(categoryId)
     }
     when (val r = load) {
-        is LoadResult.Loading -> LoadingView(modifier)
+        is LoadResult.Loading -> SkeletonRows(modifier)
         is LoadResult.Err -> ErrorView(r.message, modifier) { vm.reload() }
         is LoadResult.Ok -> {
             val channels = r.value

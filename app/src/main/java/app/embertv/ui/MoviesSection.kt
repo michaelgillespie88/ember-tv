@@ -47,7 +47,7 @@ fun MoviesSection(vm: AppViewModel) {
     val section = vm.movies
     val cats by rememberLoad(repo, vm.reloadToken) { repo.movieCategories() }
     when (val c = cats) {
-        is LoadResult.Loading -> LoadingView(text = "Loading movies…")
+        is LoadResult.Loading -> SkeletonPage(posters = true)
         is LoadResult.Err -> ErrorView(c.message) { vm.reload() }
         is LoadResult.Ok -> {
             val categories = remember(c.value) {
@@ -78,7 +78,7 @@ private fun MovieGrid(vm: AppViewModel, repo: Repository, categoryId: String, mo
         favSnapshot?.map { it.toMovie() } ?: repo.movies(categoryId)
     }
     when (val r = load) {
-        is LoadResult.Loading -> LoadingView(modifier)
+        is LoadResult.Loading -> SkeletonPosters(modifier)
         is LoadResult.Err -> ErrorView(r.message, modifier) { vm.reload() }
         is LoadResult.Ok -> {
             val movies = r.value

@@ -86,7 +86,7 @@ fun GuideSection(vm: AppViewModel) {
     val section = vm.guide
     val cats by rememberLoad(repo, vm.reloadToken) { repo.liveCategories() }
     when (val c = cats) {
-        is LoadResult.Loading -> LoadingView(text = "Loading guide…")
+        is LoadResult.Loading -> SkeletonPage(posters = false)
         is LoadResult.Err -> ErrorView(c.message) { vm.reload() }
         is LoadResult.Ok -> {
             val categories = remember(c.value) {
@@ -166,7 +166,7 @@ private fun GuideGrid(
             Spacer(Modifier.height(8.dp))
 
             when (val r = load) {
-                is LoadResult.Loading -> LoadingView(Modifier.weight(1f))
+                is LoadResult.Loading -> SkeletonRows(Modifier.weight(1f))
                 is LoadResult.Err -> ErrorView(r.message, Modifier.weight(1f)) { vm.reload() }
                 is LoadResult.Ok -> Row(Modifier.fillMaxWidth().weight(1f)) {
                     // Channel groups down the left, like TiviMate, in an Apple TV style frosted sidebar.

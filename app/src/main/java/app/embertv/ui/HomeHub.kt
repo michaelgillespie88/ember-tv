@@ -451,7 +451,7 @@ fun HomeSection(vm: AppViewModel) {
     val repo = vm.repo ?: return
     val feedState by rememberHomeFeed(vm, repo)
     when (val f = feedState) {
-        is LoadResult.Loading -> LoadingView(text = "Getting things ready…")
+        is LoadResult.Loading -> SkeletonHome()
         is LoadResult.Err -> ErrorView(f.message) { vm.reload() }
         is LoadResult.Ok -> {
             val feed = f.value
@@ -542,7 +542,7 @@ fun PhoneHomeTab(vm: AppViewModel) {
     val feedState by rememberHomeFeed(vm, repo)
     val pad = LocalContentPadding.current
     when (val f = feedState) {
-        is LoadResult.Loading -> LoadingView(text = "Getting things ready…")
+        is LoadResult.Loading -> SkeletonHome()
         is LoadResult.Err -> ErrorView(f.message) { vm.reload() }
         is LoadResult.Ok -> {
             val feed = f.value
