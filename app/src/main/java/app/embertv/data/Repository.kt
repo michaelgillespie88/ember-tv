@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.sync.withLock
 
 /**
  * In-memory cache in front of the Xtream client. Call it from the main thread only:
@@ -129,9 +130,15 @@ class Repository(val client: XtreamClient) {
     suspend fun movieCategories(): List<Category> = rawMovieCategories().filter { filter(ContentType.MOVIE, it.id) }
     suspend fun seriesCategories(): List<Category> = rawSeriesCategories().filter { filter(ContentType.SERIES, it.id) }
 
-    private suspend fun rawAllChannels(): List<Channel> = allLive ?: client.channels(null).also { allLive = it }
-    private suspend fun rawAllMovies(): List<Movie> = allMovies ?: client.movies(null).also { allMovies = it }
-    private suspend fun rawAllSeries(): List<Series> = allSeries ?: client.series(null).also { allSeries = it }
+    // The full lists are big. If several parts of the app ask at once (Home, search, a film's
+    // qualities), they wait for the one download instead of each starting another.
+    private val liveGate = kotlinx.coroutines.sync.Mutex()
+    private val moviesGate = kotlinx.coroutines.sync.Mutex()
+    private val seriesGate = kotlinx.coroutines.sync.Mutex()
+
+    private suspend fun rawAllChannels(): List<Channel> = allLive ?: liveGate.withLock { allLive ?: client.channels(null).also { allLive = it } }
+    private suspend fun rawAllMovies(): List<Movie> = allMovies ?: moviesGate.withLock { allMovies ?: client.movies(null).also { allMovies = it } }
+    private suspend fun rawAllSeries(): List<Series> = allSeries ?: seriesGate.withLock { allSeries ?: client.series(null).also { allSeries = it } }
 
     /** Channels the profile has hidden. The cached lists keep them; only what's handed out leaves them out. */
     var hiddenChannels: Set<Int> = emptySet()

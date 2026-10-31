@@ -331,6 +331,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             throw e
         } catch (e: Exception) {
             return
+        } catch (e: OutOfMemoryError) {
+            return
         }
         checkedMovies += m.streamId
         if (found.size > 1) foundVersions["m:${m.streamId}"] = found
@@ -344,6 +346,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            return
+        } catch (e: OutOfMemoryError) {
             return
         }
         if (found.size > 1) foundVersions["s:${s.seriesId}"] = found
@@ -1199,15 +1203,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val id = last.substringAfter(':').toIntOrNull() ?: return null to emptyList()
         return try {
             if (last.startsWith("m:")) {
+                // Only from lists already loaded: Home shouldn't download the whole library for this.
                 val movie = r.loadedMovies().firstOrNull { m -> m.streamId == id || m.versions.any { it.streamId == id } }
-                    ?: r.allMovies().firstOrNull { m -> m.streamId == id || m.versions.any { it.streamId == id } }
                     ?: return null to emptyList()
                 val extras = try { movieExtras(movie, r.peekMovieInfo(movie.streamId)) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
                 val picks = moreLikeThis(movie, extras).filter { it.streamId != movie.streamId && !movieWatched(it) }.take(20)
                 Versions.cleanTitle(movie.name) to picks
             } else {
                 val show = r.loadedSeries().firstOrNull { s -> s.seriesId == id || s.versions.any { it.seriesId == id } }
-                    ?: r.allSeries().firstOrNull { s -> s.seriesId == id || s.versions.any { it.seriesId == id } }
                     ?: return null to emptyList()
                 val extras = try { seriesExtras(show, r.peekSeriesInfo(show.seriesId)) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
                 val picks = moreLikeThis(show, extras).filter { it.seriesId != show.seriesId }.take(20)
@@ -1712,10 +1715,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun playMovie(m: Movie, fromStart: Boolean) {
         // Still looking for other qualities: finish that first, so the choice is always offered.
         if (mergeVersions && m.streamId !in checkedMovies) {
+            // Give the check a few seconds at most: on a big library the full film list can take a
+            // while, and Play should never just sit there. It plays with what's known so far.
             notify("Checking for other qualities…")
+            checkedMovies += m.streamId
+            // The check carries on in the background if it runs out of time, ready for next time.
+            val check = viewModelScope.launch { loadVersions(m) }
             viewModelScope.launch {
-                loadVersions(m)
-                checkedMovies += m.streamId
+                kotlinx.coroutines.withTimeoutOrNull(VERSION_CHECK_MS) { check.join() }
                 playMovie(m, fromStart)
             }
             return
@@ -2438,3 +2445,6 @@ val HOME_ROWS = listOf(
     "movies" to "Film categories",
     "series" to "Series categories",
 )
+
+/** The longest Play waits to find a film's other qualities before playing anyway. */
+private const val VERSION_CHECK_MS = 4_000L
