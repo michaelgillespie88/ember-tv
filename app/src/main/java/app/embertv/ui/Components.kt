@@ -117,6 +117,40 @@ fun <T> rememberLoad(vararg keys: Any?, block: suspend () -> T): State<LoadResul
         }
     }
 
+/**
+ * Like [rememberLoad], but when only [quiet] changes (a background update) it keeps showing what it
+ * has while it fetches, and swaps the new result in without a loading screen in between.
+ */
+@Composable
+fun <T> rememberQuietLoad(quiet: Int, vararg keys: Any?, block: suspend () -> T): State<LoadResult<T>> {
+    val state = remember(*keys) { mutableStateOf<LoadResult<T>>(LoadResult.Loading) }
+    LaunchedEffect(*keys, quiet) {
+        val had = state.value is LoadResult.Ok
+        if (!had) state.value = LoadResult.Loading
+        val result = try {
+            LoadResult.Ok(
+                try {
+                    block()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    delay(2_000)
+                    block()
+                }
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            LoadResult.Err(e.message ?: "Something went wrong.")
+        } catch (e: OutOfMemoryError) {
+            LoadResult.Err("That list is too big for this device to load all at once.")
+        }
+        // A failed background update keeps the list you were looking at.
+        if (result is LoadResult.Ok || !had) state.value = result
+    }
+    return state
+}
+
 // ---------- Remote-friendly clicking ----------
 
 private class PressState {

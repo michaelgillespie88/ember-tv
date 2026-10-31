@@ -73,6 +73,52 @@ class Repository(val client: XtreamClient) {
         fullEpg.clear()
     }
 
+    /** New films and series found by [refreshFilmsAndSeries]. -1 when there was nothing to compare with. */
+    class Fresh(val newMovies: Int, val newSeries: Int)
+
+    /**
+     * Fetches the latest film and series lists and swaps them in, so new additions appear without
+     * signing in again or pressing Refresh. Lists that haven't been opened yet are just dropped, to
+     * be fetched fresh when they are. Channels and the guide are left alone.
+     */
+    suspend fun refreshFilmsAndSeries(): Fresh {
+        // Fetch everything first and only then swap, so a failure part-way leaves the old lists in place.
+        val oldMovies = allMovies
+        val oldSeries = allSeries
+        val newMovieCats = if (movieCats != null) client.movieCategories() else null
+        val newMovies = if (oldMovies != null) client.movies(null) else null
+        val newSeriesCats = if (seriesCats != null) client.seriesCategories() else null
+        val newSeries = if (oldSeries != null) client.series(null) else null
+
+        val (movieCount, seriesCount) = withContext(Dispatchers.Default) {
+            val m = if (oldMovies != null && newMovies != null) {
+                val had = oldMovies.mapTo(HashSet(oldMovies.size)) { it.streamId }
+                newMovies.count { it.streamId !in had }
+            } else -1
+            val s = if (oldSeries != null && newSeries != null) {
+                val had = oldSeries.mapTo(HashSet(oldSeries.size)) { it.seriesId }
+                newSeries.count { it.seriesId !in had }
+            } else -1
+            m to s
+        }
+
+        movieCats = newMovieCats
+        allMovies = newMovies
+        moviesByCat.clear()
+        mergedMovies.clear()
+        movieIndex = null
+        movieSearch = null
+        seriesCats = newSeriesCats
+        allSeries = newSeries
+        seriesByCat.clear()
+        mergedSeries.clear()
+        seriesIndex = null
+        seriesSearch = null
+        // Episode lists too, so a show's new episodes turn up.
+        seriesInfos.clear()
+        return Fresh(movieCount, seriesCount)
+    }
+
     // Everything the provider offers, for managing categories.
     suspend fun rawLiveCategories(): List<Category> = liveCats ?: client.liveCategories().also { liveCats = it }
     suspend fun rawMovieCategories(): List<Category> = movieCats ?: client.movieCategories().also { movieCats = it }

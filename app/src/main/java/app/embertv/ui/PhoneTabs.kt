@@ -83,7 +83,9 @@ private fun CategorySection(
     content: @Composable (repo: Repository, categoryId: String) -> Unit,
 ) {
     val repo = vm.repo ?: return
-    val cats by rememberLoad(repo, vm.reloadToken, allLabel) { load(repo) }
+    // Films and series categories follow background updates; channels don't need to.
+    val quiet = if (allLabel == "All channels") 0 else vm.vodVersion
+    val cats by rememberQuietLoad(quiet, repo, vm.reloadToken, allLabel) { load(repo) }
     when (val c = cats) {
         is LoadResult.Loading -> SkeletonPhonePage(posters = allLabel == "All movies" || allLabel == "All series")
         is LoadResult.Err -> ErrorView(c.message) { vm.reload() }
@@ -557,7 +559,7 @@ private fun PhoneGuideRow(
 fun PhoneMoviesTab(vm: AppViewModel) {
     CategorySection(vm, vm.movies, "All movies", "Loading movies…", { it.movieCategories() }) { repo, categoryId ->
         val favSnapshot = if (categoryId == FAVOURITES) vm.favourites.filter { it.type == ContentType.MOVIE } else null
-        val load by rememberLoad(repo, categoryId, vm.reloadToken, favSnapshot) {
+        val load by rememberQuietLoad(vm.vodVersion, repo, categoryId, vm.reloadToken, favSnapshot) {
             favSnapshot?.map { it.toMovie() } ?: repo.movies(categoryId)
         }
         when (val r = load) {
@@ -603,7 +605,7 @@ fun PhoneMoviesTab(vm: AppViewModel) {
 fun PhoneSeriesTab(vm: AppViewModel) {
     CategorySection(vm, vm.series, "All series", "Loading series…", { it.seriesCategories() }) { repo, categoryId ->
         val favSnapshot = if (categoryId == FAVOURITES) vm.favourites.filter { it.type == ContentType.SERIES } else null
-        val load by rememberLoad(repo, categoryId, vm.reloadToken, favSnapshot) {
+        val load by rememberQuietLoad(vm.vodVersion, repo, categoryId, vm.reloadToken, favSnapshot) {
             favSnapshot?.map { it.toSeries() } ?: repo.series(categoryId)
         }
         when (val r = load) {

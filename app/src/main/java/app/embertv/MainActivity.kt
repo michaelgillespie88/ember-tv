@@ -56,6 +56,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        // Back after a while: pick up any new films and series.
+        vm.appVisible = true
+        vm.updateFilmsAndSeriesIfDue()
         if (isTv) {
             vm.remoteKeys = { key -> pressFromPhone(key) }
             vm.startTvLink(tvName())
@@ -64,6 +67,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
+        vm.appVisible = false
         if (isTv) {
             vm.stopTvLink()
             vm.remoteKeys = null

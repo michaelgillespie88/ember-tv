@@ -55,7 +55,7 @@ import app.embertv.data.toSeries
 fun SeriesSection(vm: AppViewModel) {
     val repo = vm.repo ?: return
     val section = vm.series
-    val cats by rememberLoad(repo, vm.reloadToken) { repo.seriesCategories() }
+    val cats by rememberQuietLoad(vm.vodVersion, repo, vm.reloadToken) { repo.seriesCategories() }
     when (val c = cats) {
         is LoadResult.Loading -> SkeletonPage(posters = true)
         is LoadResult.Err -> ErrorView(c.message) { vm.reload() }
@@ -84,7 +84,7 @@ fun SeriesSection(vm: AppViewModel) {
 @Composable
 private fun SeriesGrid(vm: AppViewModel, repo: Repository, categoryId: String, modifier: Modifier) {
     val favSnapshot = if (categoryId == FAVOURITES) vm.favourites.filter { it.type == ContentType.SERIES } else null
-    val load by rememberLoad(repo, categoryId, vm.reloadToken, favSnapshot) {
+    val load by rememberQuietLoad(vm.vodVersion, repo, categoryId, vm.reloadToken, favSnapshot) {
         favSnapshot?.map { it.toSeries() } ?: repo.series(categoryId)
     }
     when (val r = load) {

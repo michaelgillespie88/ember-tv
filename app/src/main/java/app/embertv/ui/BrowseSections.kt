@@ -619,7 +619,7 @@ fun SettingsSection(vm: AppViewModel) {
                 "Updates install straight from the app",
                 focusKey = "set:update",
             ) { vm.checkForUpdates(manual = true) }
-            SettingRow("Refresh channels and guide", "", "Reloads everything from your provider", focusKey = "set:refresh") {
+            SettingRow("Refresh everything now", "", "Films and series already update by themselves every few hours. This reloads channels and the guide too", focusKey = "set:refresh") {
                 vm.reload()
                 vm.refreshAccountInfo()
                 vm.notify("Refreshing from your provider…")

@@ -498,6 +498,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun startSession(acc: Account, info: AccountInfo?) {
         account = acc
         repo = Repository(XtreamClient(acc, userAgent)).also { it.mergeVersions = mergeVersions }
+        vodCheckedAt = System.currentTimeMillis()
         applyCategoryFilter()
         // Start on Home's rows straight away, whichever page is shown first.
         ensureHome()
@@ -773,6 +774,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun reload() {
         repo?.clearCaches()
+        vodCheckedAt = System.currentTimeMillis()
         reloadToken++
     }
 
@@ -1107,6 +1109,77 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var homeFor: Pair<Repository, Int>? = null
 
     /** Loads Home if it hasn't been for this sign-in and refresh yet (or the last try failed). */
+    // ---- Keeping films and series up to date ----
+
+    /** Goes up each time the film and series lists are updated in the background; screens re-read quietly. */
+    var vodVersion by mutableIntStateOf(0)
+        private set
+
+    /** Whether the app is on screen. Background updates only run while it is. */
+    var appVisible = true
+
+    private var vodCheckedAt = System.currentTimeMillis()
+    private var vodUpdating = false
+
+    /**
+     * Fetches the latest films and series every few hours while the app is open, and when it comes
+     * back after a while (Fire TV keeps it running for days), so new additions turn up by themselves.
+     */
+    fun updateFilmsAndSeriesIfDue(force: Boolean = false) {
+        val r = repo ?: return
+        if (vodUpdating) return
+        val now = System.currentTimeMillis()
+        if (!force && now - vodCheckedAt < VOD_UPDATE_EVERY_MS) return
+        vodUpdating = true
+        viewModelScope.launch {
+            try {
+                val fresh = r.refreshFilmsAndSeries()
+                if (repo !== r) return@launch
+                vodCheckedAt = System.currentTimeMillis()
+                vodVersion++
+                val films = fresh.newMovies.coerceAtLeast(0)
+                val shows = fresh.newSeries.coerceAtLeast(0)
+                if (films + shows > 0) {
+                    refreshHomeQuietly()
+                    // Not in the middle of something: a player or a detail page.
+                    if (stack.lastOrNull() is Screen.Home) {
+                        val parts = listOfNotNull(
+                            if (films > 0) "$films new ${if (films == 1) "film" else "films"}" else null,
+                            if (shows > 0) "$shows new series" else null,
+                        )
+                        notify(parts.joinToString(" and ") + " added")
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Try again in half an hour rather than waiting the full gap.
+                vodCheckedAt = System.currentTimeMillis() - VOD_UPDATE_EVERY_MS + 30 * 60_000L
+            } catch (e: OutOfMemoryError) {
+                vodCheckedAt = System.currentTimeMillis()
+            } finally {
+                vodUpdating = false
+            }
+        }
+    }
+
+    /** Re-builds Home in the background and swaps it in, keeping what's on screen meanwhile. */
+    private fun refreshHomeQuietly() {
+        val r = repo ?: return
+        if (homeFeed !is LoadResult.Ok) return
+        viewModelScope.launch {
+            try {
+                val feed = loadHomeFeed(r)
+                if (repo === r) homeFeed = LoadResult.Ok(feed)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Keep the Home that's showing.
+            } catch (e: OutOfMemoryError) {
+            }
+        }
+    }
+
     fun ensureHome() {
         val r = repo ?: return
         val key = r to reloadToken
@@ -2141,8 +2214,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         pickingProfile = profiles.size > 1 || start.locked
         val saved = prefs.account
         if (saved != null) startSession(saved, null)
+        // Check for new films and series now and then while the app is on screen.
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(15 * 60_000L)
+                if (appVisible) updateFilmsAndSeriesIfDue()
+            }
+        }
     }
 }
 
 /** Names for the picture zoom modes, in order. */
 val PICTURE_MODES = listOf("Fit", "Zoom", "Stretch")
+
+/** How often films and series are checked for new additions. */
+private const val VOD_UPDATE_EVERY_MS = 3 * 60 * 60_000L

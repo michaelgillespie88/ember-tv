@@ -45,7 +45,7 @@ import app.embertv.data.toMovie
 fun MoviesSection(vm: AppViewModel) {
     val repo = vm.repo ?: return
     val section = vm.movies
-    val cats by rememberLoad(repo, vm.reloadToken) { repo.movieCategories() }
+    val cats by rememberQuietLoad(vm.vodVersion, repo, vm.reloadToken) { repo.movieCategories() }
     when (val c = cats) {
         is LoadResult.Loading -> SkeletonPage(posters = true)
         is LoadResult.Err -> ErrorView(c.message) { vm.reload() }
@@ -74,7 +74,7 @@ fun MoviesSection(vm: AppViewModel) {
 @Composable
 private fun MovieGrid(vm: AppViewModel, repo: Repository, categoryId: String, modifier: Modifier) {
     val favSnapshot = if (categoryId == FAVOURITES) vm.favourites.filter { it.type == ContentType.MOVIE } else null
-    val load by rememberLoad(repo, categoryId, vm.reloadToken, favSnapshot) {
+    val load by rememberQuietLoad(vm.vodVersion, repo, categoryId, vm.reloadToken, favSnapshot) {
         favSnapshot?.map { it.toMovie() } ?: repo.movies(categoryId)
     }
     when (val r = load) {
