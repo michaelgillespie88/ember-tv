@@ -1682,6 +1682,8 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // Same film or episode in another quality: nothing has finished or started.
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) return
                 val previous = current
                 current = exo.currentMediaItemIndex
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
@@ -1789,6 +1791,32 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
     val counting = vm.autoplayNext && !upNextCancelled && playing && remainingMs in 1..UP_NEXT_MS
     val upNext = hasNextItem && duration > 120_000 && error == null && !vm.inPip && (counting || atEnd)
     BackHandler(enabled = upNext && counting) { upNextCancelled = true }
+
+    // ---- Quality: switch to another copy (4K, FHD, HD) and carry on from the same moment ----
+    val qualityChoices by produceState(emptyList<AppViewModel.QualityChoice>(), current) { value = vm.qualityChoicesFor(items[current]) }
+    // Where each item plays from now (changes when a different quality is picked).
+    val urls = remember { items.map { it.url }.toMutableList() }
+    var playingVersion by remember(current) { mutableStateOf<Int?>(null) }
+    val activeVersion = playingVersion ?: (items[current].seriesId ?: items[current].contentId)
+
+    fun switchQuality(c: AppViewModel.QualityChoice) {
+        if (c.versionId == activeVersion) return
+        scope.launch {
+            val found = vm.urlsFor(c, items, current)
+            if (found == null) {
+                vm.notify("Couldn't find this one in ${c.quality.title}")
+                return@launch
+            }
+            for ((i, u) in found) urls[i] = u
+            val at = exo.currentPosition
+            exo.setMediaItems(items.mapIndexed { i, it -> MediaItem.Builder().setUri(urls[i]).setMediaId(it.key).build() }, current, at)
+            exo.prepare()
+            // Carry on watching in the new quality.
+            exo.playWhenReady = true
+            playingVersion = c.versionId
+            vm.notify("Playing in ${c.quality.title}")
+        }
+    }
 
     fun skipBy(deltaMs: Long) {
         val d = exo.duration
@@ -1932,6 +1960,9 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                     onSubtitles = { panel = "subs" },
                     onLanguage = { panel = "audio" },
                     onMore = { panel = "more" },
+                    qualityBadge = qualityChoices.firstOrNull { it.versionId == activeVersion }?.quality?.badge?.ifEmpty { "SD" }
+                        ?: if (qualityChoices.isNotEmpty()) "HD" else null,
+                    onQuality = { panel = "quality" },
                     hasSubtitles = subtitleTracks > 0,
                     hasLanguages = audioTracks > 1,
                     onScores = {
@@ -2014,6 +2045,12 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                     exo = exo,
                     kind = shown,
                     active = open != null,
+                    qualities = qualityChoices,
+                    activeQuality = activeVersion,
+                    onQuality = { c ->
+                        panel = null
+                        switchQuality(c)
+                    },
                     onOpenElsewhere = { vm.openElsewhere(Screen.PlayVod(items, current, exo.currentPosition)) },
                     onDismiss = { panel = null },
                 )
@@ -2033,6 +2070,7 @@ private fun PlayerButton(
     focusKey: String,
     requester: FocusRequester? = null,
     badge: String? = null,
+    text: String? = null,
     onClick: () -> Unit,
 ) {
     FocusBox(
@@ -2052,7 +2090,10 @@ private fun PlayerButton(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            Box(contentAlignment = Alignment.Center) {
+            if (text != null) {
+                // A word instead of an icon, like "4K" for the quality button.
+                Text(text, style = Txt.Label.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp), color = tint, maxLines = 1)
+            } else Box(contentAlignment = Alignment.Center) {
                 Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(if (badge != null) 28.dp else 22.dp))
                 // The seconds inside the skip arrows, as on Apple TV.
                 if (badge != null) Text(badge, fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = tint, modifier = Modifier.padding(top = 3.dp))
@@ -2109,6 +2150,8 @@ private fun VodOverlay(
     onSubtitles: () -> Unit,
     onLanguage: () -> Unit,
     onMore: () -> Unit,
+    qualityBadge: String?,
+    onQuality: () -> Unit,
     hasSubtitles: Boolean,
     hasLanguages: Boolean,
     onScores: () -> Unit,
@@ -2161,9 +2204,11 @@ private fun VodOverlay(
                     PlayerButton(EmberIcons.SkipForward, null, "vod:ctl:fwd", badge = "30") { onSkip(30_000L) }
                     Spacer(Modifier.width(12.dp))
                     if (hasNext) PlayerButton(EmberIcons.Next, "Next episode", "vod:ctl:next", onClick = onNext)
-                    // Subtitles and other languages, when this film or episode has them.
-                    if (hasSubtitles) PlayerButton(EmberIcons.Subtitles, "Subtitles", "vod:ctl:subs", onClick = onSubtitles)
-                    if (hasLanguages) PlayerButton(EmberIcons.Language, "Language", "vod:ctl:audio", onClick = onLanguage)
+                    // Subtitles, other languages and other qualities, when this film or episode has them:
+                    // round buttons, as on Apple TV, so everything fits.
+                    if (hasSubtitles) PlayerButton(EmberIcons.Subtitles, null, "vod:ctl:subs", onClick = onSubtitles)
+                    if (hasLanguages) PlayerButton(EmberIcons.Language, null, "vod:ctl:audio", onClick = onLanguage)
+                    if (qualityBadge != null) PlayerButton(EmberIcons.Zoom, null, "vod:ctl:quality", text = qualityBadge, onClick = onQuality)
                     PlayerButton(EmberIcons.Football, "Scores", "vod:ctl:scores", onClick = onScores)
                     // Picture zoom, sleep timer and the rest.
                     PlayerButton(EmberIcons.More, null, "vod:ctl:more", onClick = onMore)
@@ -2353,7 +2398,17 @@ private fun UpNextCard(next: VodItem, secondsLeft: Int?, onPlay: () -> Unit, onC
  * or "all" (phones: everything in one scrolling panel).
  */
 @Composable
-private fun BoxScope.TrackPanel(vm: AppViewModel, exo: ExoPlayer, kind: String, active: Boolean, onOpenElsewhere: () -> Unit, onDismiss: () -> Unit) {
+private fun BoxScope.TrackPanel(
+    vm: AppViewModel,
+    exo: ExoPlayer,
+    kind: String,
+    active: Boolean,
+    qualities: List<AppViewModel.QualityChoice> = emptyList(),
+    activeQuality: Int? = null,
+    onQuality: (AppViewModel.QualityChoice) -> Unit = {},
+    onOpenElsewhere: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val isTv = LocalIsTv.current
     // Read fresh each time it opens, so the ticks match what's playing now.
     val audio = remember(kind) { trackOptions(exo, C.TRACK_TYPE_AUDIO) }
@@ -2384,6 +2439,14 @@ private fun BoxScope.TrackPanel(vm: AppViewModel, exo: ExoPlayer, kind: String, 
 
     val all = kind == "all"
     SidePanel(onDismiss) {
+        if (kind == "quality" || (all && qualities.size > 1)) {
+            SheetSection("Quality")
+            qualities.forEach { c ->
+                TrackRow(c.label, c.versionId == activeQuality, autoFocus = kind == "quality" && c.versionId == activeQuality) { onQuality(c) }
+            }
+            PanelNote("Carries on from the same moment.")
+            Spacer(Modifier.height(18.dp))
+        }
         if (kind == "subs" || (all && subs.isNotEmpty())) {
             SheetSection("Subtitles")
             TrackRow("Off", subtitlesOff, autoFocus = subtitlesOff) { selectSubtitle(null) }

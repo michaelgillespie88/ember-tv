@@ -353,6 +353,76 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (found.size > 1) foundVersions["s:${s.seriesId}"] = found
     }
 
+    // ---- Changing quality while watching ----
+
+    /** A quality the film or show playing also comes in. [versionId] is the film's or show's id. */
+    class QualityChoice(val quality: Quality, val label: String, val versionId: Int, val ext: String)
+
+    @Suppress("UNCHECKED_CAST")
+    private fun knownMovieVersions(id: Int): List<Movie> {
+        foundVersions.values.firstOrNull { l -> l.any { (it as? Movie)?.streamId == id } }?.let { return it.filterIsInstance<Movie>() }
+        val m = repo?.loadedMovies()?.firstOrNull { it.streamId == id || it.versions.any { v -> v.streamId == id } } ?: return emptyList()
+        return versionsOf(m).ifEmpty { listOf(m) }
+    }
+
+    private fun knownSeriesVersions(id: Int): List<Series> {
+        foundVersions.values.firstOrNull { l -> l.any { (it as? Series)?.seriesId == id } }?.let { return it.filterIsInstance<Series>() }
+        val s = repo?.loadedSeries()?.firstOrNull { it.seriesId == id || it.versions.any { v -> v.seriesId == id } } ?: return emptyList()
+        return versionsOf(s).ifEmpty { listOf(s) }
+    }
+
+    /** The other qualities of what's playing, best first; empty when there's only one. */
+    suspend fun qualityChoicesFor(item: VodItem): List<QualityChoice> {
+        if (!mergeVersions || item.key.startsWith(CATCHUP_PREFIX)) return emptyList()
+        val sid = item.seriesId
+        if (sid == null) {
+            val id = item.contentId.takeIf { it > 0 } ?: return emptyList()
+            var list = knownMovieVersions(id)
+            if (list.size <= 1) {
+                val m = repo?.loadedMovies()?.firstOrNull { it.streamId == id } ?: return emptyList()
+                kotlinx.coroutines.withTimeoutOrNull(VERSION_CHECK_MS) { loadVersions(m) }
+                list = knownMovieVersions(id)
+            }
+            if (list.size <= 1) return emptyList()
+            return list.map { QualityChoice(it.quality, (listOf(it.quality.title) + Versions.extras(it.name)).joinToString(" · "), it.streamId, it.ext) }
+        }
+        var list = knownSeriesVersions(sid)
+        if (list.size <= 1) {
+            val s = repo?.loadedSeries()?.firstOrNull { it.seriesId == sid } ?: return emptyList()
+            kotlinx.coroutines.withTimeoutOrNull(VERSION_CHECK_MS) { loadVersions(s) }
+            list = knownSeriesVersions(sid)
+        }
+        if (list.size <= 1) return emptyList()
+        return list.map { QualityChoice(it.quality, (listOf(it.quality.title) + Versions.extras(it.name)).joinToString(" · "), it.seriesId, "") }
+    }
+
+    /**
+     * Where each item from [from] onwards plays in quality [c]: the film's other copy, or for a show
+     * the same season and episode in the other copy. Null if it can't be worked out.
+     */
+    suspend fun urlsFor(c: QualityChoice, items: List<VodItem>, from: Int): Map<Int, String>? {
+        val r = repo ?: return null
+        val item = items.getOrNull(from) ?: return null
+        val sid = item.seriesId ?: return mapOf(from to r.client.movieUrl(c.versionId, c.ext.ifBlank { item.ext }))
+        return try {
+            val here = r.peekSeriesInfo(sid) ?: r.seriesInfo(sid)
+            val there = r.peekSeriesInfo(c.versionId) ?: r.seriesInfo(c.versionId)
+            val herePlaces = here.episodes.values.flatten().associate { it.id to (it.season to it.number) }
+            val thereEps = there.episodes.values.flatten().associateBy { it.season to it.number }
+            val out = HashMap<Int, String>()
+            for (i in from until items.size) {
+                val place = herePlaces[items[i].episodeId ?: continue] ?: continue
+                val ep = thereEps[place] ?: continue
+                out[i] = r.client.episodeUrl(ep.id, ep.ext)
+            }
+            out.takeIf { from in it }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     /** Where to resume a film: the furthest point reached in any of its versions. */
     fun moviePosition(m: Movie): Long =
         (versionsOf(m).map { it.streamId } + m.streamId).distinct().maxOf { prefs.position("movie:$it") }
