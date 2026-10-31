@@ -1767,7 +1767,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             throw e
                         } catch (e: Exception) {
                             emptyList()
-                        }.filter { it.score >= 4 }.take(12)
+                        }.filter { it.score >= 4 }.take(30)
                         sportHits[m.id] = nowMs to found
                         found
                     }

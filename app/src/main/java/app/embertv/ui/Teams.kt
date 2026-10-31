@@ -277,7 +277,10 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
     val repo = vm.repo ?: return
     val isTv = LocalIsTv.current
     val now = LocalNow.current
-    var hits by remember(match.id) { mutableStateOf<List<MatchHit>>(emptyList()) }
+    // Start with what Live Sport Now already found, then refresh.
+    var hits by remember(match.id) {
+        mutableStateOf(vm.liveSport.firstOrNull { it.match.id == match.id }?.hits.orEmpty())
+    }
     var checked by remember(match.id) { mutableIntStateOf(0) }
     var total by remember(match.id) { mutableIntStateOf(0) }
     var done by remember(match.id) { mutableStateOf(false) }
@@ -415,11 +418,16 @@ fun SportCard(item: AppViewModel.LiveSport, width: Dp, focusKey: String, onClick
             CardTeam(m.home, m.state, text)
             CardTeam(m.away, m.state, text)
             val channel = item.hits.firstOrNull()?.channel
+            val others = item.hits.size - 1
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(if (channel != null) EmberIcons.Play else EmberIcons.Search, contentDescription = null, tint = if (focused) Color.Black else Ember.Accent, modifier = Modifier.size(13.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    channel?.let { "On ${it.name}" } ?: "Find the channel",
+                    when {
+                        channel == null -> "Find the channel"
+                        others > 0 -> "On ${channel.name} + $others more"
+                        else -> "On ${channel.name}"
+                    },
                     style = Txt.Caption,
                     color = if (focused) Color.Black else Ember.Accent,
                     maxLines = 1,

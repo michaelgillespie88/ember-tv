@@ -103,6 +103,63 @@ object MatchFinder {
         }
     }
 
+    /** Country tags providers put on channels and groups: "UK:", "FR |", "[DE]", "|NL|"… */
+    private val REGION_TAG = Regex("^\\W*([A-Za-z]{2,3})\\s*[:|\\]\\-]|^\\[([A-Za-z]{2,3})\\]|\\|([A-Za-z]{2,3})\\|")
+    private val COUNTRY_WORDS = mapOf(
+        "uk" to listOf("uk", "gb", "united kingdom", "britain", "england", "scotland"),
+        "ie" to listOf("ie", "ireland", "irish"),
+        "us" to listOf("us", "usa", "united states"),
+        "fr" to listOf("fr", "france", "french"),
+        "de" to listOf("de", "germany", "deutschland"),
+        "es" to listOf("es", "spain", "espana"),
+        "it" to listOf("it", "italy", "italia"),
+        "nl" to listOf("nl", "netherlands", "holland"),
+        "pt" to listOf("pt", "portugal"),
+    )
+    private val COUNTRY_PATTERNS: List<Pair<String, Regex>> = COUNTRY_WORDS.flatMap { (country, words) ->
+        words.filter { it.length > 2 }.map { w -> country to Regex("\\b" + Regex.escape(w) + "\\b") }
+    }
+    private val UK_BROADCASTERS = listOf(
+        "sky sports", "sky sp", "tnt sport", "bt sport", "premier sports", "bbc", "itv", "channel 4", "channel 5", "s4c", "stv",
+        "amazon prime", "prime video", "laliga tv", "viaplay sports",
+    )
+
+    /** The viewer's country, from the device (the UK if it can't tell). */
+    private val homeCountry: String by lazy {
+        // The time zone first: Fire TVs are often left on US English in the UK.
+        when (java.util.TimeZone.getDefault().id) {
+            "Europe/London", "Europe/Belfast", "Europe/Guernsey", "Europe/Jersey", "Europe/Isle_of_Man" -> return@lazy "uk"
+            "Europe/Dublin" -> return@lazy "ie"
+        }
+        when (val c = java.util.Locale.getDefault().country.lowercase()) {
+            "gb", "" -> "uk"
+            else -> c
+        }
+    }
+
+    private fun regionOf(text: String?): String? {
+        if (text.isNullOrBlank()) return null
+        val m = REGION_TAG.find(text.trim())
+        val tag = m?.groupValues?.drop(1)?.firstOrNull { it.isNotEmpty() }?.lowercase()
+        if (tag != null) {
+            COUNTRY_WORDS.entries.firstOrNull { tag in it.value }?.let { return it.key }
+            if (tag.length == 2) return tag
+        }
+        val n = normalize(text)
+        return COUNTRY_PATTERNS.firstOrNull { (_, r) -> r.containsMatchIn(n) }?.first
+    }
+
+    /** 0: your country; 1: untagged but a home broadcaster; 2: untagged; 3: another country. */
+    internal fun regionRank(c: Channel, categoryName: String?): Int {
+        val region = regionOf(c.name) ?: regionOf(categoryName)
+        return when {
+            region == homeCountry -> 0
+            region != null -> 3
+            homeCountry == "uk" && UK_BROADCASTERS.any { normalize(c.name).contains(it) } -> 1
+            else -> 2
+        }
+    }
+
     // Channel names tidied for matching, kept between searches (the channel list rarely changes).
     @Volatile private var namesFor: List<Channel>? = null
     @Volatile private var namesCache: Map<Int, String> = emptyMap()
@@ -139,21 +196,34 @@ object MatchFinder {
         } catch (e: Exception) {
             emptyList()
         }
-        val sportCats = try {
-            repo.liveCategories().filter { SPORT_CATEGORY.containsMatchIn(normalize(it.name)) }.map { it.id }.toSet()
+        val liveCats = try {
+            repo.liveCategories()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            emptySet()
+            emptyList()
         }
+        val sportCats = liveCats.filter { SPORT_CATEGORY.containsMatchIn(normalize(it.name)) }.map { it.id }.toSet()
+        val catNames = liveCats.associate { it.id to it.name }
 
         val hits = HashMap<Int, MatchHit>()
         fun add(c: Channel, p: Programme?, score: Int) {
             val old = hits[c.streamId]
             if (old == null || old.score < score) hits[c.streamId] = MatchHit(c, p, score)
         }
+        // Your own country's channels first (a UK viewer wants Sky or TNT, not a French copy), then the
+        // best match, then the best picture.
+        val regionRanks = HashMap<Int, Int>()
         fun sorted(): List<MatchHit> =
-            hits.values.sortedWith(compareBy<MatchHit>({ -it.score }, { qualityRank(it.channel.name) }, { it.channel.num }, { it.channel.name }))
+            hits.values.sortedWith(
+                compareBy<MatchHit>(
+                    { h -> regionRanks.getOrPut(h.channel.streamId) { regionRank(h.channel, catNames[h.channel.categoryId]) } },
+                    { -it.score },
+                    { qualityRank(it.channel.name) },
+                    { it.channel.num },
+                    { it.channel.name },
+                )
+            )
 
         // The heavy text work happens off the main thread, so the screen never freezes.
         val names = normalizedNames(channels)

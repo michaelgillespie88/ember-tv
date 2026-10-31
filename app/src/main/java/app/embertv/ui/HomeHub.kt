@@ -226,7 +226,8 @@ private fun LazyListScope.homeRows(
                             s,
                             continueWidth,
                             "home:sport:${s.match.id}",
-                            onClick = { if (s.hits.isNotEmpty()) vm.playFound(s.hits, 0) else vm.findingMatch = s.match },
+                            // One channel: play it. Several: list them all to choose from.
+                            onClick = { if (s.hits.size == 1) vm.playFound(s.hits, 0) else vm.findingMatch = s.match },
                             onLongClick = { vm.pinMatch(s.match) },
                         )
                     }
