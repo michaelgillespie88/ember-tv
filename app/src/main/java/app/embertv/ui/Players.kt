@@ -2324,7 +2324,8 @@ private fun UpNextCard(next: VodItem, secondsLeft: Int?, onPlay: () -> Unit, onC
             if (isTv) {
                 RemoteHints(
                     if (secondsLeft != null) listOf(Hint("OK", "Play now"), Hint("BACK", "Cancel"))
-                    else listOf(Hint("OK", "Play next episode"))
+                    else listOf(Hint("OK", "Play next episode")),
+                    always = true,
                 )
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

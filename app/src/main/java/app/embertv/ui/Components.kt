@@ -668,9 +668,10 @@ class Hint(val key: String, val label: String)
  * "OK"), then what it does in grey. Replaces lines of text symbols.
  */
 @Composable
-fun RemoteHints(hints: List<Hint>, modifier: Modifier = Modifier) {
-    // Settings → Remote hints can turn them off once you know your way around.
-    if (!HintsSetting.show) return
+fun RemoteHints(hints: List<Hint>, modifier: Modifier = Modifier, always: Boolean = false) {
+    // Settings → Remote hints can turn them off once you know your way around; [always] is for
+    // the few places where the keys are the actual choices (like Up Next).
+    if (!HintsSetting.show && !always) return
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
         for (h in hints) {
             Row(verticalAlignment = Alignment.CenterVertically) {
