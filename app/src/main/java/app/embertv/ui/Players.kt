@@ -184,7 +184,7 @@ internal fun PhoneFullscreen() {
 private val ControlBg = Color(0x47000000)
 
 /** What's actually on screen: picture height and the measured frame rate. */
-private data class VideoStats(val width: Int, val height: Int, val fps: Float?, val declared: Boolean = false) {
+private data class VideoStats(val width: Int, val height: Int, val fps: Float?, val declared: Boolean = false, val range: String = "") {
     val label: String
         get() {
             val res = when {
@@ -198,7 +198,7 @@ private data class VideoStats(val width: Int, val height: Int, val fps: Float?, 
                     .firstOrNull { (v, _) -> kotlin.math.abs(f - v) < 0.05f }?.second
                 (known ?: Math.round(f).toString()) + " fps"
             }
-            return listOf(res, rate ?: "").filter { it.isNotEmpty() }.joinToString(" · ")
+            return listOf(res, rate ?: "", range).filter { it.isNotEmpty() }.joinToString(" · ")
         }
 }
 
@@ -243,16 +243,28 @@ private fun rememberVideoStats(exo: ExoPlayer, key: Any): VideoStats? {
             val h = if (size.height > 0) size.height else format?.height ?: 0
             if (h > 0 || measured != null || declared != null) {
                 val m = measured?.takeIf { it > 1f }
+                // The picture's dynamic range, as the stream describes it: shows whether a dark 4K
+                // picture is HDR the stream doesn't label (so the TV is never told to switch).
+                val transfer = format?.colorInfo?.colorTransfer
+                val tenBit = format?.codecs.orEmpty().let { c -> c.startsWith("hvc1.2") || c.startsWith("hev1.2") } ||
+                    (format?.colorInfo?.lumaBitdepth ?: 8) >= 10
+                val range = when {
+                    transfer == C.COLOR_TRANSFER_ST2084 -> "HDR10"
+                    transfer == C.COLOR_TRANSFER_HLG -> "HLG"
+                    transfer != null && transfer != androidx.media3.common.Format.NO_VALUE -> "SDR"
+                    tenBit && h >= 2000 -> "HDR? (unlabelled)"
+                    else -> ""
+                }
                 val next = when {
                     // A rate the stream states outright is exact; prefer it once it matches what's measured.
-                    declared != null && (m == null || kotlin.math.abs(m - declared) < 1.5f) -> VideoStats(w, h, declared, declared = true)
-                    m != null -> VideoStats(w, h, m)
-                    else -> VideoStats(w, h, value?.fps, value?.declared ?: false)
+                    declared != null && (m == null || kotlin.math.abs(m - declared) < 1.5f) -> VideoStats(w, h, declared, declared = true, range = range)
+                    m != null -> VideoStats(w, h, m, range = range)
+                    else -> VideoStats(w, h, value?.fps, value?.declared ?: false, range)
                 }
                 // Only pass on real changes: tiny wobbles in the measured rate would redraw the player
                 // screen (and could nudge the TV's refresh rate) every second while you watch.
                 val old = value
-                val same = old != null && old.width == next.width && old.height == next.height && old.declared == next.declared &&
+                val same = old != null && old.width == next.width && old.height == next.height && old.declared == next.declared && old.range == next.range &&
                     ((old.fps == null && next.fps == null) || (old.fps != null && next.fps != null && kotlin.math.abs(old.fps - next.fps) < 0.5f))
                 if (!same) value = next
             }
