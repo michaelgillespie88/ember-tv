@@ -35,6 +35,8 @@ class MainActivity : ComponentActivity() {
         }
         super.onCreate(savedInstanceState)
         if (!isTv) window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        // Phones: the Screen direction setting, from the start.
+        if (!isTv) requestedOrientation = app.embertv.ui.appOrientation(vm.screenDirection)
         setContent { EmberApp(vm, isTv) }
     }
 

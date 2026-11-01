@@ -152,7 +152,8 @@ internal fun FullScreenButton() {
 internal fun appOrientation(direction: Int): Int = when (direction) {
     1 -> ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
     2 -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-    else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    // Turns whenever the phone does, even with the phone's rotation lock on.
+    else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR
 }
 
 /** On phones, play full screen, turning with the phone; put things back when playback ends. */
@@ -164,7 +165,7 @@ internal fun PhoneFullscreen() {
     val direction = LocalAppVm.current.screenDirection
     LaunchedEffect(activity, force) {
         activity.requestedOrientation =
-            if (force) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+            if (force) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_SENSOR
     }
     DisposableEffect(activity) {
         val window = activity.window
