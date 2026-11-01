@@ -1533,6 +1533,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
+    /** Moves a film or show up or down My List (the order it shows on Home). */
+    fun moveMyListItem(key: String, by: Int): Boolean {
+        val idx = favourites.indices.filter { favourites[it].type != ContentType.LIVE }
+        val pos = idx.indexOfFirst { favourites[it].key == key }
+        val target = pos + by
+        if (pos < 0 || target !in idx.indices) return false
+        val a = idx[pos]
+        val b = idx[target]
+        val item = favourites[a]
+        favourites[a] = favourites[b]
+        favourites[b] = item
+        prefs.favourites = favourites.toList()
+        return true
+    }
+
     fun removeFavourite(key: String) {
         if (favourites.removeAll { it.key == key }) prefs.favourites = favourites.toList()
     }

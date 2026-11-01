@@ -754,6 +754,8 @@ private fun PhoneHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
 fun ArrangeHomeDialog(vm: AppViewModel, onDone: () -> Unit) {
     val isTv = LocalIsTv.current
     val names = remember { HOME_ROWS.toMap() }
+    // "channels" or "mylist" while putting that row's tiles in order.
+    var ordering by remember { mutableStateOf<String?>(null) }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDone) {
         DialogBackdropBlur()
         Column(
@@ -792,6 +794,21 @@ fun ArrangeHomeDialog(vm: AppViewModel, onDone: () -> Unit) {
                         )
                     }
                 }
+                // The tiles you choose yourself can be put in your own order too.
+                Spacer(Modifier.height(10.dp))
+                SheetSection("Tiles")
+                SheetOption(
+                    "Your Channels",
+                    focusKey = "arrange:tiles:channels",
+                    subtitle = "Put your favourite channels in order",
+                    trailing = { dark -> androidx.compose.material3.Icon(EmberIcons.ChevronRight, contentDescription = null, tint = if (dark) Color.Black else Ember.Dim, modifier = Modifier.size(18.dp)) },
+                ) { ordering = "channels" }
+                SheetOption(
+                    "My List",
+                    focusKey = "arrange:tiles:mylist",
+                    subtitle = "Put your films and series in order",
+                    trailing = { dark -> androidx.compose.material3.Icon(EmberIcons.ChevronRight, contentDescription = null, tint = if (dark) Color.Black else Ember.Dim, modifier = Modifier.size(18.dp)) },
+                ) { ordering = "mylist" }
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -800,6 +817,8 @@ fun ArrangeHomeDialog(vm: AppViewModel, onDone: () -> Unit) {
             }
         }
     }
+    val t = ordering
+    if (t != null) TileOrderDialog(vm, channels = t == "channels") { ordering = null }
 }
 
 @Composable
@@ -876,6 +895,95 @@ private fun ArrowButton(icon: androidx.compose.ui.graphics.vector.ImageVector, d
                 },
                 modifier = Modifier.size(20.dp),
             )
+        }
+    }
+}
+
+/**
+ * Put the tiles of Your Channels or My List in order: arrows to move each one up or down, ✕ to take
+ * it off. Saved straight away; Home shows them in this order.
+ */
+@Composable
+private fun TileOrderDialog(vm: AppViewModel, channels: Boolean, onDone: () -> Unit) {
+    val isTv = LocalIsTv.current
+    val tiles = vm.favourites.filter { (it.type == ContentType.LIVE) == channels }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDone) {
+        DialogBackdropBlur()
+        Column(
+            Modifier
+                .widthIn(max = 520.dp)
+                .fillMaxWidth()
+                .heightIn(max = if (isTv) 520.dp else 640.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(dialogPanelColor())
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            SheetTitle(if (channels) "Your Channels" else "My List", eyebrow = "Arrange Home", subtitle = "Move tiles up or down to set their order on Home")
+            Spacer(Modifier.height(14.dp))
+            if (tiles.isEmpty()) {
+                Text(
+                    if (channels) "No favourite channels yet. ${holdPrompt()} a channel to add one."
+                    else "Nothing in My List yet. ${holdPrompt()} a film or series to add it.",
+                    style = Txt.Body,
+                    color = Ember.Dim,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                tiles.forEachIndexed { i, f ->
+                    androidx.compose.runtime.key(f.key) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            FocusBox(
+                                modifier = Modifier.weight(1f).height(56.dp),
+                                focusKey = "tiles:${f.key}",
+                                shape = RoundedCornerShape(16.dp),
+                                focusedScale = 1.03f,
+                                color = Color(0x14FFFFFF),
+                                focusedColor = Color.White,
+                                autoFocus = i == 0,
+                                onClick = {},
+                            ) { focused ->
+                                Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "${i + 1}",
+                                        style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold),
+                                        color = if (focused) Color(0xFF55555C) else Ember.Faint,
+                                        modifier = Modifier.width(26.dp),
+                                    )
+                                    if (channels) {
+                                        ChannelLogo(f.image, f.name, Modifier.size(width = 50.dp, height = 32.dp))
+                                    } else {
+                                        Box(Modifier.size(width = 28.dp, height = 40.dp).clip(RoundedCornerShape(6.dp)).background(Color(0x1FFFFFFF))) {
+                                            NetImage(f.image, Modifier.fillMaxSize())
+                                        }
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(f.name, style = Txt.Label, color = if (focused) Color.Black else Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            ArrowButton(EmberIcons.ChevronUp, "Move up", "tiles:${f.key}:up", enabled = i > 0) {
+                                if (channels) vm.moveFavouriteChannel(f.key, -1) else vm.moveMyListItem(f.key, -1)
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            ArrowButton(EmberIcons.ChevronDown, "Move down", "tiles:${f.key}:down", enabled = i < tiles.lastIndex) {
+                                if (channels) vm.moveFavouriteChannel(f.key, 1) else vm.moveMyListItem(f.key, 1)
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            ArrowButton(EmberIcons.Close, "Remove", "tiles:${f.key}:remove", enabled = true) { vm.removeFavourite(f.key) }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            GlassButton("Done", EmberIcons.Check, onClick = onDone)
         }
     }
 }
