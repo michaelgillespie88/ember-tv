@@ -89,6 +89,9 @@ private val NAV_ITEMS = listOf(
 
 
 
+/** Apple's dark round header buttons: they stay readable over Home's artwork. */
+private val HeaderButton = Color(0x59000000)
+
 /** Side padding used by screens shared between TV and phone. */
 @Composable
 fun edgePadding(): Dp = if (LocalIsTv.current) 48.dp else 16.dp
@@ -168,7 +171,7 @@ fun PhoneHome(vm: AppViewModel) {
             Row(
                 Modifier.fillMaxWidth().height(HEADER_ROW).padding(start = if (mainTab) 20.dp else 8.dp, end = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (!mainTab) {
                     IconCircleButton(EmberIcons.Back, "Back", size = 38.dp, background = Color(0x1AFFFFFF), glass = true) { vm.tab = returnTab }
@@ -182,19 +185,19 @@ fun PhoneHome(vm: AppViewModel) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (isHome || vm.castTarget != null) {
+                if (vm.castTarget != null) {
                     IconCircleButton(
                         if (vm.castTarget != null) EmberIcons.Remote else EmberIcons.Tv,
                         if (vm.castTarget != null) "Playing on ${vm.castTarget?.tv?.name}" else "Play on TV",
-                        size = 38.dp,
-                        background = Color(0x1AFFFFFF),
+                        size = 36.dp,
+                        background = HeaderButton,
                         glass = true,
                         tint = if (vm.castTarget != null) Ember.Accent else Ember.Text,
                     ) { vm.showCastSheet = true }
                 }
-                if (tab == TAB_LIVE) IconCircleButton(EmberIcons.Guide, "TV guide", size = 38.dp, background = Color(0x1AFFFFFF), glass = true) { openOverlayTab(TAB_GUIDE) }
-                if (tab != TAB_SEARCH) IconCircleButton(EmberIcons.Search, "Search", size = 38.dp, background = Color(0x1AFFFFFF), glass = true) { openOverlayTab(TAB_SEARCH) }
-                if (tab != TAB_SETTINGS) IconCircleButton(EmberIcons.Settings, "Settings", size = 38.dp, background = Color(0x1AFFFFFF), glass = true) { openOverlayTab(TAB_SETTINGS) }
+                if (tab == TAB_LIVE) IconCircleButton(EmberIcons.Guide, "TV guide", size = 36.dp, background = HeaderButton, glass = true) { openOverlayTab(TAB_GUIDE) }
+                if (tab != TAB_SEARCH) IconCircleButton(EmberIcons.Search, "Search", size = 36.dp, background = HeaderButton, glass = true) { openOverlayTab(TAB_SEARCH) }
+                if (tab != TAB_SETTINGS) IconCircleButton(EmberIcons.Settings, "Settings", size = 36.dp, background = HeaderButton, glass = true) { openOverlayTab(TAB_SETTINGS) }
                 ProfileButton(vm)
             }
             if (hasChips) {

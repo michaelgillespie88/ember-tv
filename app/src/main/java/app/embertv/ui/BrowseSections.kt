@@ -573,6 +573,14 @@ fun SettingsSection(vm: AppViewModel) {
 
             // ---- Playing ----
             SettingsGroup("Playing") {
+                if (!isTv) {
+                    SettingRow(
+                        "Play on TV",
+                        vm.castTarget?.tv?.name?.let { "On $it" } ?: "Choose a TV",
+                        "Send what you pick to Streammania on your TV",
+                        focusKey = "set:cast",
+                    ) { vm.showCastSheet = true }
+                }
                 SettingRow(
                     "Quality to play",
                     when (vm.qualityChoice) {

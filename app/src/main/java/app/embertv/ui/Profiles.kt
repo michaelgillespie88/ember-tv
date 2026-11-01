@@ -95,10 +95,10 @@ fun ProfileButton(vm: AppViewModel, modifier: Modifier = Modifier) {
         }
     } else {
         Box(
-            modifier.size(44.dp).clip(CircleShape).pressable { vm.switchProfile() },
+            modifier.size(36.dp).clip(CircleShape).pressable { vm.switchProfile() },
             contentAlignment = Alignment.Center,
         ) {
-            ProfileAvatar(p, 30.dp)
+            ProfileAvatar(p, 34.dp)
         }
     }
 }
