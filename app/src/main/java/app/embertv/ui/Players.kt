@@ -434,11 +434,7 @@ private fun isSelectKey(code: Int) =
 
 @Composable
 private fun BoxScope.Spinner() {
-    CircularProgressIndicator(
-        modifier = Modifier.align(Alignment.Center).size(44.dp),
-        color = Color.White,
-        strokeWidth = 3.dp,
-    )
+    AppleSpinner(Modifier.align(Alignment.Center).size(40.dp))
 }
 
 @Composable

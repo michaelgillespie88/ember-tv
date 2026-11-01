@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.togetherWith
 import app.embertv.data.nowSeconds
 import kotlinx.coroutines.delay
 
@@ -66,15 +67,24 @@ fun EmberApp(vm: AppViewModel, isTv: Boolean) {
                 } else if (vm.pickingProfile) {
                     ProfilePicker(vm)
                 } else {
-                    when (val screen = vm.stack.last()) {
-                        Screen.Home -> if (isTv) HomeScreen(vm) else PhoneHome(vm)
-                        is Screen.MovieDetail -> if (isTv) MovieDetailScreen(vm, screen.movie) else PhoneMovieDetail(vm, screen.movie)
-                        is Screen.SeriesDetail -> if (isTv) SeriesDetailScreen(vm, screen.series) else PhoneSeriesDetail(vm, screen.series)
-                        is Screen.PlayLive -> LivePlayerScreen(vm, screen.channels, screen.index)
-                        is Screen.PlayVod -> VodPlayerScreen(vm, screen.items, screen.index, screen.startMs)
-                        is Screen.Catchup -> CatchupScreen(vm, screen.channel)
-                        is Screen.MultiView -> MultiViewScreen(vm, screen.channels, screen.pool)
-                    }
+                    // Phones: pages slide in from the right and back out, as on iPhone. Players fade.
+                    val depth = vm.stack.size
+                    if (isTv) Screens(vm, isTv, vm.stack.last()) else androidx.compose.animation.AnimatedContent(
+                        targetState = vm.stack.last() to depth,
+                        transitionSpec = {
+                            val forward = targetState.second >= initialState.second
+                            val player = (if (forward) targetState.first else initialState.first).let { it is Screen.PlayLive || it is Screen.PlayVod || it is Screen.MultiView }
+                            when {
+                                player -> androidx.compose.animation.fadeIn() togetherWith androidx.compose.animation.fadeOut()
+                                forward -> androidx.compose.animation.slideInHorizontally { it } togetherWith
+                                    (androidx.compose.animation.slideOutHorizontally { -it / 4 } + androidx.compose.animation.fadeOut(targetAlpha = 0.6f))
+                                else -> (androidx.compose.animation.slideInHorizontally { -it / 4 } + androidx.compose.animation.fadeIn(initialAlpha = 0.6f)) togetherWith
+                                    androidx.compose.animation.slideOutHorizontally { it }
+                            }
+                        },
+                        contentKey = { it.second },
+                        label = "pages",
+                    ) { (s, _) -> Screens(vm, isTv, s) }
                 }
 
                 // Programme reminders
@@ -329,5 +339,19 @@ private fun UpdateDialog(vm: AppViewModel) {
                 }
             }
         }
+    }
+}
+
+/** The page for [screen]. */
+@Composable
+private fun Screens(vm: AppViewModel, isTv: Boolean, screen: Screen) {
+    when (screen) {
+        Screen.Home -> if (isTv) HomeScreen(vm) else PhoneHome(vm)
+        is Screen.MovieDetail -> if (isTv) MovieDetailScreen(vm, screen.movie) else PhoneMovieDetail(vm, screen.movie)
+        is Screen.SeriesDetail -> if (isTv) SeriesDetailScreen(vm, screen.series) else PhoneSeriesDetail(vm, screen.series)
+        is Screen.PlayLive -> LivePlayerScreen(vm, screen.channels, screen.index)
+        is Screen.PlayVod -> VodPlayerScreen(vm, screen.items, screen.index, screen.startMs)
+        is Screen.Catchup -> CatchupScreen(vm, screen.channel)
+        is Screen.MultiView -> MultiViewScreen(vm, screen.channels, screen.pool)
     }
 }

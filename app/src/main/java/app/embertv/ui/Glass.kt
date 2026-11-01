@@ -148,7 +148,7 @@ fun Modifier.glassSurface(shape: Shape, fill: Color = Color(0x1FFFFFFF)): Modifi
  * panel at all: like tvOS, the screen dims right down and the pop-up floats in the middle.
  */
 @Composable
-fun dialogPanelColor(): Color = if (LocalIsTv.current) Color.Transparent else Color(0xD91A1A1F)
+fun dialogPanelColor(): Color = if (LocalIsTv.current) Color.Transparent else Color(0xF21C1C21)
 
 /**
  * Sets up the window behind a pop-up. Call inside a Dialog.

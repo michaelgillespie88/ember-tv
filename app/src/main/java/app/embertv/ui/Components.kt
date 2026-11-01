@@ -610,11 +610,38 @@ fun rememberCategorySelector(section: SectionState): (String, Boolean) -> Unit {
 
 // ---------- States ----------
 
+/** Apple's activity indicator: eight rounded spokes, the bright one stepping round. */
+@Composable
+fun AppleSpinner(modifier: Modifier = Modifier, color: Color = Color.White) {
+    var step by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(95)
+            step = (step + 1) % 8
+        }
+    }
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+        val spoke = maxHeight * 0.28f
+        for (i in 0 until 8) {
+            val age = (step - i + 8) % 8
+            Box(Modifier.fillMaxSize().graphicsLayer { rotationZ = i * 45f }) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .size(width = maxWidth * 0.09f, height = spoke)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(color.copy(alpha = 1f - age * 0.11f))
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun LoadingView(modifier: Modifier = Modifier, text: String? = null) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(modifier = Modifier.size(38.dp), color = Ember.Text, strokeWidth = 3.dp)
+            AppleSpinner(Modifier.size(34.dp))
             if (text != null) {
                 Spacer(Modifier.height(16.dp))
                 Text(text, style = Txt.Body, color = Ember.Dim)
