@@ -160,12 +160,16 @@ fun PhoneHome(vm: AppViewModel) {
             }
         }
 
-        // Frosted header
+        // Header: no band or line across the screen, just a soft fade behind the title, with the
+        // buttons gathered in one floating frosted pill, like the tab bar at the bottom.
         Column(
             Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .frosted(backdrop, RectangleShape, tint = if (isHome) Color(0x26000000) else Color(0xB30B0B0E), edge = false)
+                .background(
+                    if (isHome) Brush.verticalGradient(listOf(Color(0x8C000000), Color.Transparent))
+                    else Brush.verticalGradient(0f to Ember.Bg, 0.75f to Ember.Bg.copy(alpha = 0.92f), 1f to Ember.Bg.copy(alpha = 0f))
+                )
         ) {
             Spacer(Modifier.height(statusTop))
             Row(
@@ -185,20 +189,26 @@ fun PhoneHome(vm: AppViewModel) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                Row(
+                    Modifier
+                        .height(44.dp)
+                        .frosted(backdrop, RoundedCornerShape(22.dp), tint = Color(0xC716161B))
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                 if (vm.castTarget != null) {
                     IconCircleButton(
                         if (vm.castTarget != null) EmberIcons.Remote else EmberIcons.Tv,
                         if (vm.castTarget != null) "Playing on ${vm.castTarget?.tv?.name}" else "Play on TV",
-                        size = 36.dp,
-                        background = HeaderButton,
-                        glass = true,
+                        size = 38.dp,
                         tint = if (vm.castTarget != null) Ember.Accent else Ember.Text,
                     ) { vm.showCastSheet = true }
                 }
-                if (tab == TAB_LIVE) IconCircleButton(EmberIcons.Guide, "TV guide", size = 36.dp, background = HeaderButton, glass = true) { openOverlayTab(TAB_GUIDE) }
-                if (tab != TAB_SEARCH) IconCircleButton(EmberIcons.Search, "Search", size = 36.dp, background = HeaderButton, glass = true) { openOverlayTab(TAB_SEARCH) }
-                if (tab != TAB_SETTINGS) IconCircleButton(EmberIcons.Settings, "Settings", size = 36.dp, background = HeaderButton, glass = true) { openOverlayTab(TAB_SETTINGS) }
+                if (tab == TAB_LIVE) IconCircleButton(EmberIcons.Guide, "TV guide", size = 38.dp) { openOverlayTab(TAB_GUIDE) }
+                if (tab != TAB_SEARCH) IconCircleButton(EmberIcons.Search, "Search", size = 38.dp) { openOverlayTab(TAB_SEARCH) }
+                if (tab != TAB_SETTINGS) IconCircleButton(EmberIcons.Settings, "Settings", size = 38.dp) { openOverlayTab(TAB_SETTINGS) }
                 ProfileButton(vm)
+                }
             }
             if (hasChips) {
                 Box(Modifier.fillMaxWidth().height(CHIPS_ROW)) {
@@ -208,7 +218,6 @@ fun PhoneHome(vm: AppViewModel) {
                     }
                 }
             }
-            Box(Modifier.fillMaxWidth().height(0.6.dp).background(Color(0x1FFFFFFF)))
         }
 
         // Floating frosted tab bar
