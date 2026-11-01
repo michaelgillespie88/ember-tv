@@ -583,7 +583,14 @@ private fun SeeAllCard(width: Dp, focusKey: String, onClick: () -> Unit) {
 @Composable
 private fun HomeRow(title: String, edge: Dp, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
-        Text(title, style = Txt.Headline, modifier = Modifier.padding(start = edge, end = edge), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        val phone = !LocalIsTv.current
+        Text(
+            title,
+            style = if (phone) Txt.Headline.copy(fontSize = (20f * Txt.scale).sp, fontWeight = FontWeight.Bold) else Txt.Headline,
+            modifier = Modifier.padding(start = edge, end = edge, top = if (phone) 8.dp else 0.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         content()
     }
 }
@@ -775,12 +782,12 @@ fun PhoneHomeTab(vm: AppViewModel) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 val heroes = featuredFor(vm, feed)
+                item(key = "top") { Spacer(Modifier.height(pad.calculateTopPadding() + 4.dp)) }
                 if (heroes.isNotEmpty()) {
                     item(key = "hero") { PhoneHero(vm, repo, heroes) }
-                } else {
-                    item(key = "top") { Spacer(Modifier.height(pad.calculateTopPadding())) }
                 }
-                homeRows(vm, feed, edge = 16.dp, posterWidth = 112.dp, continueWidth = 240.dp, gap = 12.dp) { arranging = true }
+                // Apple TV app sizes: big wide cards for Up Next, roomy posters, 20dp margins.
+                homeRows(vm, feed, edge = 20.dp, posterWidth = 118.dp, continueWidth = 270.dp, gap = 12.dp) { arranging = true }
             }
         }
     }
@@ -798,8 +805,10 @@ private fun PhoneHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
 
     Box(
         Modifier
+            .padding(horizontal = 20.dp)
             .fillMaxWidth()
-            .aspectRatio(4f / 5.4f)
+            .aspectRatio(16f / 11f)
+            .clip(RoundedCornerShape(20.dp))
             .pointerInput(heroes.size) {
                 var travelled = 0f
                 detectHorizontalDragGestures(
@@ -815,50 +824,50 @@ private fun PhoneHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
             }
     ) {
         Crossfade(targetState = movie, label = "hero") { m ->
+            // Wide artwork when the film has it, as on Apple TV; the poster otherwise.
+            val art = if (m.streamId == movie.streamId) info?.backdrop?.takeIf { it.isNotBlank() } ?: m.poster else m.poster
             Box(Modifier.fillMaxSize()) {
-                Placeholder(m.name, Modifier.fillMaxSize(), fontSizeSp = 40)
-                NetImage(m.poster, Modifier.fillMaxSize())
+                Placeholder(m.name, Modifier.fillMaxSize(), fontSizeSp = 32)
+                NetImage(art, Modifier.fillMaxSize())
             }
         }
         Box(
             Modifier.fillMaxSize().background(
-                Brush.verticalGradient(0f to Color(0x80000000), 0.25f to Color.Transparent, 0.55f to Color.Transparent, 1f to Ember.Bg)
+                Brush.verticalGradient(0f to Color.Transparent, 0.4f to Color.Transparent, 1f to Color(0xD9000000))
             )
         )
         Column(
-            Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+            Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 14.dp)
         ) {
-            Text(movie.name, style = Txt.LargeTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("FEATURED FOR YOU", style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp), color = Color(0xFFCFCFD4))
+            Spacer(Modifier.height(2.dp))
+            Text(app.embertv.data.Versions.cleanTitle(movie.name), style = Txt.Title.copy(fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis)
             val meta = listOfNotNull(
                 info?.year?.takeIf { it.isNotBlank() },
                 info?.genre?.takeIf { it.isNotBlank() }?.substringBefore(","),
                 ratingLabel(info?.rating ?: movie.rating),
             ).joinToString("  ·  ")
             if (meta.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                Text(meta, style = Txt.Caption, color = Ember.Dim, maxLines = 1)
+                Spacer(Modifier.height(2.dp))
+                Text(meta, style = Txt.Caption, color = Color(0xFFCFCFD4), maxLines = 1)
             }
-            Spacer(Modifier.height(14.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton(
                     if (resume > 0) "Resume" else "Play",
                     icon = EmberIcons.Play,
                     primary = true,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.height(40.dp),
                 ) { vm.playMovie(movie, fromStart = resume <= 0) }
-                PillButton("Info", modifier = Modifier.weight(1f)) { vm.push(Screen.MovieDetail(movie)) }
-                IconCircleButton(
-                    if (isFav) EmberIcons.StarFilled else EmberIcons.Star,
-                    if (isFav) "Remove from favourites" else "Add to favourites",
-                    size = 48.dp,
-                    background = Color(0x1FFFFFFF),
-                    tint = Ember.Text,
-                    glass = true,
+                PillButton(
+                    if (isFav) "In My List" else "My List",
+                    icon = if (isFav) EmberIcons.Check else EmberIcons.Star,
+                    modifier = Modifier.height(40.dp),
                 ) { vm.toggleFavourite(vm.favouriteOf(movie)) }
-            }
-            Spacer(Modifier.height(14.dp))
-            Box(Modifier.fillMaxWidth().height(6.dp)) {
-                HeroDots(heroes.size, index, Modifier.align(Alignment.Center))
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.height(6.dp).width((heroes.size.coerceAtMost(8) * 11 + 12).dp)) {
+                    HeroDots(heroes.size.coerceAtMost(8), index.coerceAtMost(7), Modifier.align(Alignment.CenterEnd))
+                }
             }
         }
     }

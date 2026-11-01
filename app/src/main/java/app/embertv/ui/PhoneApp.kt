@@ -87,9 +87,9 @@ private val NAV_ITEMS = listOf(
     NavItem(TAB_FAVOURITES, "Favourites", EmberIcons.Star),
 )
 
-private val HEADER_ROW = 58.dp
+private val HEADER_ROW = 62.dp
 private val CHIPS_ROW = 52.dp
-private val TAB_BAR = 64.dp
+private val TAB_BAR = 62.dp
 
 /** Side padding used by screens shared between TV and phone. */
 @Composable
@@ -121,8 +121,8 @@ fun PhoneHome(vm: AppViewModel) {
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val contentPadding = PaddingValues(
-        // Home's featured banner runs up underneath the glass header.
-        top = if (isHome) 0.dp else statusTop + HEADER_ROW + (if (hasChips) CHIPS_ROW else 0.dp),
+        // Apple TV app style: every page starts under its large title.
+        top = statusTop + HEADER_ROW + (if (hasChips) CHIPS_ROW else 0.dp),
         bottom = navBottom + (if (mainTab) TAB_BAR + 20.dp else 12.dp),
     )
 
@@ -153,39 +153,39 @@ fun PhoneHome(vm: AppViewModel) {
             Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .frosted(backdrop, RectangleShape, tint = if (isHome) Color(0x40101014) else Color(0x99101014), edge = false)
+                .frosted(backdrop, RectangleShape, tint = Color(0xB30B0B0E), edge = false)
         ) {
             Spacer(Modifier.height(statusTop))
             Row(
-                Modifier.fillMaxWidth().height(HEADER_ROW).padding(start = 8.dp, end = 8.dp),
+                Modifier.fillMaxWidth().height(HEADER_ROW).padding(start = if (mainTab) 20.dp else 8.dp, end = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (mainTab) {
-                    Spacer(Modifier.width(10.dp))
-                } else {
-                    IconCircleButton(EmberIcons.Back, "Back") { vm.tab = returnTab }
+                if (!mainTab) {
+                    IconCircleButton(EmberIcons.Back, "Back", size = 38.dp, background = Color(0x1AFFFFFF), glass = true) { vm.tab = returnTab }
+                    Spacer(Modifier.width(2.dp))
                 }
-                if (isHome) {
-                    Box(Modifier.weight(1f)) { Wordmark() }
-                } else {
-                    Text(
-                        TAB_TITLES[tab.coerceIn(0, TAB_TITLES.lastIndex)],
-                        style = Txt.LargeTitle,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+                // A big, bold page title, as in Apple's TV app.
+                Text(
+                    TAB_TITLES[tab.coerceIn(0, TAB_TITLES.lastIndex)],
+                    style = Txt.LargeTitle.copy(fontSize = (if (mainTab) 32f else 26f).times(Txt.scale).sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
                 if (isHome || vm.castTarget != null) {
                     IconCircleButton(
                         if (vm.castTarget != null) EmberIcons.Remote else EmberIcons.Tv,
                         if (vm.castTarget != null) "Playing on ${vm.castTarget?.tv?.name}" else "Play on TV",
+                        size = 38.dp,
+                        background = Color(0x1AFFFFFF),
+                        glass = true,
                         tint = if (vm.castTarget != null) Ember.Accent else Ember.Text,
                     ) { vm.showCastSheet = true }
                 }
-                if (tab == TAB_LIVE) IconCircleButton(EmberIcons.Guide, "TV guide") { openOverlayTab(TAB_GUIDE) }
-                if (tab != TAB_SEARCH) IconCircleButton(EmberIcons.Search, "Search") { openOverlayTab(TAB_SEARCH) }
-                if (tab != TAB_SETTINGS) IconCircleButton(EmberIcons.Settings, "Settings") { openOverlayTab(TAB_SETTINGS) }
+                if (tab == TAB_LIVE) IconCircleButton(EmberIcons.Guide, "TV guide", size = 38.dp, background = Color(0x1AFFFFFF), glass = true) { openOverlayTab(TAB_GUIDE) }
+                if (tab != TAB_SEARCH) IconCircleButton(EmberIcons.Search, "Search", size = 38.dp, background = Color(0x1AFFFFFF), glass = true) { openOverlayTab(TAB_SEARCH) }
+                if (tab != TAB_SETTINGS) IconCircleButton(EmberIcons.Settings, "Settings", size = 38.dp, background = Color(0x1AFFFFFF), glass = true) { openOverlayTab(TAB_SETTINGS) }
                 ProfileButton(vm)
             }
             if (hasChips) {
@@ -205,10 +205,10 @@ fun PhoneHome(vm: AppViewModel) {
                 Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(start = 16.dp, end = 16.dp, bottom = 10.dp)
+                    .padding(start = 14.dp, end = 14.dp, bottom = 8.dp)
                     .fillMaxWidth()
                     .height(TAB_BAR)
-                    .frosted(backdrop, RoundedCornerShape(32.dp), tint = Color(0x8C16161B))
+                    .frosted(backdrop, RoundedCornerShape(32.dp), tint = Color(0xC716161B))
                     .padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -220,7 +220,7 @@ fun PhoneHome(vm: AppViewModel) {
                             .fillMaxHeight()
                             .padding(vertical = 6.dp)
                             .clip(RoundedCornerShape(26.dp))
-                            .then(if (selected) Modifier.background(Color(0x24FFFFFF)) else Modifier)
+                            .then(if (selected) Modifier.background(Color(0x1FFFFFFF)) else Modifier)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
@@ -228,8 +228,9 @@ fun PhoneHome(vm: AppViewModel) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
-                        val color = if (selected) Ember.Text else Ember.Dim
-                        Icon(item.icon, contentDescription = null, tint = if (selected) Ember.Text else color, modifier = Modifier.size(22.dp))
+                        // iOS grey for the tabs you're not on.
+                        val color = if (selected) Ember.Text else Color(0xFF8E8E93)
+                        Icon(item.icon, contentDescription = null, tint = color, modifier = Modifier.size(23.dp))
                         Spacer(Modifier.height(3.dp))
                         Text(
                             item.label,
@@ -301,7 +302,7 @@ fun PillButton(
 private fun CategoryChips(spec: ChipsSpec) {
     LazyRow(
         state = spec.state,
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(spec.categories, key = { it.id }) { c ->

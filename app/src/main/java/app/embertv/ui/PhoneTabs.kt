@@ -130,7 +130,7 @@ fun PhoneLiveTab(vm: AppViewModel) {
                     val pad = LocalContentPadding.current
                     LazyColumn(
                         state = vm.live.list(categoryId),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 8.dp),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
@@ -576,11 +576,11 @@ fun PhoneMoviesTab(vm: AppViewModel) {
                     val pad = LocalContentPadding.current
                     val sortedMovies = remember(r.value, vm.movieSort) { sortMovies(r.value, vm.movieSort) }
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 104.dp),
+                        columns = GridCells.Adaptive(minSize = 106.dp),
                         state = vm.movies.grid(categoryId),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = pad.calculateTopPadding() + 10.dp, bottom = pad.calculateBottomPadding() + 8.dp),
+                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = pad.calculateTopPadding() + 10.dp, bottom = pad.calculateBottomPadding() + 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         item(key = "sort", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
@@ -626,11 +626,11 @@ fun PhoneSeriesTab(vm: AppViewModel) {
                     val pad = LocalContentPadding.current
                     val sortedSeries = remember(r.value, vm.seriesSort) { sortSeries(r.value, vm.seriesSort) }
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 104.dp),
+                        columns = GridCells.Adaptive(minSize = 106.dp),
                         state = vm.series.grid(categoryId),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = pad.calculateTopPadding() + 10.dp, bottom = pad.calculateBottomPadding() + 8.dp),
+                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = pad.calculateTopPadding() + 10.dp, bottom = pad.calculateBottomPadding() + 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         item(key = "sort", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {

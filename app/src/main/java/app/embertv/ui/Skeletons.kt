@@ -58,7 +58,7 @@ private fun rememberPulse(): Float {
 private fun Modifier.phoneInsets(): Modifier {
     if (LocalIsTv.current) return this
     val pad = LocalContentPadding.current
-    return this.padding(start = 12.dp, end = 12.dp, top = pad.calculateTopPadding() + 10.dp, bottom = pad.calculateBottomPadding())
+    return this.padding(start = 20.dp, end = 20.dp, top = pad.calculateTopPadding() + 10.dp, bottom = pad.calculateBottomPadding())
 }
 
 @Composable
@@ -116,7 +116,7 @@ fun SkeletonRows(modifier: Modifier = Modifier, rows: Int = 10, underHeader: Boo
 fun SkeletonHome(modifier: Modifier = Modifier) {
     val pulse = rememberPulse()
     val isTv = LocalIsTv.current
-    val side = if (isTv) 48.dp else 16.dp
+    val side = if (isTv) 48.dp else 20.dp
     val top = if (isTv) 12.dp else LocalContentPadding.current.calculateTopPadding() + 12.dp
     Column(
         modifier.fillMaxSize().graphicsLayer { alpha = pulse }.padding(start = side, end = side, top = top),

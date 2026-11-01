@@ -17,12 +17,13 @@ import android.os.Build
 import android.view.ViewGroup
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -981,16 +982,16 @@ fun LivePlayerScreen(vm: AppViewModel, channelsIn: List<Channel>, startIndex: In
                             .fillMaxWidth()
                             .background(Brush.verticalGradient(listOf(Color(0xAA000000), Color.Transparent)))
                             .windowInsetsPadding(WindowInsets.displayCutout)
-                            .padding(12.dp),
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        IconCircleButton(EmberIcons.Back, "Back", background = ControlBg, glass = true) { vm.pop() }
+                        IconCircleButton(EmberIcons.Close, "Close", size = 40.dp, background = ControlBg, glass = true) { vm.pop() }
                         Spacer(Modifier.weight(1f))
-                        IconCircleButton(EmberIcons.Football, "Live scores", background = ControlBg, glass = true) { scoresOpen = true }
-                        if (enterPip != null) IconCircleButton(EmberIcons.Pip, "Picture in picture", background = ControlBg, glass = true) { enterPip() }
-                        IconCircleButton(EmberIcons.ChannelList, "Channel list", background = ControlBg, glass = true) { listOpen = true }
-                        IconCircleButton(EmberIcons.More, "More options", background = ControlBg, glass = true) { optionsOpen = true }
+                        GlassPill("Scores", EmberIcons.Football) { scoresOpen = true }
+                        GlassPill("Channels", EmberIcons.ChannelList) { listOpen = true }
+                        if (enterPip != null) IconCircleButton(EmberIcons.Pip, "Picture in picture", size = 40.dp, background = ControlBg, glass = true) { enterPip() }
+                        IconCircleButton(EmberIcons.More, "More options", size = 40.dp, background = ControlBg, glass = true) { optionsOpen = true }
                     }
                     if (vm.timeshiftOn) {
                         Row(
@@ -2261,31 +2262,33 @@ private fun VodTouchOverlay(
     onScores: () -> Unit,
     onPip: (() -> Unit)? = null,
 ) {
-    Box(Modifier.fillMaxSize().background(Color(0x59000000))) {
+    // Apple TV app on iPhone: a soft shade top and bottom, close and title top-left, the big
+    // play controls in the middle, and a thin scrubber with labelled glass pills along the bottom.
+    Box(
+        Modifier.fillMaxSize().background(
+            Brush.verticalGradient(0f to Color(0x99000000), 0.3f to Color(0x33000000), 0.65f to Color(0x33000000), 1f to Color(0xBF000000))
+        )
+    ) {
         Row(
             Modifier
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.displayCutout)
-                .padding(12.dp),
+                .padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconCircleButton(EmberIcons.Back, "Back", background = ControlBg, glass = true, onClick = onBack)
-            Spacer(Modifier.width(10.dp))
+            IconCircleButton(EmberIcons.Close, "Close", size = 40.dp, background = ControlBg, glass = true, onClick = onBack)
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(item.title, style = Txt.Headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.title, style = Txt.Label.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (item.subtitle.isNotBlank()) {
-                    Text(item.subtitle, style = Txt.Caption, color = Ember.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(item.subtitle, style = Txt.Caption, color = Color(0xFFCFCFD4), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Spacer(Modifier.width(10.dp))
-            IconCircleButton(EmberIcons.Football, "Live scores", background = ControlBg, glass = true, onClick = onScores)
-            Spacer(Modifier.width(8.dp))
             if (onPip != null) {
-                IconCircleButton(EmberIcons.Pip, "Picture in picture", background = ControlBg, glass = true, onClick = onPip)
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(10.dp))
+                IconCircleButton(EmberIcons.Pip, "Picture in picture", size = 40.dp, background = ControlBg, glass = true, onClick = onPip)
             }
-            IconCircleButton(EmberIcons.Subtitles, "Subtitles, language and more", background = ControlBg, glass = true, onClick = onTracks)
         }
 
         Row(
@@ -2298,7 +2301,7 @@ private fun VodTouchOverlay(
                 if (playing) EmberIcons.Pause else EmberIcons.Play,
                 if (playing) "Pause" else "Play",
                 size = 76.dp,
-                background = Color(0x59000000),
+                background = Color(0x40FFFFFF),
                 glass = true,
                 onClick = onTogglePlay,
             )
@@ -2310,30 +2313,96 @@ private fun VodTouchOverlay(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.displayCutout)
-                .padding(start = 20.dp, end = 20.dp, bottom = 10.dp)
+                .padding(start = 24.dp, end = 24.dp, bottom = 14.dp)
         ) {
             val fraction = if (duration > 0) (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
-            Slider(
-                value = fraction,
-                onValueChange = { f -> if (duration > 0) onScrub((f * duration).toLong()) },
-                onValueChangeFinished = onScrubDone,
-                enabled = duration > 0,
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    // Apple style: a white bar on a faint track.
-                    activeTrackColor = Color(0xF2FFFFFF),
-                    inactiveTrackColor = Color(0x40FFFFFF),
-                ),
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            TouchScrubber(fraction, enabled = duration > 0, onScrub = { f -> onScrub((f * duration).toLong()) }, onDone = onScrubDone)
+            Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(formatMs(position), style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Text)
                 Spacer(Modifier.weight(1f))
-                if (hasNext) {
-                    PillButton("Next episode", icon = EmberIcons.Next, onClick = onNext)
-                    Spacer(Modifier.width(14.dp))
-                }
                 Text(if (duration > 0) "−" + formatMs(duration - position) else "", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Dim)
             }
+            Spacer(Modifier.height(10.dp))
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (hasNext) GlassPill("Next episode", EmberIcons.Next, onNext)
+                GlassPill("Subtitles & audio", EmberIcons.Subtitles, onTracks)
+                GlassPill("Scores", EmberIcons.Football, onScores)
+            }
+        }
+    }
+}
+
+/** Phones: a small labelled glass pill along the bottom of the player, as in Apple's TV app. */
+@Composable
+internal fun GlassPill(label: String, icon: ImageVector, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .height(36.dp)
+            .glassSurface(RoundedCornerShape(18.dp), ControlBg)
+            .pressable(onClick = onClick)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(7.dp))
+        Text(label, style = Txt.Caption.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = Color.White, maxLines = 1)
+    }
+}
+
+/** Phones: Apple's thin scrubber. Drag or tap anywhere along it; it thickens while you hold it. */
+@Composable
+private fun TouchScrubber(fraction: Float, enabled: Boolean, onScrub: (Float) -> Unit, onDone: () -> Unit) {
+    var held by remember { mutableStateOf(false) }
+    val latestScrub by androidx.compose.runtime.rememberUpdatedState(onScrub)
+    val latestDone by androidx.compose.runtime.rememberUpdatedState(onDone)
+    val grow by androidx.compose.animation.core.animateFloatAsState(if (held) 1f else 0f, label = "scrub")
+    val thickness = 5.dp + 5.dp * grow
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectTapGestures { o ->
+                    latestScrub((o.x / size.width).coerceIn(0f, 1f))
+                    latestDone()
+                }
+            }
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragStart = { o ->
+                        held = true
+                        latestScrub((o.x / size.width).coerceIn(0f, 1f))
+                    },
+                    onDragEnd = {
+                        held = false
+                        latestDone()
+                    },
+                    onDragCancel = {
+                        held = false
+                        latestDone()
+                    },
+                    onHorizontalDrag = { change, _ ->
+                        change.consume()
+                        latestScrub((change.position.x / size.width).coerceIn(0f, 1f))
+                    },
+                )
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(thickness)
+                .clip(RoundedCornerShape(thickness / 2))
+                .background(Color(0x40FFFFFF))
+        ) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)).background(Color(0xF2FFFFFF)))
         }
     }
 }
