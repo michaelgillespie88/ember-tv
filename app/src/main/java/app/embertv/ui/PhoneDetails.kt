@@ -57,7 +57,7 @@ private fun PhoneDetailFrame(vm: AppViewModel, content: @Composable (Modifier) -
                 .padding(10.dp)
                 .size(44.dp)
                 .frosted(backdrop, CircleShape, tint = Color(0x66101014))
-                .clickable { vm.pop() },
+                .pressable { vm.pop() },
             contentAlignment = Alignment.Center,
         ) {
             androidx.compose.material3.Icon(EmberIcons.Back, contentDescription = "Back", tint = Ember.Text, modifier = Modifier.size(22.dp))
@@ -261,7 +261,7 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
                                     if (selected) Modifier.clip(RoundedCornerShape(18.dp)).background(Color.White)
                                     else Modifier.glassSurface(RoundedCornerShape(18.dp), Color(0x14FFFFFF))
                                 )
-                                .clickable { chosenSeason = s }
+                                .pressable { chosenSeason = s }
                                 .padding(horizontal = 16.dp),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -297,7 +297,7 @@ private fun PhoneEpisodeRow(episode: Episode, watched: Boolean, watchedMs: Long,
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .pressable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -323,8 +323,7 @@ private fun PhoneEpisodeRow(episode: Episode, watched: Boolean, watchedMs: Long,
                 Modifier
                     .align(Alignment.Center)
                     .size(30.dp)
-                    .clip(RoundedCornerShape(15.dp))
-                    .background(Color(0x99000000)),
+                    .glassSurface(RoundedCornerShape(15.dp), Color(0x59000000)),
                 contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Icon(EmberIcons.Play, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))

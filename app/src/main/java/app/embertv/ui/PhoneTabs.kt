@@ -349,7 +349,7 @@ private fun SmallPill(text: String, primary: Boolean, onClick: () -> Unit) {
         Modifier
             .height(32.dp)
             .then(if (primary) Modifier.clip(shape).background(Color.White) else Modifier.glassSurface(shape))
-            .clickable(onClick = onClick)
+            .pressable(onClick = onClick)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -366,7 +366,7 @@ private fun PhoneTimeHeader(dayStart: Long, now: Long, day: Int, scroll: ScrollS
                 Modifier
                     .height(26.dp)
                     .glassSurface(RoundedCornerShape(13.dp))
-                    .clickable(onClick = onDay)
+                    .pressable(onClick = onDay)
                     .padding(horizontal = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -442,7 +442,7 @@ private fun PhoneGuideRow(
                 .width(P_CHANNEL - 12.dp)
                 .fillMaxHeight()
                 .glassSurface(RoundedCornerShape(10.dp), Color(0x0FFFFFFF))
-                .clickable(onClick = onWatch),
+                .pressable(onClick = onWatch),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
@@ -461,7 +461,7 @@ private fun PhoneGuideRow(
                             .width(280.dp)
                             .fillMaxHeight()
                             .glassSurface(RoundedCornerShape(10.dp), Color(0x0AFFFFFF))
-                            .clickable(onClick = onWatch)
+                            .pressable(onClick = onWatch)
                             .padding(horizontal = 12.dp),
                         contentAlignment = Alignment.CenterStart,
                     ) {

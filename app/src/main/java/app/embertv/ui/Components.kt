@@ -46,6 +46,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -160,11 +163,15 @@ private class PressState {
 
 /** OK/Enter clicks, holding OK long-presses; on touch screens, tap and press-and-hold do the same. */
 @OptIn(ExperimentalFoundationApi::class)
-fun Modifier.tvClickable(onClick: () -> Unit, onLongClick: (() -> Unit)? = null): Modifier = composed {
+fun Modifier.tvClickable(
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    interactionSource: MutableInteractionSource? = null,
+): Modifier = composed {
     val press = remember { PressState() }
     val click by rememberUpdatedState(onClick)
     val longClick by rememberUpdatedState(onLongClick)
-    val interaction = remember { MutableInteractionSource() }
+    val interaction = interactionSource ?: remember { MutableInteractionSource() }
     Modifier
         .onPreviewKeyEvent { ev ->
             val code = ev.nativeKeyEvent.keyCode
@@ -197,8 +204,9 @@ fun Modifier.tvClickable(onClick: () -> Unit, onLongClick: (() -> Unit)? = null)
         }
         .combinedClickable(
             interactionSource = interaction,
-            // TVs show focus with the white outline; phones get the usual touch ripple.
-            indication = if (LocalIsTv.current) null else LocalIndication.current,
+            // No Android ripple anywhere: TVs show focus with the white highlight, and on phones the
+            // tile shrinks a touch under your finger, as on iPhone (see FocusBox).
+            indication = null,
             onLongClick = if (onLongClick != null) {
                 { longClick?.invoke() }
             } else {
@@ -229,7 +237,16 @@ fun FocusBox(
 ) {
     val vm = LocalAppVm.current
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) focusedScale else 1f, label = "focusScale")
+    val press = remember { MutableInteractionSource() }
+    val pressed by press.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        when {
+            focused -> focusedScale
+            pressed -> 0.96f
+            else -> 1f
+        },
+        label = "focusScale",
+    )
     val ownRequester = remember { FocusRequester() }
     val requester = requester ?: ownRequester
 
@@ -293,6 +310,7 @@ fun FocusBox(
                     onClick()
                 },
                 onLongClick = onLongClick,
+                interactionSource = press,
             ),
     ) {
         content(focused)
@@ -799,4 +817,19 @@ fun SortChip(label: String, focusKey: String, onClick: () -> Unit) {
             }
         }
     }
+}
+
+/**
+ * Tapping, the Apple way: no Android ripple; the thing you're pressing lightens a little under your
+ * finger instead. For buttons and rows that aren't [FocusBox] tiles.
+ */
+fun Modifier.pressable(onClick: () -> Unit): Modifier = composed {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    this
+        .drawWithContent {
+            drawContent()
+            if (pressed) drawRect(Color(0x26FFFFFF))
+        }
+        .clickable(interactionSource = interaction, indication = null, onClick = onClick)
 }

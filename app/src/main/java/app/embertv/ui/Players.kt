@@ -1029,7 +1029,7 @@ fun LivePlayerScreen(vm: AppViewModel, channelsIn: List<Channel>, startIndex: In
         if (listOpen) {
             if (!isTv) {
                 // Tapping beside the list closes it.
-                Box(Modifier.fillMaxSize().clickable { listOpen = false })
+                Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { listOpen = false })
             }
             ZapList(
                 vm = vm,
@@ -1217,7 +1217,7 @@ private fun BehindLivePill(behindMs: Long, isTv: Boolean, modifier: Modifier, on
     Row(
         modifier
             .glassSurface(RoundedCornerShape(16.dp), Color(0xB3101014))
-            .then(if (isTv) Modifier else Modifier.clickable(onClick = onLive))
+            .then(if (isTv) Modifier else Modifier.pressable(onClick = onLive))
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -2345,7 +2345,7 @@ private fun SkipButton(forward: Boolean, seconds: Int, onClick: () -> Unit) {
         Modifier
             .size(56.dp)
             .glassSurface(RoundedCornerShape(28.dp), ControlBg)
-            .clickable(onClick = onClick),
+            .pressable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(

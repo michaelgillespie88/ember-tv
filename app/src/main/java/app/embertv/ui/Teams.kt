@@ -581,7 +581,7 @@ fun BoxScope.ScoreBug(vm: AppViewModel) {
             // Frosted like everything else; when the score changes it lights up white for a few seconds.
             .glassSurface(shape, if (flashing) Color(0x40FFFFFF) else Color(0xCC121216))
             .border(if (flashing) 1.5.dp else 0.dp, if (flashing) Color.White else Color.Transparent, shape)
-            .then(if (!isTv) Modifier.clickable { vm.unpinMatch() } else Modifier)
+            .then(if (!isTv) Modifier.pressable { vm.unpinMatch() } else Modifier)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -145,7 +145,7 @@ fun CastSheet(vm: AppViewModel) {
                                     "Forget",
                                     style = Txt.Caption,
                                     color = if (dark) Color(0xFF555555) else Ember.Dim,
-                                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { vm.forgetTv(p) }.padding(6.dp),
+                                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).pressable { vm.forgetTv(p) }.padding(6.dp),
                                 )
                             }
                         },

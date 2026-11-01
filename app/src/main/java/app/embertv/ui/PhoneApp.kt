@@ -262,7 +262,7 @@ fun IconCircleButton(
         modifier
             .size(size)
             .then(if (glass) Modifier.glassSurface(CircleShape, background) else Modifier.clip(CircleShape).background(background))
-            .clickable(onClick = onClick),
+            .pressable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(size * 0.5f))
@@ -283,7 +283,7 @@ fun PillButton(
         modifier
             .height(48.dp)
             .then(if (primary) Modifier.clip(shape).background(Color.White) else Modifier.glassSurface(shape))
-            .clickable(onClick = onClick)
+            .pressable(onClick = onClick)
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -311,7 +311,7 @@ private fun CategoryChips(spec: ChipsSpec) {
                 Modifier
                     .height(36.dp)
                     .then(if (selected) Modifier.clip(shape).background(Color.White) else Modifier.glassSurface(shape, Color(0x14FFFFFF)))
-                    .clickable { spec.onSelect(c) }
+                    .pressable { spec.onSelect(c) }
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -451,7 +451,7 @@ private fun PhoneTextField(
                             color = Ember.Dim,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { reveal = !reveal }
+                                .pressable { reveal = !reveal }
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                         )
                     }
