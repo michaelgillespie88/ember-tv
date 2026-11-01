@@ -223,6 +223,8 @@ fun FocusBox(
     onFocusChange: ((Boolean) -> Unit)? = null,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
+    /** The soft highlight and hairline rim on see-through tiles; off for calm grids like the guide. */
+    glassEdge: Boolean = true,
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
 ) {
     val vm = LocalAppVm.current
@@ -270,7 +272,7 @@ fun FocusBox(
             .background(if (focused) focusedColor else color)
             // Tinted (see-through) surfaces get Apple TV's glass edge: a soft top highlight and a hairline rim.
             .then(
-                if (!focused && color.alpha > 0f && color.alpha < 0.5f) {
+                if (glassEdge && !focused && color.alpha > 0f && color.alpha < 0.5f) {
                     Modifier
                         .background(Brush.verticalGradient(listOf(Color(0x12FFFFFF), Color.Transparent)))
                         .border(0.6.dp, Color(0x24FFFFFF), shape)

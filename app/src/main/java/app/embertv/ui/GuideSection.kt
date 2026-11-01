@@ -200,7 +200,9 @@ private fun GuideGrid(
                         )
                     }
                     Spacer(Modifier.width(10.dp))
-                    val channels = r.value
+                    // Each channel once, whatever qualities the provider lists it in.
+                    val rows = remember(r.value, vm.qualityChoice) { combineChannelQualities(r.value, vm.qualityChoice) }
+                    val channels = remember(rows) { rows.map { it.channel } }
                     val compact = vm.compactLists
                     val rowHeight = if (compact) COMPACT_ROW_HEIGHT else ROW_HEIGHT
                     BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
@@ -237,6 +239,7 @@ private fun GuideGrid(
                                         GuideRow(
                                             repo = repo,
                                             channel = ch,
+                                            tag = rows[index].tag,
                                             rowHeight = rowHeight,
                                             compact = compact,
                                             wantFull = step != 0,
@@ -349,7 +352,7 @@ internal fun GuideInfo(focus: GuideFocus?, now: Long) {
         val p = focus.programme
         val ch = focus.channel
         Text(
-            (if (ch.num > 0) "${ch.num}  ·  " else "") + ch.name.uppercase(),
+            (if (ch.num > 0) "${ch.num}  ·  " else "") + channelParts(ch.name).first.uppercase(),
             style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp),
             color = Ember.Text,
             maxLines = 1,
@@ -521,6 +524,8 @@ internal fun GuideRow(
     onLongPick: (Programme?) -> Unit,
     autoFocusLive: Boolean = false,
     channelColumn: Dp = CHANNEL_COLUMN,
+    /** The quality shown beside the name; worked out from the name when not given. */
+    tag: String? = channelParts(channel.name).second,
 ) {
     // Once a row has needed the whole guide it keeps it, so scrolling back doesn't reload it.
     var full by remember { mutableStateOf(false) }
@@ -551,12 +556,24 @@ internal fun GuideRow(
                 if (compact) Modifier.size(width = 38.dp, height = 24.dp) else Modifier.size(width = 50.dp, height = 32.dp),
             )
             Spacer(Modifier.width(8.dp))
+            // The name without "FHD :" and the like, with the quality as a small frosted tag.
             Text(
-                channel.name,
+                channelParts(channel.name).first,
                 style = Txt.Label.copy(fontSize = if (compact) 13.sp else 14.sp),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
             )
+            if (tag != null) {
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    Modifier
+                        .glassSurface(RoundedCornerShape(5.dp), Color(0x1AFFFFFF))
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                ) {
+                    Text(tag, style = Txt.Caption.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp), color = Ember.Dim, maxLines = 1)
+                }
+            }
         }
         Box(Modifier.width(gridWidth).fillMaxHeight()) {
             val visible = programmes.orEmpty().filter { it.end > windowStart && it.start < windowEnd }
@@ -622,18 +639,20 @@ private fun ProgrammeBlock(
     onLongClick: (() -> Unit)? = null,
     autoFocus: Boolean = false,
 ) {
-    Box(modifier.padding(end = 2.dp)) {
+    Box(modifier.padding(end = 3.dp)) {
         FocusBox(
             modifier = Modifier.fillMaxSize(),
             focusKey = focusKey,
             shape = RoundedCornerShape(if (compact) 7.dp else 9.dp),
             focusedScale = 1f,
-            // Tinted glass, like the rest of the app: brighter for what's on now, fainter for what's finished.
+            // Calm, Apple TV style: soft fills without outlines, a little brighter for what's on now,
+            // fainter for later and fainter still for what's finished. The one you're on turns white.
             color = when {
-                live -> Color(0x29FFFFFF)
-                past -> Color(0x0AFFFFFF)
-                else -> Color(0x14FFFFFF)
+                live -> Color(0x21FFFFFF)
+                past -> Color(0x08FFFFFF)
+                else -> Color(0x10FFFFFF)
             },
+            glassEdge = false,
             focusedColor = Color.White,
             autoFocus = autoFocus,
             onFocusChange = { if (it) onFocus() },
@@ -664,7 +683,9 @@ private fun ProgrammeBlock(
                             else -> Ember.Dim
                         },
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        // Long titles in short slots simply stop at the edge, without "…".
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
                     )
                 }
                 if (time.isNotEmpty()) {
