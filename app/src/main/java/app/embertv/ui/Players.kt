@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.graphicsLayer
 import android.view.KeyEvent as AndroidKeyEvent
 import android.app.Activity
 import android.content.Context
@@ -1685,6 +1686,10 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
     // TVs: the row of buttons (play, skip, next episode, live scores) that pausing brings up.
     var controlsOpen by remember { mutableStateOf(false) }
     var controlsToken by remember { mutableIntStateOf(0) }
+    // TVs: ▲ from the pause buttons picks up the progress bar, Apple TV style. ◀▶ move a marker along
+    // it (faster the longer you hold), OK jumps there, ▼ or BACK puts it down without moving.
+    var barFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(controlsOpen) { if (!controlsOpen) barFocused = false }
     var scoresOpen by remember { mutableStateOf(false) }
     val controlsFocus = remember { FocusRequester() }
     // What this film or episode offers, so the pause buttons only show what's there.
@@ -1909,6 +1914,14 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
         showOverlay()
     }
 
+    // Moving the marker on the progress bar: 10 seconds a press, speeding up to minutes while held.
+    fun barStep(repeat: Int): Long = when {
+        repeat < 4 -> 10_000L
+        repeat < 12 -> 30_000L
+        repeat < 24 -> 60_000L
+        else -> 120_000L
+    }
+
     fun stepFor(repeat: Int): Long = when {
         repeat < 6 -> 10_000L
         repeat < 20 -> 30_000L
@@ -1922,6 +1935,44 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
         // Up Next showing: OK plays the next episode now.
         if (upNext && !controlsOpen && isSelectKey(code)) {
             if (ev.type == KeyEventType.KeyDown && native.repeatCount == 0) nextEpisode(finished = true)
+            return true
+        }
+        if (controlsOpen && barFocused) {
+            val arrows = code == AndroidKeyEvent.KEYCODE_DPAD_LEFT || code == AndroidKeyEvent.KEYCODE_DPAD_RIGHT ||
+                code == AndroidKeyEvent.KEYCODE_MEDIA_REWIND || code == AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD
+            val leave = code == AndroidKeyEvent.KEYCODE_DPAD_DOWN || code == AndroidKeyEvent.KEYCODE_BACK
+            if (ev.type != KeyEventType.KeyDown) return arrows || leave || isSelectKey(code)
+            controlsToken++
+            when {
+                code == AndroidKeyEvent.KEYCODE_DPAD_LEFT || code == AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> scrubBy(-barStep(native.repeatCount))
+                code == AndroidKeyEvent.KEYCODE_DPAD_RIGHT || code == AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> scrubBy(barStep(native.repeatCount))
+                isSelectKey(code) || code == AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                    if (native.repeatCount == 0) {
+                        // Jump there and carry on watching.
+                        commitScrub()
+                        barFocused = false
+                        controlsOpen = false
+                        exo.play()
+                    }
+                }
+                leave -> {
+                    scrub = null
+                    barFocused = false
+                    scope.launch {
+                        delay(30)
+                        runCatching { controlsFocus.requestFocus() }
+                    }
+                }
+                else -> return true
+            }
+            return true
+        }
+        if (controlsOpen && code == AndroidKeyEvent.KEYCODE_DPAD_UP) {
+            if (ev.type == KeyEventType.KeyDown && duration > 0) {
+                barFocused = true
+                scrub = exo.currentPosition
+                controlsToken++
+            }
             return true
         }
         if (controlsOpen) {
@@ -1981,6 +2032,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
             .fillMaxSize()
             .background(Color.Black)
             .focusRequester(focus)
+            .onPreviewKeyEvent { if (controlsOpen && barFocused) onKey(it) else false }
             .onKeyEvent { onKey(it) }
             .focusable()
             // Touch: tap shows or hides the controls; double-tap the left or right side to skip 10 seconds;
@@ -2036,6 +2088,8 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
                     playing = playing,
                     hasNext = current < items.lastIndex,
                     controlsOpen = controlsOpen && !scoresOpen,
+                    barFocused = barFocused && controlsOpen,
+                    jumpBy = scrub?.let { it - position },
                     requester = controlsFocus,
                     onActivity = { controlsToken++ },
                     onTogglePlay = { togglePlay() },
@@ -2227,6 +2281,8 @@ private fun VodOverlay(
     playing: Boolean,
     hasNext: Boolean,
     controlsOpen: Boolean,
+    barFocused: Boolean = false,
+    jumpBy: Long? = null,
     requester: FocusRequester,
     onActivity: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -2256,14 +2312,44 @@ private fun VodOverlay(
                 Text(item.subtitle, style = Txt.Label, color = Ember.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.height(14.dp))
+            val fraction = if (duration > 0) position.toFloat() / duration.toFloat() else 0f
+            if (barFocused) {
+                // The marker's time in a white bubble above it, and how far that is from where you were.
+                androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().height(34.dp)) {
+                    val bubble = 120.dp
+                    val x = ((maxWidth - bubble) * fraction.coerceIn(0f, 1f) + 0.dp)
+                    Column(
+                        Modifier.padding(start = x).width(bubble),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box(Modifier.clip(RoundedCornerShape(10.dp)).background(Color.White).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                            val delta = jumpBy ?: 0L
+                            val sign = if (delta < 0) "−" else "+"
+                            Text(
+                                formatMs(position) + if (kotlin.math.abs(delta) >= 1_000) "  ($sign${formatMs(kotlin.math.abs(delta))})" else "",
+                                style = Txt.Caption.copy(fontWeight = FontWeight.Bold),
+                                color = Color.Black,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+            }
             PlayerScrubber(
-                fraction = if (duration > 0) position.toFloat() / duration.toFloat() else 0f,
-                showHead = scrubbing || !playing,
+                fraction = fraction,
+                showHead = scrubbing || !playing || barFocused,
+                modifier = if (barFocused) Modifier.graphicsLayer { scaleY = 1.35f } else Modifier,
             )
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(formatMs(position), style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Text)
                 Spacer(Modifier.weight(1f))
+                if (barFocused) {
+                    RemoteHints(listOf(Hint("◀▶", "Move"), Hint("OK", "Jump here"), Hint("▼", "Cancel")), always = true)
+                } else if (controlsOpen) {
+                    RemoteHints(listOf(Hint("▲", "Choose a point")))
+                }
                 if (!controlsOpen) {
                     RemoteHints(
                         if (playing) listOf(Hint("OK", "Pause"), Hint("◀▶", "Skip"))
