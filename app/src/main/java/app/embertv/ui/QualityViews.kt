@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -130,7 +131,11 @@ fun VersionPickerDialog(vm: AppViewModel, choice: VersionChoice) {
                 .padding(if (isTv) 8.dp else 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            SheetTitle(choice.title, eyebrow = "Choose quality", subtitle = episodeLine)
+            if (choice is VersionChoice.ForChannel) {
+                ChannelChoiceHeader(vm, choice)
+            } else {
+                SheetTitle(choice.title, eyebrow = "Choose quality", subtitle = episodeLine)
+            }
             Spacer(Modifier.height(22.dp))
             LazyColumn(
                 Modifier.weight(1f, fill = false),
@@ -141,7 +146,8 @@ fun VersionPickerDialog(vm: AppViewModel, choice: VersionChoice) {
                     val name = choice.names[i]
                     SheetOption(
                         title = (listOf(q.title) + Versions.extras(name)).joinToString(" · "),
-                        subtitle = if (i == 0) "Best available" else name,
+                        // Channels: just the quality (their raw names repeat "FHD : BBC One"); films keep their name.
+                        subtitle = if (i == 0) "Best available" else if (choice is VersionChoice.ForChannel) null else name,
                         focusKey = "version:$i",
                         autoFocus = isTv && i == 0,
                         leading = { dark -> QualityTag(q, dark) },
@@ -183,5 +189,40 @@ fun WatchedTick(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         androidx.compose.material3.Icon(EmberIcons.Check, contentDescription = "Watched", tint = Color.White, modifier = Modifier.size(14.dp))
+    }
+}
+
+/** The top of the quality card for a channel: its logo and name, and what's on now. */
+@Composable
+private fun ChannelChoiceHeader(vm: AppViewModel, choice: VersionChoice.ForChannel) {
+    val ch = choice.copies.first()
+    val repo = vm.repo
+    val now = LocalNow.current
+    val onNow = if (repo != null) rememberProgrammes(repo, ch.streamId)?.firstOrNull { it.isLive(now) } else null
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("CHOOSE QUALITY", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Dim)
+        Spacer(Modifier.height(12.dp))
+        Box(
+            Modifier
+                .size(width = 96.dp, height = 60.dp)
+                .glassSurface(RoundedCornerShape(14.dp), Color(0x14FFFFFF)),
+            contentAlignment = Alignment.Center,
+        ) {
+            ChannelLogo(ch.icon, choice.title, Modifier.size(width = 72.dp, height = 44.dp))
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(choice.title, style = Txt.Title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (onNow != null) {
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LiveTag()
+                Spacer(Modifier.width(8.dp))
+                Text(onNow.title, style = Txt.Label, color = Ember.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.width(220.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Color(0x26FFFFFF))) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(onNow.progress(now).coerceIn(0f, 1f)).background(Ember.Text))
+            }
+        }
     }
 }
