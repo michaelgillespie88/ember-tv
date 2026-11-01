@@ -124,6 +124,28 @@ internal suspend fun loadHomeFeed(repo: Repository): HomeFeed = kotlinx.coroutin
 }
 
 /**
+ * The films for the big banner at the top of Home, picked for you rather than just the provider's
+ * first category: first ones like what you've been watching (Because You Watched), then new
+ * additions that are rated well, then (only if there's nothing else) the newest films. Nothing
+ * you've already watched, and only ones with artwork. Empty when the banner is turned off.
+ */
+private fun featuredFor(vm: AppViewModel, feed: HomeFeed): List<Movie> {
+    if (FEATURED in vm.homeHidden) return emptyList()
+    fun rating(m: Movie) = m.rating.toFloatOrNull() ?: 0f
+    fun ok(m: Movie) = m.poster.isNotBlank() && !vm.movieWatched(m)
+    val picked = LinkedHashMap<Int, Movie>()
+    vm.homeExtras?.because.orEmpty().filterIsInstance<Movie>().filter(::ok).take(3).forEach { picked[it.streamId] = it }
+    val newest = feed.recent.filterIsInstance<Movie>().filter(::ok)
+    newest.filter { rating(it) >= 6.5f }.sortedByDescending { rating(it) }.take(6).forEach { if (picked.size < 6) picked.putIfAbsent(it.streamId, it) }
+    if (picked.size < 3) newest.take(6).forEach { if (picked.size < 6) picked.putIfAbsent(it.streamId, it) }
+    if (picked.isEmpty()) feed.heroes.filter(::ok).forEach { if (picked.size < 6) picked.putIfAbsent(it.streamId, it) }
+    return picked.values.toList()
+}
+
+/** The id Arrange Home uses for the banner at the top. */
+const val FEATURED = "featured"
+
+/**
  * Home's rows, loaded by the app in the background (so switching to Live TV doesn't stop it) and
  * kept until something changes (profile, categories, a refresh).
  */
@@ -562,8 +584,9 @@ fun HomeSection(vm: AppViewModel) {
                 contentPadding = PaddingValues(bottom = 48.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                if (feed.heroes.isNotEmpty()) {
-                    item(key = "hero") { TvHero(vm, repo, feed.heroes) }
+                val heroes = featuredFor(vm, feed)
+                if (heroes.isNotEmpty()) {
+                    item(key = "hero") { TvHero(vm, repo, heroes) }
                 }
                 homeRows(vm, feed, edge = 48.dp, posterWidth = 132.dp, continueWidth = 300.dp, gap = 22.dp) { arranging = true }
             }
@@ -655,8 +678,9 @@ fun PhoneHomeTab(vm: AppViewModel) {
                 contentPadding = PaddingValues(bottom = pad.calculateBottomPadding() + 8.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                if (feed.heroes.isNotEmpty()) {
-                    item(key = "hero") { PhoneHero(vm, repo, feed.heroes) }
+                val heroes = featuredFor(vm, feed)
+                if (heroes.isNotEmpty()) {
+                    item(key = "hero") { PhoneHero(vm, repo, heroes) }
                 } else {
                     item(key = "top") { Spacer(Modifier.height(pad.calculateTopPadding())) }
                 }
@@ -778,6 +802,19 @@ fun ArrangeHomeDialog(vm: AppViewModel, onDone: () -> Unit) {
                     .verticalScroll(androidx.compose.foundation.rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // The big banner always sits at the top; it can only be turned on or off.
+                ArrangeRow(
+                    name = "Featured banner (picked for you)",
+                    shown = FEATURED !in vm.homeHidden,
+                    canUp = false,
+                    canDown = false,
+                    first = true,
+                    id = FEATURED,
+                    onToggle = { vm.toggleHomeRow(FEATURED) },
+                    onUp = {},
+                    onDown = {},
+                    arrows = false,
+                )
                 order.forEachIndexed { i, id ->
                     // Keyed by row, so focus stays on the arrow you pressed as the row moves.
                     androidx.compose.runtime.key(id) {
@@ -786,7 +823,7 @@ fun ArrangeHomeDialog(vm: AppViewModel, onDone: () -> Unit) {
                             shown = id !in vm.homeHidden,
                             canUp = i > 0,
                             canDown = i < order.lastIndex,
-                            first = i == 0,
+                            first = false,
                             id = id,
                             onToggle = { vm.toggleHomeRow(id) },
                             onUp = { vm.moveHomeRow(id, -1) },
@@ -832,6 +869,7 @@ private fun ArrangeRow(
     onToggle: () -> Unit,
     onUp: () -> Unit,
     onDown: () -> Unit,
+    arrows: Boolean = true,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         FocusBox(
@@ -866,10 +904,12 @@ private fun ArrangeRow(
                 )
             }
         }
-        Spacer(Modifier.width(8.dp))
-        ArrowButton(EmberIcons.ChevronUp, "Move up", "arrange:$id:up", enabled = canUp, onClick = onUp)
-        Spacer(Modifier.width(6.dp))
-        ArrowButton(EmberIcons.ChevronDown, "Move down", "arrange:$id:down", enabled = canDown, onClick = onDown)
+        if (arrows) {
+            Spacer(Modifier.width(8.dp))
+            ArrowButton(EmberIcons.ChevronUp, "Move up", "arrange:$id:up", enabled = canUp, onClick = onUp)
+            Spacer(Modifier.width(6.dp))
+            ArrowButton(EmberIcons.ChevronDown, "Move down", "arrange:$id:down", enabled = canDown, onClick = onDown)
+        }
     }
 }
 
