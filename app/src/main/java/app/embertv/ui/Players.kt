@@ -377,7 +377,7 @@ private fun rememberExoPlayer(
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(15_000, 50_000, 1_000, 2_500)
             .build()
-        ExoPlayer.Builder(context)
+        ExoPlayer.Builder(context, app.embertv.HdrHint.renderersFactory(context))
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(context, http)))
             .setLoadControl(loadControl)
             .build()
@@ -651,6 +651,7 @@ fun LivePlayerScreen(vm: AppViewModel, channelsIn: List<Channel>, startIndex: In
             .setUri(url)
             .setMediaId("shift:${ch.streamId}:$startSec")
             .build()
+        app.embertv.HdrHint.choose(vm.hdrHint, live = true)
         exo.setMediaItem(item)
         exo.prepare()
         exo.playWhenReady = !paused
@@ -729,6 +730,7 @@ fun LivePlayerScreen(vm: AppViewModel, channelsIn: List<Channel>, startIndex: In
             .setMediaId("live:${channel.streamId}")
             .setMimeType(if (url.endsWith(".m3u8")) MimeTypes.APPLICATION_M3U8 else null)
             .build()
+        app.embertv.HdrHint.choose(vm.hdrHint, live = true)
         exo.setMediaItem(item)
         exo.prepare()
         exo.playWhenReady = true
@@ -1796,6 +1798,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
 
     LaunchedEffect(Unit) {
         val media = items.map { MediaItem.Builder().setUri(it.url).setMediaId(it.key).build() }
+        app.embertv.HdrHint.choose(vm.hdrHint, live = false)
         exo.setMediaItems(media, startIndex.coerceIn(0, items.lastIndex), startMs.coerceAtLeast(0L))
         exo.prepare()
         exo.playWhenReady = true

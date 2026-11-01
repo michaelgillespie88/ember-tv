@@ -615,6 +615,17 @@ fun SettingsSection(vm: AppViewModel) {
                 ) { choosingAudio = true }
                 if (isTv) {
                     SettingRow(
+                        "4K picture",
+                        vm.hdrHintLabel,
+                        when (vm.hdrHint) {
+                            "hlg" -> "Unlabelled 4K is treated as HLG (most UK sport)"
+                            "hdr10" -> "Unlabelled 4K is treated as HDR10 (most films)"
+                            "off" -> "4K plays as it comes. Try this if 4K looks too bright"
+                            else -> "Brightens 4K that's dark: HLG for channels, HDR10 for films"
+                        },
+                        focusKey = "set:hdr",
+                    ) { vm.cycleHdrHint() }
+                    SettingRow(
                         "Match frame rate",
                         if (vm.matchFrameRate) "On" else "Off",
                         "Films and series switch to 24Hz. The screen may blink",

@@ -300,6 +300,13 @@ class Prefs(context: Context) {
             sp.edit().putString("quality_choice", value).apply()
         }
 
+    /** 4K streams that don't say they're HDR: "auto", "hlg", "hdr10" or "off". */
+    var hdrHint: String
+        get() = sp.getString("hdr_hint", "auto") ?: "auto"
+        set(value) {
+            sp.edit().putString("hdr_hint", value).apply()
+        }
+
     /** Switch the TV's refresh rate to match what's playing. */
     var matchFrameRate: Boolean
         get() = sp.getBoolean("match_frame_rate", true)

@@ -522,6 +522,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 4K streams that don't say they're HDR (Settings → Playing → 4K picture). */
+    var hdrHint by mutableStateOf(prefs.hdrHint)
+        private set
+
+    val hdrHintLabel: String
+        get() = when (hdrHint) {
+            "hlg" -> "HLG"
+            "hdr10" -> "HDR10"
+            "off" -> "Off"
+            else -> "Automatic"
+        }
+
+    fun cycleHdrHint() {
+        hdrHint = when (hdrHint) {
+            "auto" -> "hlg"
+            "hlg" -> "hdr10"
+            "hdr10" -> "off"
+            else -> "auto"
+        }
+        prefs.hdrHint = hdrHint
+    }
+
     fun toggleMatchFrameRate() {
         matchFrameRate = !matchFrameRate
         prefs.matchFrameRate = matchFrameRate
