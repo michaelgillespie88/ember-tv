@@ -112,6 +112,42 @@ object ScoresClient {
     suspend fun matches(league: League, dates: String): List<Match> {
         val root = fetch("https://site.api.espn.com/apis/site/v2/sports/soccer/${league.code}/scoreboard?dates=$dates&limit=300")
             ?: return emptyList()
+        return parse(root, league)
+    }
+
+    /**
+     * One club's own fixture list: its next games and its recent results. A small, reliable request,
+     * so Your Teams always has the next game and the last result, whatever day it is.
+     */
+    suspend fun teamSchedule(league: League, teamId: String): List<Match> = coroutineScope {
+        val base = "https://site.api.espn.com/apis/site/v2/sports/soccer/${league.code}/teams/$teamId/schedule"
+        val next = async { fetch("$base?fixture=true")?.let { parse(it, league) }.orEmpty() }
+        val past = async { fetch(base)?.let { parse(it, league) }.orEmpty() }
+        (next.await() + past.await()).distinctBy { it.id }.sortedBy { it.kickoff }
+    }
+
+    /** [teams]' own fixture lists together; a team whose list can't be fetched is just left out. */
+    suspend fun schedules(teams: List<Team>): List<Match> = coroutineScope {
+        teams.map { t ->
+            async {
+                val l = LEAGUES.firstOrNull { it.code == t.league }
+                if (l == null) emptyList() else try {
+                    teamSchedule(l, t.id)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
+        }.awaitAll().flatten().distinctBy { it.id }
+    }
+
+    /** Day by day from [from] to [to] days from today (for when a date range comes back empty). */
+    private suspend fun dayByDay(leagues: List<League>, from: Int, to: Int): List<Match> = coroutineScope {
+        (from..to).flatMap { d -> leagues.map { l -> async { matches(l, day(d)) } } }.awaitAll().flatten().distinctBy { it.id }
+    }
+
+    private fun parse(root: JSONObject, league: League): List<Match> {
         val clockFormat = SimpleDateFormat("HH:mm", Locale.UK)
         return asArray(root.opt("events")).objects().mapNotNull { ev ->
             val comp = asArray(ev.opt("competitions")).objects().firstOrNull() ?: return@mapNotNull null
@@ -162,13 +198,17 @@ object ScoresClient {
     /** Matches across [leagues] from [days] ago up to today, newest first. */
     suspend fun recent(leagues: List<League>, days: Int): List<Match> = coroutineScope {
         val range = day(-days) + "-" + day(0)
-        leagues.map { l -> async { matches(l, range) } }.awaitAll().flatten().distinctBy { it.id }.sortedByDescending { it.kickoff }
+        val found = leagues.map { l -> async { matches(l, range) } }.awaitAll().flatten()
+        // Some feeds don't answer date ranges: ask for each day instead.
+        (found.ifEmpty { dayByDay(leagues, -days, 0) }).distinctBy { it.id }.sortedByDescending { it.kickoff }
     }
 
     /** Matches across [leagues] from today to [days] ahead, soonest first. */
     suspend fun upcoming(leagues: List<League>, days: Int): List<Match> = coroutineScope {
         val range = day(0) + "-" + day(days)
-        leagues.map { l -> async { matches(l, range) } }.awaitAll().flatten().distinctBy { it.id }.sortedBy { it.kickoff }
+        val found = leagues.map { l -> async { matches(l, range) } }.awaitAll().flatten()
+        // Some feeds don't answer date ranges: ask for each day instead (the next week or so).
+        (found.ifEmpty { dayByDay(leagues, 0, minOf(days, 8)) }).distinctBy { it.id }.sortedBy { it.kickoff }
     }
 
     private val teamCache = HashMap<String, List<Team>>()

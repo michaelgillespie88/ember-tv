@@ -2332,7 +2332,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val nowMs = System.currentTimeMillis()
                 if (nowMs - fixturesAt > 30 * 60_000L || fixtures.isEmpty() && nowMs - fixturesAt > 5 * 60_000L) {
                     fixtures = try {
-                        ScoresClient.upcoming(leagues, 45).filter { ours(it) }
+                        // Each club's own fixture list first (next games and recent results), then the
+                        // competitions' lists to catch anything missing.
+                        val own = ScoresClient.schedules(followedTeams.toList())
+                        (own + ScoresClient.upcoming(leagues, 45)).filter { ours(it) }.distinctBy { it.id }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
