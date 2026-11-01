@@ -381,7 +381,18 @@ fun PhoneLoginScreen(vm: AppViewModel) {
             )
             val error = vm.loginError
             if (error != null) {
-                Text(error, style = Txt.Body, color = Color(0xFFFF8A80), modifier = Modifier.padding(bottom = 14.dp))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 14.dp)
+                        .glassSurface(RoundedCornerShape(14.dp), Color(0x24FF453A))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(EmberIcons.Alert, contentDescription = null, tint = Ember.Text, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(error, style = Txt.Label, color = Ember.Text)
+                }
             }
             Spacer(Modifier.height(6.dp))
             PillButton(

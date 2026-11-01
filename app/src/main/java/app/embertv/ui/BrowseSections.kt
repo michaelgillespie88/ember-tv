@@ -5,6 +5,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.material3.Icon
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -441,237 +442,228 @@ fun SettingsSection(vm: AppViewModel) {
 
     val settingsList: @Composable (Modifier) -> Unit = { modifier ->
         Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // ---- Profile ----
-            SettingsHeader("Profile", first = true)
-            SettingRow(
-                "My teams",
-                if (vm.followedTeams.isEmpty()) "None" else vm.followedTeams.joinToString(", ") { it.shortName },
-                "Goal alerts and their next match on Home",
-                focusKey = "set:teams",
-            ) { pickingTeams = true }
-            if (!kids) SettingRow(
-                "Live sport on Home",
-                if (vm.sportOnHome) "On" else "Off",
-                "Football on now across your channels, with the score",
-                focusKey = "set:sport",
-            ) { vm.toggleSportOnHome() }
-            if (!kids && vm.sportOnHome) {
-                val names = app.embertv.data.LEAGUES.filter { it.code in vm.sportLeagues }.map { it.name }
-                SettingRow(
-                    "My leagues",
-                    when {
-                        names.isEmpty() -> "None chosen"
-                        names.size <= 2 -> names.joinToString(", ")
-                        else -> "${names.take(2).joinToString(", ")} + ${names.size - 2}"
-                    },
-                    "Shown first in Live Sport Now" + if (vm.sportOthers) ", then other leagues" else " (others hidden)",
-                    focusKey = "set:leagues",
-                ) { pickingLeagues = true }
-                val shownRows = HOME_ROWS.count { it.first !in vm.homeHidden }
-                SettingRow(
-                    "Arrange Home",
-                    if (shownRows == HOME_ROWS.size) "All rows" else "$shownRows of ${HOME_ROWS.size} rows",
-                    "Choose which rows Home shows, and their order",
-                    focusKey = "set:arrange",
-                ) { arrangingHome = true }
-                SettingRow(
-                    "Background",
-                    Ember.backdrop.name,
-                    "The colour behind everything, and the glow at the top of each page",
-                    focusKey = "set:backdrop",
-                ) { pickingBackdrop = true }
-                SettingRow(
-                    "Text size",
-                    vm.textSizeLabel,
-                    "Bigger text is easier to read from across the room",
-                    focusKey = "set:textsize",
-                ) { vm.cycleTextSize() }
-                if (LocalIsTv.current) {
+            val p = vm.profile
+
+            // ---- Look & Home ----
+            SettingsGroup("Look & Home", first = true) {
+                if (!kids) {
+                    val shownRows = HOME_ROWS.count { it.first !in vm.homeHidden }
+                    SettingRow(
+                        "Arrange Home",
+                        if (shownRows == HOME_ROWS.size) "All rows" else "$shownRows of ${HOME_ROWS.size} rows",
+                        "Which rows Home shows, and their order",
+                        focusKey = "set:arrange",
+                    ) { arrangingHome = true }
+                }
+                SettingRow("Background", Ember.backdrop.name, "The colour behind everything", focusKey = "set:backdrop") { pickingBackdrop = true }
+                SettingRow("Text size", vm.textSizeLabel, "Bigger is easier to read from across the room", focusKey = "set:textsize") { vm.cycleTextSize() }
+                if (isTv) {
                     SettingRow(
                         "Remote hints",
                         if (HintsSetting.show) "On" else "Off",
-                        "The little OK, arrow and Back guides on screen. Turn them off once you know your way around",
+                        "The little OK, arrow and Back guides on screen",
                         focusKey = "set:hints",
                     ) { vm.toggleHints() }
+                    SettingRow(
+                        "Screensaver",
+                        if (vm.screensaverMinutes == 0) "Off" else "After ${vm.screensaverMinutes} min",
+                        "Film and series artwork when the remote is left alone",
+                        focusKey = "set:screensaver",
+                    ) { vm.cycleScreensaver() }
                 }
             }
-            val p = vm.profile
-            if (!kids && p != null) {
-                val hidden = vm.categoryRules(p).keys.size
-                SettingRow(
-                    "Categories",
-                    if (hidden == 0) "All shown" else "$hidden hidden",
-                    "Hide categories you never watch",
-                    focusKey = "set:categories",
-                ) { managingCategories = true }
-            }
-            if (!kids) {
-                val favChannels = vm.favourites.count { it.type == app.embertv.data.ContentType.LIVE }
-                val hiddenCount = vm.hiddenChannels.size
-                SettingRow(
-                    "Channels",
-                    listOfNotNull(
-                        if (favChannels > 0) "$favChannels favourites" else null,
-                        if (hiddenCount > 0) "$hiddenCount hidden" else null,
-                    ).joinToString(" · ").ifEmpty { "All shown" },
-                    "Put favourite channels in order and hide ones you never watch",
-                    focusKey = "set:channels",
-                ) { managingChannels = true }
-            }
 
-            // ---- Watching ----
-            SettingsHeader("Watching")
-            SettingRow(
-                "Pause & rewind live TV",
-                if (vm.timeshiftOn) "On" else "Off",
-                "Uses your provider's catch-up, so it works on channels that have it (marked with the catch-up symbol)",
-                focusKey = "set:timeshift",
-            ) { vm.toggleTimeshift() }
-            SettingRow(
-                "When the app opens",
-                vm.startOnLabel(),
-                "Go straight to the last channel you watched or the TV guide, like a TV box",
-                focusKey = "set:starton",
-            ) { vm.cycleStartOn() }
-            SettingRow(
-                "Picture zoom",
-                vm.pictureModeLabel,
-                if (LocalIsTv.current) "Zoom fills the screen on channels with black bars. Also in the player: press OK" else "Zoom fills the screen on channels with black bars. Pinch the picture to change it too",
-                focusKey = "set:picture",
-            ) { vm.cyclePicture(announce = false) }
-            SettingRow(
-                "Play next episode automatically",
-                if (vm.autoplayNext) "On" else "Off",
-                if (vm.autoplayNext) "Up Next counts down at the end of an episode, then plays the next one" else "Stops at the end of each episode, with the next one ready to play",
-                focusKey = "set:autoplay",
-            ) { vm.toggleAutoplayNext() }
-            SettingRow(
-                "Quality to play",
-                when (vm.qualityChoice) {
-                    "best" -> "Best available"
-                    "FHD" -> "Full HD"
-                    "HD" -> "HD"
-                    else -> "Ask each time"
-                },
-                "For films and shows that come in HD, FHD and 4K",
-                focusKey = "set:quality",
-            ) { vm.cycleQualityChoice() }
-            SettingRow(
-                "Show each channel once",
-                if (vm.channelsOnce) "On" else "Off",
-                if (vm.channelsOnce) "BBC One in FHD, HD and SD shows as one channel, playing your quality. Pick another copy from ••• while watching"
-                else "Every copy your provider lists is shown separately",
-                focusKey = "set:channelsonce",
-            ) { vm.toggleChannelsOnce() }
-            SettingRow(
-                "Audio & subtitles",
-                listOf(
-                    if (vm.audioLanguage.isEmpty()) "Default audio" else "English audio",
-                    if (vm.subtitleMode == "off") "subtitles off" else "English subtitles",
-                ).joinToString(" · "),
-                "What to pick when a stream has a choice",
-                focusKey = "set:audiosubs",
-            ) { choosingAudio = true }
-            if (isTv) {
+            // ---- Sport ----
+            SettingsGroup("Sport") {
                 SettingRow(
-                    "Channel up / down",
-                    if (vm.invertZap) "Up goes to the previous channel" else "Up goes to the next channel",
-                    null,
-                    focusKey = "set:zap",
-                ) { vm.toggleInvertZap() }
-            } else {
-                SettingRow(
-                    "Channel swipe",
-                    if (vm.invertZap) "Swipe down for the next channel" else "Swipe up for the next channel",
-                    null,
-                    focusKey = "set:zap",
-                ) { vm.toggleInvertZap() }
-            }
-
-            // ---- TV ----
-            if (isTv) {
-                SettingsHeader("TV")
-                SettingRow(
-                    "Guide and channel list",
-                    if (vm.compactLists) "Compact" else "Comfortable",
-                    if (vm.compactLists) "About 10 channels in the guide and 8 in the channel list"
-                    else "About 7 channels in the guide, with times on each programme",
-                    focusKey = "set:compact",
-                ) { vm.toggleCompactLists() }
-                SettingRow(
-                    "Live preview",
-                    if (vm.livePreview) "On" else "Off",
-                    "A small muted picture of the highlighted channel. Uses one provider connection",
-                    focusKey = "set:preview",
-                ) { vm.toggleLivePreview() }
-                SettingRow(
-                    "Match frame rate",
-                    if (vm.matchFrameRate) "On" else "Off",
-                    "Films and series only: switches to 24Hz and back. The screen may blink as it switches",
-                    focusKey = "set:afr",
-                ) { vm.toggleMatchFrameRate() }
-                SettingRow(
-                    "Screensaver",
-                    if (vm.screensaverMinutes == 0) "Off" else "After ${vm.screensaverMinutes} min",
-                    "Movie and series artwork when the remote is left alone",
-                    focusKey = "set:screensaver",
-                ) { vm.cycleScreensaver() }
+                    "My teams",
+                    if (vm.followedTeams.isEmpty()) "None" else vm.followedTeams.joinToString(", ") { it.shortName },
+                    "Goal alerts, and their games on Home",
+                    focusKey = "set:teams",
+                ) { pickingTeams = true }
                 if (!kids) {
+                    SettingRow(
+                        "Live sport on Home",
+                        if (vm.sportOnHome) "On" else "Off",
+                        "Football on now across your channels, with the score",
+                        focusKey = "set:sport",
+                    ) { vm.toggleSportOnHome() }
+                    if (vm.sportOnHome) {
+                        val names = app.embertv.data.LEAGUES.filter { it.code in vm.sportLeagues }.map { it.name }
+                        SettingRow(
+                            "My leagues",
+                            when {
+                                names.isEmpty() -> "None chosen"
+                                names.size <= 2 -> names.joinToString(", ")
+                                else -> "${names.take(2).joinToString(", ")} + ${names.size - 2}"
+                            },
+                            "Shown first" + if (vm.sportOthers) ", then other leagues" else " (others hidden)",
+                            focusKey = "set:leagues",
+                        ) { pickingLeagues = true }
+                    }
+                }
+            }
+
+            // ---- Channels & guide ----
+            SettingsGroup("Channels & guide") {
+                SettingRow(
+                    "Show each channel once",
+                    if (vm.channelsOnce) "On" else "Off",
+                    if (vm.channelsOnce) "FHD, HD and SD copies show as one channel" else "Every copy your provider lists is shown",
+                    focusKey = "set:channelsonce",
+                ) { vm.toggleChannelsOnce() }
+                if (!kids) {
+                    val favChannels = vm.favourites.count { it.type == app.embertv.data.ContentType.LIVE }
+                    val hiddenCount = vm.hiddenChannels.size
+                    SettingRow(
+                        "Channels",
+                        listOfNotNull(
+                            if (favChannels > 0) "$favChannels favourites" else null,
+                            if (hiddenCount > 0) "$hiddenCount hidden" else null,
+                        ).joinToString(" · ").ifEmpty { "All shown" },
+                        "Order your favourites, hide ones you never watch",
+                        focusKey = "set:channels",
+                    ) { managingChannels = true }
+                }
+                if (!kids && p != null) {
+                    val hidden = vm.categoryRules(p).keys.size
+                    SettingRow(
+                        "Categories",
+                        if (hidden == 0) "All shown" else "$hidden hidden",
+                        "Hide categories you never watch",
+                        focusKey = "set:categories",
+                    ) { managingCategories = true }
+                }
+                if (isTv) {
+                    SettingRow(
+                        "Guide and channel list",
+                        if (vm.compactLists) "Compact" else "Comfortable",
+                        if (vm.compactLists) "More channels on screen" else "Bigger rows, with times on each programme",
+                        focusKey = "set:compact",
+                    ) { vm.toggleCompactLists() }
+                    SettingRow(
+                        "Live preview",
+                        if (vm.livePreview) "On" else "Off",
+                        "A small muted picture of the highlighted channel",
+                        focusKey = "set:preview",
+                    ) { vm.toggleLivePreview() }
+                }
+                SettingRow(
+                    "Pause & rewind live TV",
+                    if (vm.timeshiftOn) "On" else "Off",
+                    "Uses your provider's catch-up, on channels that have it",
+                    focusKey = "set:timeshift",
+                ) { vm.toggleTimeshift() }
+                SettingRow(
+                    if (isTv) "Channel up / down" else "Channel swipe",
+                    if (isTv) (if (vm.invertZap) "Up goes to the previous channel" else "Up goes to the next channel")
+                    else (if (vm.invertZap) "Swipe down for the next channel" else "Swipe up for the next channel"),
+                    null,
+                    focusKey = "set:zap",
+                ) { vm.toggleInvertZap() }
+            }
+
+            // ---- Playing ----
+            SettingsGroup("Playing") {
+                SettingRow(
+                    "Quality to play",
+                    when (vm.qualityChoice) {
+                        "best" -> "Best available"
+                        "FHD" -> "Full HD"
+                        "HD" -> "HD"
+                        else -> "Ask each time"
+                    },
+                    "For films, shows and channels that come in more than one",
+                    focusKey = "set:quality",
+                ) { vm.cycleQualityChoice() }
+                SettingRow(
+                    "Play next episode automatically",
+                    if (vm.autoplayNext) "On" else "Off",
+                    if (vm.autoplayNext) "Up Next counts down, then plays the next one" else "Stops at the end of each episode",
+                    focusKey = "set:autoplay",
+                ) { vm.toggleAutoplayNext() }
+                SettingRow(
+                    "Picture zoom",
+                    vm.pictureModeLabel,
+                    if (isTv) "Fills the screen on channels with black bars" else "Fills the screen on channels with black bars. Pinch to change it too",
+                    focusKey = "set:picture",
+                ) { vm.cyclePicture(announce = false) }
+                SettingRow(
+                    "Audio & subtitles",
+                    listOf(
+                        if (vm.audioLanguage.isEmpty()) "Default audio" else "English audio",
+                        if (vm.subtitleMode == "off") "subtitles off" else "English subtitles",
+                    ).joinToString(" · "),
+                    "What to pick when a stream has a choice",
+                    focusKey = "set:audiosubs",
+                ) { choosingAudio = true }
+                if (isTv) {
+                    SettingRow(
+                        "Match frame rate",
+                        if (vm.matchFrameRate) "On" else "Off",
+                        "Films and series switch to 24Hz. The screen may blink",
+                        focusKey = "set:afr",
+                    ) { vm.toggleMatchFrameRate() }
+                }
+                SettingRow(
+                    "When the app opens",
+                    vm.startOnLabel(),
+                    "Go straight to your last channel or the TV guide",
+                    focusKey = "set:starton",
+                ) { vm.cycleStartOn() }
+            }
+
+            // ---- If something won't play (grown-ups only) ----
+            if (!kids) {
+                SettingsGroup("If something won't play") {
+                    SettingRow("Video player", vm.externalPlayerName(), "Play in VLC or another app instead", focusKey = "set:player") { choosingPlayer = true }
+                    SettingRow(
+                        "Stream format",
+                        if (vm.streamFormat == "m3u8") "HLS (.m3u8)" else "MPEG-TS (.ts)",
+                        "Switch if channels buffer or won't start",
+                        focusKey = "set:format",
+                    ) { vm.toggleStreamFormat() }
+                    SettingRow(
+                        "Player identity",
+                        if (vm.userAgent == DEFAULT_USER_AGENT) "Streammania" else "VLC compatible",
+                        "Some providers only accept certain players",
+                        focusKey = "set:ua",
+                    ) { vm.toggleUserAgent() }
+                }
+            }
+
+            // ---- This TV / phone & app ----
+            SettingsGroup(if (isTv) "This TV & app" else "This phone & app") {
+                if (isTv && !kids) {
                     val phones = vm.pairedPhoneCount
                     SettingRow(
                         "Phones that can control this TV",
-                        if (phones == 0) "None yet" else "$phones paired · select to unpair all",
-                        "On your phone, tap the TV button on Home. Address if it's needed: ${vm.tvLinkAddress ?: "starting…"}",
+                        if (phones == 0) "None yet" else "$phones paired · select to unpair",
+                        "On your phone, tap the TV button on Home",
                         focusKey = "set:phones",
                     ) { vm.forgetPairedPhones() }
                 }
-            }
-
-            // ---- Connection (grown-ups only) ----
-            if (!kids) {
-                SettingsHeader("If something won't play")
+                if (!kids) SettingRow(
+                    "Film details (TMDB)",
+                    if (vm.tmdbKey.isBlank()) "Off" else "Connected",
+                    "Cast photos, trailers and suggestions",
+                    focusKey = "set:tmdb",
+                ) { editingTmdb = true }
                 SettingRow(
-                    "Video player",
-                    vm.externalPlayerName(),
-                    "Play in VLC or another app instead",
-                    focusKey = "set:player",
-                ) { choosingPlayer = true }
-                SettingRow(
-                    "Stream format",
-                    if (vm.streamFormat == "m3u8") "HLS (.m3u8)" else "MPEG-TS (.ts)",
-                    "Switch if channels buffer or won't start",
-                    focusKey = "set:format",
-                ) { vm.toggleStreamFormat() }
-                SettingRow(
-                    "Player identity",
-                    if (vm.userAgent == DEFAULT_USER_AGENT) "Streammania" else "VLC compatible",
-                    "Some providers only accept certain players",
-                    focusKey = "set:ua",
-                ) { vm.toggleUserAgent() }
-            }
-
-            // ---- App ----
-            SettingsHeader("App")
-            if (!kids) SettingRow(
-                "Film details (TMDB)",
-                if (vm.tmdbKey.isBlank()) "Off" else "Connected",
-                "Cast photos, trailers and suggestions. Paste a free key from themoviedb.org",
-                focusKey = "set:tmdb",
-            ) { editingTmdb = true }
-            SettingRow(
-                "Check for updates",
-                "Version ${app.embertv.BuildConfig.VERSION_NAME}",
-                "Updates install straight from the app",
-                focusKey = "set:update",
-            ) { vm.checkForUpdates(manual = true) }
-            SettingRow("Refresh everything now", "", "Films and series already update by themselves every few hours. This reloads channels and the guide too", focusKey = "set:refresh") {
-                vm.reload()
-                vm.refreshAccountInfo()
-                vm.notify("Refreshing from your provider…")
-            }
-            // Kids profiles can't sign the whole device out.
-            if (!kids) SettingRow("Sign out", "", "Removes your login from this $device", focusKey = "set:signout") {
-                confirmSignOut = true
+                    "Check for updates",
+                    "Version ${app.embertv.BuildConfig.VERSION_NAME}",
+                    "Updates install straight from the app",
+                    focusKey = "set:update",
+                ) { vm.checkForUpdates(manual = true) }
+                SettingRow("Refresh everything now", "", "Films and series also update by themselves", focusKey = "set:refresh") {
+                    vm.reload()
+                    vm.refreshAccountInfo()
+                    vm.notify("Refreshing from your provider…")
+                }
+                // Kids profiles can't sign the whole device out.
+                if (!kids) SettingRow("Sign out", "", "Removes your login from this $device", focusKey = "set:signout") {
+                    confirmSignOut = true
+                }
             }
         }
     }
@@ -782,9 +774,23 @@ private fun InfoLine(label: String, value: String) {
 private fun SettingsHeader(text: String, first: Boolean = false) {
     Text(
         text.uppercase(),
-        style = Txt.Caption.copy(letterSpacing = 1.2.sp),
-        color = Ember.Faint,
-        modifier = Modifier.padding(start = 6.dp, top = if (first) 0.dp else 16.dp),
+        style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp),
+        color = Ember.Dim,
+        modifier = Modifier.padding(start = 10.dp, top = if (first) 0.dp else 18.dp, bottom = 2.dp),
+    )
+}
+
+/** Apple-style grouped settings: a heading, then its rows together on one frosted panel. */
+@Composable
+private fun SettingsGroup(title: String, first: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+    SettingsHeader(title, first)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .glassSurface(RoundedCornerShape(22.dp), Color(0x0FFFFFFF))
+            .padding(6.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+        content = content,
     )
 }
 
@@ -799,8 +805,11 @@ private fun SettingRow(title: String, value: String, hint: String?, focusKey: St
         },
         focusKey = focusKey,
         focusedScale = 1.03f,
-        color = Ember.Card,
+        // Rows sit on their group's frosted panel, so each is only faintly tinted.
+        color = Color(0x08FFFFFF),
         focusedColor = Color.White,
+        glassEdge = false,
+        shape = RoundedCornerShape(16.dp),
         onClick = onClick,
     ) { focused ->
         if (isTv) {
@@ -821,7 +830,7 @@ private fun SettingRow(title: String, value: String, hint: String?, focusKey: St
                 Text(title, style = Txt.Label, color = Ember.Text)
                 if (value.isNotEmpty()) {
                     Spacer(Modifier.height(2.dp))
-                    Text(value, style = Txt.Label.copy(fontSize = Txt.Caption.fontSize), color = Ember.Text)
+                    Text(value, style = Txt.Label.copy(fontSize = Txt.Caption.fontSize), color = Ember.Dim)
                 }
                 if (hint != null) {
                     Spacer(Modifier.height(2.dp))

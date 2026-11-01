@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Icon
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -84,52 +87,64 @@ fun LoginScreen(vm: AppViewModel) {
             .background(Brush.radialGradient(listOf(Ember.GlowStrong, Ember.Bg), radius = 1400f))
     ) {
         Row(
-            Modifier.fillMaxSize().padding(horizontal = 80.dp, vertical = 48.dp),
+            Modifier.fillMaxSize().padding(horizontal = 72.dp, vertical = 40.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // ---- Welcome, and signing in from a phone ----
             Column(Modifier.weight(1f)) {
                 Wordmark(large = true)
-                Spacer(Modifier.height(28.dp))
-                Text("Sign in to your IPTV service", style = Txt.Title)
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(26.dp))
+                Text("Welcome", style = Txt.LargeTitle)
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    "Enter the Xtream Codes details from your provider: a server address, a username and a password. " +
-                        "They're saved on this TV only.",
+                    "Sign in with the Xtream Codes details from your IPTV provider: a server address, a username and a password.",
                     style = Txt.Body,
                     color = Ember.Dim,
+                    modifier = Modifier.width(500.dp),
                 )
                 Spacer(Modifier.height(10.dp))
-                Text(
-                    "Press up or down to pick a box, then OK to type in it.",
-                    style = Txt.Body,
-                    color = Ember.Faint,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(EmberIcons.Lock, contentDescription = null, tint = Ember.Dim, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Saved on this TV only", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Dim)
+                }
                 val url = vm.phoneLoginUrl
                 if (url != null) {
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(24.dp))
                     Row(
                         Modifier
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(Color(0x14FFFFFF))
-                            .padding(14.dp),
+                            .width(500.dp)
+                            .glassSurface(RoundedCornerShape(22.dp), Color(0x14FFFFFF))
+                            .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        QrCode(url, 112.dp)
+                        Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color.White).padding(6.dp)) {
+                            QrCode(url, 104.dp)
+                        }
                         Spacer(Modifier.width(18.dp))
                         Column {
-                            Text("Easier: use your phone", style = Txt.Headline)
-                            Spacer(Modifier.height(4.dp))
-                            Text("Scan the code with your phone's camera, or open this address on a phone on the same Wi-Fi:", style = Txt.Caption, color = Ember.Dim)
+                            Text("Sign in with your phone", style = Txt.Headline.copy(fontWeight = FontWeight.Bold))
                             Spacer(Modifier.height(6.dp))
-                            Text(url.removePrefix("http://"), style = Txt.Label, color = Ember.Text)
+                            Text("1  Scan the code with your phone's camera", style = Txt.Caption, color = Ember.Dim)
+                            Text("2  Type your details there and send them", style = Txt.Caption, color = Ember.Dim)
+                            Spacer(Modifier.height(8.dp))
+                            Text("Or open ${url.removePrefix("http://")} on the same Wi-Fi", style = Txt.Caption, color = Ember.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(20.dp))
                 Text("Version ${app.embertv.BuildConfig.VERSION_NAME}", style = Txt.Caption, color = Ember.Faint)
             }
-            Spacer(Modifier.width(64.dp))
-            Column(Modifier.width(440.dp)) {
+            Spacer(Modifier.width(56.dp))
+            // ---- The form, on a floating frosted panel ----
+            Column(
+                Modifier
+                    .width(460.dp)
+                    .glassSurface(RoundedCornerShape(28.dp), Color(0x12FFFFFF))
+                    .padding(horizontal = 26.dp, vertical = 24.dp)
+            ) {
+                Text("SIGN IN", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Dim, modifier = Modifier.padding(start = 4.dp))
+                Spacer(Modifier.height(16.dp))
                 EntryRow(
                     label = "Server address",
                     value = server,
@@ -153,15 +168,30 @@ fun LoginScreen(vm: AppViewModel) {
                 )
                 val error = vm.loginError
                 if (error != null) {
-                    Text(error, style = Txt.Body, color = Color(0xFFFF8A80), modifier = Modifier.padding(bottom = 16.dp))
+                    // A small frosted note rather than coloured text.
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 14.dp)
+                            .glassSurface(RoundedCornerShape(14.dp), Color(0x24FF453A))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(EmberIcons.Alert, contentDescription = null, tint = Ember.Text, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text(error, style = Txt.Label, color = Ember.Text)
+                    }
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
                 TvButton(
                     text = if (vm.loggingIn) "Signing in…" else "Sign in",
                     icon = "→",
+                    modifier = Modifier.fillMaxWidth(),
                     requester = requesters[SIGN_IN],
                     onClick = { vm.login(server, user, pass) },
                 )
+                Spacer(Modifier.height(16.dp))
+                RemoteHints(listOf(Hint("▲▼", "Pick a box"), Hint("OK", "Type")))
             }
         }
     }

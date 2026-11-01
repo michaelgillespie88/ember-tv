@@ -65,27 +65,38 @@ fun EntryRow(
     var focused by remember { mutableStateOf(false) }
     Column(modifier.fillMaxWidth().padding(bottom = 16.dp)) {
         if (label.isNotEmpty()) {
-            Text(label, style = Txt.Caption, color = if (focused) Ember.Text else Ember.Dim)
+            Text(
+                label.uppercase(),
+                style = Txt.Caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, letterSpacing = 1.1.sp),
+                color = if (focused) Ember.Text else Ember.Dim,
+                modifier = Modifier.padding(start = 4.dp),
+            )
             Spacer(Modifier.height(8.dp))
         }
+        // Apple style: a frosted box that turns white, with dark text, when it's the one you're on.
         FocusBox(
             modifier = Modifier.fillMaxWidth().height(56.dp),
             focusKey = focusKey,
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(14.dp),
             focusedScale = 1.03f,
-            color = Ember.Card,
-            focusedColor = Ember.CardHi,
+            color = Color(0x17FFFFFF),
+            focusedColor = Color.White,
             autoFocus = autoFocus,
             requester = requester,
             onFocusChange = { focused = it },
             onClick = onClick,
-        ) {
+        ) { isFocused ->
             Box(Modifier.fillMaxSize().padding(horizontal = 18.dp), contentAlignment = Alignment.CenterStart) {
                 val shown = if (masked) "•".repeat(value.length) else value
                 Text(
                     shown.ifEmpty { placeholder },
                     style = Txt.Body.copy(fontSize = 18.sp),
-                    color = if (value.isEmpty()) Ember.Faint else Ember.Text,
+                    color = when {
+                        isFocused && value.isEmpty() -> Color(0xFF8E8E93)
+                        isFocused -> Color.Black
+                        value.isEmpty() -> Ember.Faint
+                        else -> Ember.Text
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
