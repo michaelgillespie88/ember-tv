@@ -497,7 +497,7 @@ private fun PhoneGuideRow(
                                 )
                                 .combinedClickable(
                                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                    indication = androidx.compose.foundation.LocalIndication.current,
+                                    indication = null,
                                     onLongClick = { onHold(p) },
                                     onClick = { onTap(p) },
                                 )

@@ -40,6 +40,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.widthIn
 import app.embertv.data.ContentType
 import app.embertv.data.Episode
 import app.embertv.data.Movie
@@ -65,18 +67,59 @@ private fun PhoneDetailFrame(vm: AppViewModel, content: @Composable (Modifier) -
     }
 }
 
-/** Wide artwork at the top of a detail page, fading into the background. */
+/**
+ * Apple TV app style top of a detail page: tall artwork filling the screen's width and fading into
+ * the page, with the title and details centred over the bottom of it. Sideways, wide artwork instead.
+ */
 @Composable
-private fun PhoneHeroImage(url: String, fallbackName: String) {
-    Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f)) {
-        Placeholder(fallbackName, Modifier.fillMaxSize(), fontSizeSp = 40)
-        NetImage(url, Modifier.fillMaxSize())
+private fun PhoneHeroImage(poster: String, wide: String, title: String, meta: List<String?>, extra: @Composable () -> Unit = {}) {
+    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val art = if (landscape) wide.ifBlank { poster } else poster.ifBlank { wide }
+    Box(Modifier.fillMaxWidth().aspectRatio(if (landscape) 2.2f else 4f / 5.2f)) {
+        Placeholder(title, Modifier.fillMaxSize(), fontSizeSp = 40)
+        NetImage(art, Modifier.fillMaxSize())
         Box(
             Modifier.fillMaxSize().background(
-                Brush.verticalGradient(0f to Color(0x99000000), 0.3f to Color.Transparent, 0.65f to Color.Transparent, 1f to Ember.Bg)
+                Brush.verticalGradient(0f to Color(0x80000000), 0.2f to Color.Transparent, 0.5f to Color.Transparent, 0.82f to Ember.Bg.copy(alpha = 0.9f), 1f to Ember.Bg)
             )
         )
+        Column(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                app.embertv.data.Versions.cleanTitle(title),
+                style = Txt.LargeTitle.copy(fontSize = (30f * Txt.scale).sp, lineHeight = (34f * Txt.scale).sp, letterSpacing = (-0.5).sp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val text = meta.filterNotNull().filter { it.isNotBlank() }.joinToString(" · ")
+            if (text.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(text, style = Txt.Label.copy(fontSize = 14.sp), color = Ember.Text.copy(alpha = 0.8f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2)
+            }
+            extra()
+        }
     }
+}
+
+/** Apple's action row: a wide white Play, then round glass buttons for everything else. */
+@Composable
+private fun ActionRow(play: String, onPlay: () -> Unit, content: @Composable () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PillButton(play, Modifier.widthIn(min = 150.dp, max = 220.dp), icon = EmberIcons.Play, primary = true, onClick = onPlay)
+        content()
+    }
+}
+
+@Composable
+private fun RoundAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    IconCircleButton(icon, label, size = 48.dp, background = Color(0x26FFFFFF), glass = true, onClick = onClick)
 }
 
 @Composable
@@ -103,54 +146,45 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
         frame,
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { PhoneHeroImage(backdrop, movie.name) }
+        val movieQualities = movie.copy(versions = vm.versionsOf(movie)).qualities()
         item {
-            Column(Modifier.padding(horizontal = 16.dp).windowInsetsPadding(WindowInsets.navigationBars)) {
-                Text(movie.name, style = Txt.LargeTitle, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(6.dp))
-                MetaLine(
-                    listOf(
-                        if (vm.movieWatched(movie)) "Watched" else null,
-                        info?.year,
-                        info?.duration?.takeIf { it.isNotBlank() }?.let { prettyDuration(it) },
-                        ratingLabel(info?.rating ?: movie.rating),
-                        info?.genre,
-                    )
-                )
-                val movieQualities = movie.copy(versions = vm.versionsOf(movie)).qualities()
+            PhoneHeroImage(
+                movie.poster.ifBlank { info?.poster.orEmpty() },
+                backdrop,
+                movie.name,
+                listOf(
+                    "Film",
+                    info?.genre?.substringBefore(",")?.substringBefore("/")?.trim(),
+                    info?.year,
+                    info?.duration?.takeIf { it.isNotBlank() }?.let { prettyDuration(it) },
+                    ratingLabel(info?.rating ?: movie.rating),
+                    if (vm.movieWatched(movie)) "Watched" else null,
+                ),
+            ) {
                 if (movieQualities.isNotEmpty()) {
                     Spacer(Modifier.height(10.dp))
                     QualityChips(movieQualities, plan = vm.qualityPlan)
                 }
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(18.dp))
+                ActionRow(if (resume > 0) "Resume" else "Play", onPlay = { vm.playMovie(movie, fromStart = resume <= 0) }) {
+                    if (resume > 0) RoundAction(EmberIcons.Restart, "Start over") { vm.playMovie(movie, fromStart = true) }
+                    if (trailer != null) RoundAction(EmberIcons.Movies, "Trailer") { vm.playTrailer(trailer) }
+                    // Pick the quality yourself, whatever Settings says.
+                    if (movieQualities.size > 1) RoundAction(EmberIcons.Sliders, "Choose quality") { vm.chooseMovieQuality(movie, fromStart = resume <= 0) }
+                    RoundAction(if (isFav) EmberIcons.Check else EmberIcons.Plus, if (isFav) "In My List" else "Add to My List") { vm.toggleFavourite(vm.favouriteOf(movie)) }
+                }
                 if (resume > 0) {
-                    PillButton("Resume from ${formatMs(resume)}", icon = EmberIcons.Play, primary = true, modifier = Modifier.fillMaxWidth()) {
-                        vm.playMovie(movie, fromStart = false)
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    PillButton("Start over", icon = EmberIcons.Restart, modifier = Modifier.fillMaxWidth()) {
-                        vm.playMovie(movie, fromStart = true)
-                    }
-                } else {
-                    PillButton("Play", icon = EmberIcons.Play, primary = true, modifier = Modifier.fillMaxWidth()) {
-                        vm.playMovie(movie, fromStart = true)
-                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("${formatMs(resume)} watched", style = Txt.Caption, color = Ember.Dim)
                 }
-                if (trailer != null) {
-                    Spacer(Modifier.height(10.dp))
-                    PillButton("Trailer", icon = EmberIcons.Play, modifier = Modifier.fillMaxWidth()) { vm.playTrailer(trailer) }
-                }
-                // Pick the quality yourself, whatever Settings says.
-                if (movieQualities.size > 1) {
-                    Spacer(Modifier.height(10.dp))
-                    PillButton("Choose quality", icon = EmberIcons.Sliders, modifier = Modifier.fillMaxWidth()) { vm.chooseMovieQuality(movie, fromStart = resume <= 0) }
-                }
-                Spacer(Modifier.height(10.dp))
-                PillButton(
-                    if (isFav) "In favourites" else "Add to favourites",
-                    icon = if (isFav) EmberIcons.StarFilled else EmberIcons.Star,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { vm.toggleFavourite(vm.favouriteOf(movie)) }
+            }
+        }
+        item {
+            Column(Modifier.padding(horizontal = 20.dp)) {
                 Spacer(Modifier.height(20.dp))
                 when {
                     load is LoadResult.Loading -> SkeletonLines(Modifier.fillMaxWidth())
@@ -196,47 +230,46 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
         frame,
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { PhoneHeroImage(backdrop, series.name) }
+        val seriesQualities = series.copy(versions = vm.versionsOf(series)).qualities()
         item {
-            Column(Modifier.padding(horizontal = 16.dp)) {
-                Text(series.name, style = Txt.LargeTitle, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(6.dp))
-                MetaLine(
-                    listOf(
-                        info?.year ?: series.year,
-                        info?.let { "${it.seasons.size} " + (if (it.seasons.size == 1) "season" else "seasons") },
-                        ratingLabel(info?.rating ?: series.rating),
-                        info?.genre ?: series.genre,
-                    )
-                )
-                val seriesQualities = series.copy(versions = vm.versionsOf(series)).qualities()
+            PhoneHeroImage(
+                series.cover.ifBlank { info?.cover.orEmpty() },
+                backdrop,
+                series.name,
+                listOf(
+                    "Series",
+                    (info?.genre ?: series.genre).substringBefore(",").substringBefore("/").trim(),
+                    info?.year ?: series.year,
+                    info?.let { "${it.seasons.size} " + (if (it.seasons.size == 1) "season" else "seasons") },
+                    ratingLabel(info?.rating ?: series.rating),
+                ),
+            ) {
                 if (seriesQualities.isNotEmpty()) {
                     Spacer(Modifier.height(10.dp))
                     QualityChips(seriesQualities)
                 }
+            }
+        }
+        item {
+            Column {
                 Spacer(Modifier.height(18.dp))
-                if (start != null && info != null) {
-                    val resumed = lastEpisodeId == start.id
-                    PillButton(
-                        (if (resumed) "Resume" else "Play") + "  S${start.season} E${start.number}",
-                        icon = EmberIcons.Play,
-                        primary = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        val eps = info.episodes[start.season].orEmpty()
-                        vm.playEpisodes(series, eps, eps.indexOfFirst { it.id == start.id }, fromStart = !resumed)
-                    }
-                    Spacer(Modifier.height(10.dp))
+                val resumed = start != null && lastEpisodeId == start.id
+                ActionRow(
+                    if (start == null) "Play" else (if (resumed) "Resume" else "Play") + " S${start.season} E${start.number}",
+                    onPlay = {
+                        if (start != null && info != null) {
+                            val eps = info.episodes[start.season].orEmpty()
+                            vm.playEpisodes(series, eps, eps.indexOfFirst { it.id == start.id }, fromStart = !resumed)
+                        }
+                    },
+                ) {
+                    if (trailer != null) RoundAction(EmberIcons.Movies, "Trailer") { vm.playTrailer(trailer) }
+                    RoundAction(if (isFav) EmberIcons.Check else EmberIcons.Plus, if (isFav) "In My List" else "Add to My List") { vm.toggleFavourite(vm.favouriteOf(series)) }
                 }
-                if (trailer != null) {
-                    PillButton("Trailer", icon = EmberIcons.Play, modifier = Modifier.fillMaxWidth()) { vm.playTrailer(trailer) }
-                    Spacer(Modifier.height(10.dp))
-                }
-                PillButton(
-                    if (isFav) "In favourites" else "Add to favourites",
-                    icon = if (isFav) EmberIcons.StarFilled else EmberIcons.Star,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { vm.toggleFavourite(vm.favouriteOf(series)) }
+            }
+        }
+        item {
+            Column(Modifier.padding(horizontal = 20.dp)) {
                 Spacer(Modifier.height(18.dp))
                 val plot = info?.plot?.takeIf { it.isNotBlank() } ?: series.plot
                 when {
@@ -249,7 +282,7 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
         if (info != null && info.seasons.size > 1) {
             item {
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(info.seasons, key = { it }) { s ->
@@ -268,7 +301,7 @@ fun PhoneSeriesDetail(vm: AppViewModel, series: Series) {
                             Text(
                                 if (s == 0) "Specials" else "Season $s",
                                 style = Txt.Label,
-                                color = if (selected) Color.Black else Ember.Dim,
+                                color = if (selected) Color.Black else Ember.Text.copy(alpha = 0.85f),
                             )
                         }
                     }
@@ -298,7 +331,7 @@ private fun PhoneEpisodeRow(episode: Episode, watched: Boolean, watchedMs: Long,
         Modifier
             .fillMaxWidth()
             .pressable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.Top,
     ) {
         Box(
@@ -331,7 +364,7 @@ private fun PhoneEpisodeRow(episode: Episode, watched: Boolean, watchedMs: Long,
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text("${episode.number}. ${episode.title}", style = Txt.Label, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("${episode.number}. ${episode.title}", style = Txt.Label.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (episode.duration.isNotBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(prettyDuration(episode.duration), style = Txt.Caption, color = Ember.Faint)
