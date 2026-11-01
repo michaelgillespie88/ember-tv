@@ -44,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -602,25 +604,31 @@ private fun TvHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
     val info = (rememberLoad(movie.streamId) { repo.movieInfo(movie.streamId) }.value as? LoadResult.Ok)?.value
     val resume = vm.moviePosition(movie)
 
-    Box(Modifier.fillMaxWidth().height(300.dp)) {
+    val isFav = vm.isFavourite(ContentType.MOVIE, movie.streamId)
+    // Which button has focus, so ◀ on the first and ▶ on the last can page through the films.
+    var onFirst by remember { mutableStateOf(false) }
+    var onLast by remember { mutableStateOf(false) }
+
+    Box(Modifier.fillMaxWidth().height(360.dp)) {
         Crossfade(targetState = movie, label = "hero") { m ->
             val art = if (m.streamId == movie.streamId) info?.backdrop?.takeIf { it.isNotBlank() } ?: m.poster else m.poster
             Box(Modifier.fillMaxSize()) {
                 NetImage(art, Modifier.fillMaxSize())
             }
         }
+        // Apple TV style: the picture fills the width, fading softly into the page on the left and below.
         Box(
             Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(0f to Ember.Bg, 0.42f to Ember.Bg.copy(alpha = 0.75f), 1f to Color.Transparent)
+                Brush.horizontalGradient(0f to Ember.Bg.copy(alpha = 0.92f), 0.35f to Ember.Bg.copy(alpha = 0.55f), 0.65f to Color.Transparent)
             )
         )
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to Ember.Bg)))
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Ember.Bg.copy(alpha = 0.55f), 0.25f to Color.Transparent, 0.62f to Color.Transparent, 1f to Ember.Bg)))
         Column(
-            Modifier.align(Alignment.BottomStart).padding(start = 48.dp, bottom = 22.dp).width(560.dp)
+            Modifier.align(Alignment.BottomStart).padding(start = 48.dp, bottom = 26.dp).width(540.dp)
         ) {
-            Text("FEATURED", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Dim)
+            Text("FEATURED FOR YOU", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Dim)
             Spacer(Modifier.height(6.dp))
-            Text(movie.name, style = Txt.Hero, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(app.embertv.data.Versions.cleanTitle(movie.name), style = Txt.LargeTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(6.dp))
             val meta = listOfNotNull(
                 info?.year?.takeIf { it.isNotBlank() },
@@ -633,24 +641,67 @@ private fun TvHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
                 Spacer(Modifier.height(8.dp))
                 Text(plot, style = Txt.Body, color = Ember.Text.copy(alpha = 0.85f), maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
             Row(
-                Modifier.onFocusChanged { focused = it.hasFocus },
+                Modifier
+                    .onFocusChanged { focused = it.hasFocus }
+                    .onPreviewKeyEvent { ev ->
+                        if (ev.type != androidx.compose.ui.input.key.KeyEventType.KeyDown || heroes.size <= 1) return@onPreviewKeyEvent false
+                        when (ev.nativeKeyEvent.keyCode) {
+                            android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> if (onLast) { setIndex(index + 1); true } else false
+                            android.view.KeyEvent.KEYCODE_DPAD_LEFT -> if (onFirst) { setIndex(index - 1); true } else false
+                            else -> false
+                        }
+                    },
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                TvButton(
-                    if (resume > 0) "Resume" else "Play",
-                    icon = "▶",
-                    focusKey = "home:hero:play",
-                    onClick = { vm.playMovie(movie, fromStart = resume <= 0) },
-                )
+                Box(Modifier.onFocusChanged { onFirst = it.hasFocus }) {
+                    TvButton(
+                        if (resume > 0) "Resume" else "Play",
+                        icon = "▶",
+                        focusKey = "home:hero:play",
+                        onClick = { vm.playMovie(movie, fromStart = resume <= 0) },
+                    )
+                }
                 TvButton("More info", focusKey = "home:hero:info", onClick = { vm.push(Screen.MovieDetail(movie)) })
-                if (heroes.size > 1) {
-                    TvButton("Next", icon = "›", focusKey = "home:hero:next", onClick = { setIndex(index + 1) })
+                // Add to My List, as a round glass button.
+                Box(Modifier.onFocusChanged { onLast = it.hasFocus }) {
+                    FocusBox(
+                        modifier = Modifier.size(50.dp),
+                        focusKey = "home:hero:fav",
+                        shape = CircleShape,
+                        focusedScale = 1.08f,
+                        color = Color(0x26FFFFFF),
+                        focusedColor = Color.White,
+                        onClick = { vm.toggleFavourite(vm.favouriteOf(movie)) },
+                    ) { f ->
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            androidx.compose.material3.Icon(
+                                if (isFav) EmberIcons.StarFilled else EmberIcons.Star,
+                                contentDescription = if (isFav) "In My List" else "Add to My List",
+                                tint = if (f) Color.Black else Ember.Text,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
                 }
             }
         }
-        HeroDots(heroes.size, index, Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 30.dp))
+        // Where you are among the featured films, in a small frosted pill.
+        if (heroes.size > 1) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 48.dp, bottom = 40.dp)
+                    .glassSurface(RoundedCornerShape(12.dp), Color(0x33000000))
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            ) {
+                Box(Modifier.size(width = (heroes.size * 12 + 12).dp, height = 6.dp)) {
+                    HeroDots(heroes.size, index, Modifier.align(Alignment.CenterStart))
+                }
+            }
+        }
     }
 }
 
