@@ -97,7 +97,8 @@ private fun ChannelList(
         is LoadResult.Loading -> SkeletonRows(modifier)
         is LoadResult.Err -> ErrorView(r.message, modifier) { vm.reload() }
         is LoadResult.Ok -> {
-            val channels = r.value
+            // Each channel once, whatever qualities the provider lists it in (like the guide).
+            val channels = remember(r.value, vm.qualityChoice) { channelsOnce(r.value, vm.qualityChoice) }
             if (channels.isEmpty()) {
                 EmptyView(
                     if (categoryId == FAVOURITES) "${holdPrompt()} any channel to add it to your favourites."
@@ -178,12 +179,20 @@ fun ChannelRow(
             )
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(
-                    channel.name,
-                    style = Txt.Headline.copy(fontSize = 16.sp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val (clean, tag) = channelParts(channel.name)
+                    Text(
+                        clean,
+                        style = Txt.Headline.copy(fontSize = 16.sp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (tag != null) {
+                        Spacer(Modifier.width(8.dp))
+                        ChannelQualityTag(tag)
+                    }
+                }
                 if (current != null) {
                     Spacer(Modifier.height(if (compact) 1.dp else 3.dp))
                     Text(current.title, style = Txt.Caption, color = Ember.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)

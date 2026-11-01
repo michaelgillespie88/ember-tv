@@ -92,6 +92,7 @@ private fun SeriesGrid(vm: AppViewModel, repo: Repository, categoryId: String, m
         is LoadResult.Err -> ErrorView(r.message, modifier) { vm.reload() }
         is LoadResult.Ok -> {
             val list = r.value
+            val sorted = remember(list, vm.seriesSort) { sortSeries(list, vm.seriesSort) }
             if (list.isEmpty()) {
                 EmptyView(
                     if (categoryId == FAVOURITES) "${holdPrompt()} any series to add it to your favourites."
@@ -107,7 +108,10 @@ private fun SeriesGrid(vm: AppViewModel, repo: Repository, categoryId: String, m
                     horizontalArrangement = Arrangement.spacedBy(18.dp),
                     verticalArrangement = Arrangement.spacedBy(22.dp),
                 ) {
-                    items(list, key = { it.seriesId }) { s ->
+                    item(key = "sort", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                        SortChip(sortName(vm.seriesSort), "series:$categoryId:sort") { vm.cycleSeriesSort() }
+                    }
+                    items(sorted, key = { it.seriesId }) { s ->
                         PosterCard(
                             title = s.name,
                             image = s.cover,

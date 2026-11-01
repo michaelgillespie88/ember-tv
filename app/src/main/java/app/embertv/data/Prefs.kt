@@ -515,6 +515,19 @@ class Prefs(context: Context) {
             sp.edit().putString(pk("home_order"), JSONArray().apply { value.forEach { put(it) } }.toString()).apply()
         }
 
+    /** How the Movies and Series grids are sorted: provider, newest, az, rating or year. */
+    var movieSort: String
+        get() = sp.getString("movie_sort", "provider") ?: "provider"
+        set(value) {
+            sp.edit().putString("movie_sort", value).apply()
+        }
+
+    var seriesSort: String
+        get() = sp.getString("series_sort", "provider") ?: "provider"
+        set(value) {
+            sp.edit().putString("series_sort", value).apply()
+        }
+
     /** This profile's background colours (an id from the Background list). */
     var backdrop: String
         get() = sp.getString(pk("backdrop"), "warm") ?: "warm"

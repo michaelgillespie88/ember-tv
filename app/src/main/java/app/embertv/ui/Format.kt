@@ -111,7 +111,7 @@ private fun normaliseTag(t: String): String = when (t.uppercase()) {
     else -> t.uppercase()
 }
 
-private fun tagRank(t: String?): Int = when (t) {
+fun tagRank(t: String?): Int = when (t) {
     "4K" -> 4
     "FHD" -> 3
     "HD" -> 2
@@ -144,3 +144,10 @@ fun combineChannelQualities(channels: List<app.embertv.data.Channel>, qualityCho
         GuideChannel(pick.first, channelParts(pick.first.name).first, pick.second, copies.size)
     }
 }
+
+/** The same for every quality copy of a channel: "FHD : BBC One" and "SD : BBC ONE" both give "bbcone". */
+fun channelKey(name: String): String = channelParts(name).first.lowercase().replace(Regex("[^a-z0-9]"), "")
+
+/** Each channel once (see [combineChannelQualities]), as plain channels. */
+fun channelsOnce(channels: List<app.embertv.data.Channel>, qualityChoice: String): List<app.embertv.data.Channel> =
+    combineChannelQualities(channels, qualityChoice).map { it.channel }

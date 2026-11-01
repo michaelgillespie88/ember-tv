@@ -82,6 +82,7 @@ private fun MovieGrid(vm: AppViewModel, repo: Repository, categoryId: String, mo
         is LoadResult.Err -> ErrorView(r.message, modifier) { vm.reload() }
         is LoadResult.Ok -> {
             val movies = r.value
+            val sorted = remember(movies, vm.movieSort) { sortMovies(movies, vm.movieSort) }
             if (movies.isEmpty()) {
                 EmptyView(
                     if (categoryId == FAVOURITES) "${holdPrompt()} any movie to add it to your favourites."
@@ -97,7 +98,10 @@ private fun MovieGrid(vm: AppViewModel, repo: Repository, categoryId: String, mo
                     horizontalArrangement = Arrangement.spacedBy(18.dp),
                     verticalArrangement = Arrangement.spacedBy(22.dp),
                 ) {
-                    items(movies, key = { it.streamId }) { m ->
+                    item(key = "sort", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                        SortChip(sortName(vm.movieSort), "movie:$categoryId:sort") { vm.cycleMovieSort() }
+                    }
+                    items(sorted, key = { it.streamId }) { m ->
                         PosterCard(
                             title = m.name,
                             image = m.poster,

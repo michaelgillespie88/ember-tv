@@ -424,14 +424,14 @@ fun ChannelCard(
         if (onNow != null) {
             // What's on, with the channel underneath and a thin bar for how far through it is.
             Text(onNow.title, style = Txt.Label, color = if (focused) Ember.Text else Ember.Text.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(name, style = Txt.Caption, color = Ember.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(channelParts(name).first, style = Txt.Caption, color = Ember.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(5.dp))
             Box(Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)).background(Color(0x26FFFFFF))) {
                 Box(Modifier.fillMaxHeight().fillMaxWidth(onNow.progress(now).coerceIn(0f, 1f)).background(Ember.Text))
             }
         } else {
             Text(
-                name,
+                channelParts(name).first,
                 style = Txt.Label,
                 color = if (focused) Ember.Text else Ember.Dim,
                 maxLines = 1,
@@ -765,4 +765,38 @@ fun CheckMark(dark: Boolean) {
 @Composable
 fun StarMark(size: androidx.compose.ui.unit.Dp = 14.dp, tint: Color = Ember.Text) {
     Icon(EmberIcons.StarFilled, contentDescription = "Favourite", tint = tint, modifier = Modifier.size(size))
+}
+
+/** A small frosted quality tag (4K, FHD, HD, SD) beside a channel's name. */
+@Composable
+fun ChannelQualityTag(tag: String) {
+    Box(
+        Modifier
+            .glassSurface(RoundedCornerShape(5.dp), Color(0x1AFFFFFF))
+            .padding(horizontal = 4.dp, vertical = 1.dp)
+    ) {
+        Text(tag, style = Txt.Caption.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp), color = Ember.Dim, maxLines = 1)
+    }
+}
+
+/** A small frosted "Sort: Newest" pill above a grid; OK (or a tap) moves to the next order. */
+@Composable
+fun SortChip(label: String, focusKey: String, onClick: () -> Unit) {
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+        FocusBox(
+            modifier = Modifier.height(36.dp),
+            focusKey = focusKey,
+            shape = RoundedCornerShape(18.dp),
+            focusedScale = 1.05f,
+            color = Color(0x1AFFFFFF),
+            focusedColor = Color.White,
+            onClick = onClick,
+        ) { focused ->
+            Row(Modifier.fillMaxHeight().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(EmberIcons.Sliders, contentDescription = null, tint = if (focused) Color.Black else Ember.Dim, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Sort: $label", style = Txt.Label.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = if (focused) Color.Black else Ember.Text)
+            }
+        }
+    }
 }

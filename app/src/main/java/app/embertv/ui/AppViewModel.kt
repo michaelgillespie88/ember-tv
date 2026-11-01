@@ -1353,6 +1353,44 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.showHints = HintsSetting.show
     }
 
+    /** The same channel in every quality its group has, best first (just itself if there's one). */
+    suspend fun channelCopies(c: Channel): List<Channel> {
+        val r = repo ?: return listOf(c)
+        val key = channelKey(c.name)
+        val group = try {
+            r.channels(c.categoryId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return listOf(c)
+        }
+        val found = group.filter { channelKey(it.name) == key }
+        return (if (found.any { it.streamId == c.streamId }) found else found + c)
+            .sortedByDescending { tagRank(channelParts(it.name).second) }
+    }
+
+    // ---- Sorting Movies and Series ----
+
+    var movieSort by mutableStateOf(prefs.movieSort)
+        private set
+    var seriesSort by mutableStateOf(prefs.seriesSort)
+        private set
+
+    fun cycleMovieSort() {
+        movieSort = nextSort(movieSort)
+        prefs.movieSort = movieSort
+    }
+
+    fun cycleSeriesSort() {
+        seriesSort = nextSort(seriesSort)
+        prefs.seriesSort = seriesSort
+    }
+
+    private fun nextSort(s: String): String {
+        val ids = SORTS.map { it.first }
+        return ids[(ids.indexOf(s) + 1) % ids.size]
+    }
+
     /** Opens a film or series category from Home's "See all": switches tab and picks the category. */
     fun openCategory(tab: Int, categoryId: String) {
         if (tab == Tabs.MOVIES) movies.categoryId = categoryId else series.categoryId = categoryId
@@ -2642,3 +2680,26 @@ val HOME_ROWS = listOf(
 
 /** The longest Play waits to find a film's other qualities before playing anyway. */
 private const val VERSION_CHECK_MS = 4_000L
+
+/** Ways to sort the Movies and Series grids, with their names. */
+val SORTS = listOf("provider" to "Provider order", "newest" to "Newest", "az" to "A–Z", "rating" to "Rating", "year" to "Year")
+
+fun sortName(id: String): String = SORTS.firstOrNull { it.first == id }?.second ?: "Provider order"
+
+private fun yearOf(name: String): Int = Versions.year(name)?.filter { it.isDigit() }?.toIntOrNull() ?: 0
+
+fun sortMovies(list: List<Movie>, mode: String): List<Movie> = when (mode) {
+    "newest" -> list.sortedByDescending { it.added }
+    "az" -> list.sortedBy { Versions.cleanTitle(it.name).lowercase() }
+    "rating" -> list.sortedByDescending { it.rating.toFloatOrNull() ?: 0f }
+    "year" -> list.sortedByDescending { yearOf(it.name) }
+    else -> list
+}
+
+fun sortSeries(list: List<Series>, mode: String): List<Series> = when (mode) {
+    "newest" -> list.sortedByDescending { it.updated }
+    "az" -> list.sortedBy { Versions.cleanTitle(it.name).lowercase() }
+    "rating" -> list.sortedByDescending { it.rating.toFloatOrNull() ?: 0f }
+    "year" -> list.sortedByDescending { it.year.filter { c -> c.isDigit() }.take(4).toIntOrNull() ?: yearOf(it.name) }
+    else -> list
+}

@@ -435,7 +435,9 @@ private fun BoxScope.ErrorCard(message: String, hint: String, keys: List<Hint> =
 // ---------------- Live TV ----------------
 
 @Composable
-fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int) {
+fun LivePlayerScreen(vm: AppViewModel, channelsIn: List<Channel>, startIndex: Int) {
+    // A copy of the list, so a channel can be swapped for another quality of itself while watching.
+    val channels = remember(channelsIn) { androidx.compose.runtime.mutableStateListOf<Channel>().apply { addAll(channelsIn) } }
     AutoPip()
     val enterPip = rememberPipAction()
     if (vm.repo == null || channels.isEmpty()) return
@@ -476,6 +478,8 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
     var tsTick by remember { mutableIntStateOf(0) }
 
     val channel = channels[index]
+    // The same channel in other qualities (FHD, HD, SD), for the ••• panel.
+    val copies by produceState(emptyList<Channel>(), channel.streamId) { value = vm.channelCopies(channel) }
     // Live TV keeps the screen's own refresh rate (switching blanked the picture on every channel change).
     val videoStats = rememberVideoStats(exo, channel.streamId)
     // So coming back from catch-up returns to this channel, not the one the player opened on.
@@ -1069,6 +1073,15 @@ fun LivePlayerScreen(vm: AppViewModel, channels: List<Channel>, startIndex: Int)
                     vm,
                     channel,
                     active = optionsOpen,
+                    copies = copies,
+                    onCopy = { c ->
+                        optionsOpen = false
+                        if (c.streamId != channel.streamId) {
+                            channels[index] = c
+                            restart++
+                            vm.notify("Watching in ${channelParts(c.name).second ?: "another quality"}")
+                        }
+                    },
                     onOpenElsewhere = { vm.openElsewhere(Screen.PlayLive(channels, index)) },
                     onMultiView = { vm.push(Screen.MultiView(listOf(channels[index]), channels)) },
                     onPrevious = if (previousIndex != null) ({ previousChannel() }) else null,
@@ -1279,7 +1292,7 @@ private fun LiveInfoBar(
                             Text("${channel.num}", style = Txt.Headline, color = Ember.Dim)
                             Spacer(Modifier.width(12.dp))
                         }
-                        Text(channel.name, style = Txt.Title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        Text(channelParts(channel.name).first, style = Txt.Title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         if (isFavourite) {
                             Spacer(Modifier.width(10.dp))
                             StarMark(20.dp)
@@ -1420,7 +1433,7 @@ private fun ZapRow(vm: AppViewModel, c: Channel, playing: Boolean, onClick: () -
             ChannelLogo(c.icon, c.name, Modifier.size(width = 54.dp, height = 36.dp))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(c.name, style = Txt.Label, color = if (focused) Color.Black else Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(channelParts(c.name).first, style = Txt.Label, color = if (focused) Color.Black else Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (onNow != null) {
                     Spacer(Modifier.height(2.dp))
                     Text(onNow.title, style = Txt.Caption, color = if (focused) Color(0xFF55555C) else Ember.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1498,6 +1511,8 @@ private fun BoxScope.LiveOptionsPanel(
     vm: AppViewModel,
     channel: Channel,
     active: Boolean,
+    copies: List<Channel> = emptyList(),
+    onCopy: (Channel) -> Unit = {},
     onOpenElsewhere: () -> Unit,
     onMultiView: () -> Unit,
     onPrevious: (() -> Unit)? = null,
@@ -1505,7 +1520,16 @@ private fun BoxScope.LiveOptionsPanel(
 ) {
     BackHandler(enabled = active, onBack = onDismiss)
     SidePanel(onDismiss) {
-        Text(channel.name, style = Txt.Headline, color = Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 4.dp, bottom = 14.dp))
+        Text(channelParts(channel.name).first, style = Txt.Headline, color = Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 4.dp, bottom = 14.dp))
+        // Other qualities of this channel, to switch to.
+        if (copies.size > 1) {
+            SheetSection("Quality")
+            copies.forEach { c ->
+                val tag = channelParts(c.name).second ?: "Standard"
+                TrackRow(tag, c.streamId == channel.streamId, autoFocus = false) { onCopy(c) }
+            }
+            Spacer(Modifier.height(14.dp))
+        }
         SheetSection("Channel")
         val fav = vm.isFavourite(ContentType.LIVE, channel.streamId)
         ZapAction(if (fav) EmberIcons.StarFilled else EmberIcons.Star, if (fav) "Remove from favourites" else "Add to favourites", "", autoFocus = true) {

@@ -94,7 +94,9 @@ fun FavouritesSection(vm: AppViewModel) {
 }
 
 @Composable
-private fun ChannelShelf(vm: AppViewModel, title: String, channels: List<Channel>, keyPrefix: String) {
+private fun ChannelShelf(vm: AppViewModel, title: String, found: List<Channel>, keyPrefix: String) {
+    // Each channel once in the results, not once per quality.
+    val channels = remember(found, vm.qualityChoice) { channelsOnce(found, vm.qualityChoice) }
     Column {
         SectionHeader(title, Modifier.padding(start = edgePadding()))
         LazyRow(

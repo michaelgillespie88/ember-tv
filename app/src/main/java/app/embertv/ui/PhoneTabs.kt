@@ -120,7 +120,7 @@ fun PhoneLiveTab(vm: AppViewModel) {
             is LoadResult.Loading -> SkeletonRows()
             is LoadResult.Err -> ErrorView(r.message) { vm.reload() }
             is LoadResult.Ok -> {
-                val channels = r.value
+                val channels = remember(r.value, vm.qualityChoice) { channelsOnce(r.value, vm.qualityChoice) }
                 if (channels.isEmpty()) {
                     EmptyView(
                         if (categoryId == FAVOURITES) "${holdPrompt()} any channel to add it to your favourites."
@@ -190,7 +190,7 @@ fun PhoneGuideTab(vm: AppViewModel) {
             is LoadResult.Loading -> SkeletonRows()
             is LoadResult.Err -> ErrorView(r.message) { vm.reload() }
             is LoadResult.Ok -> {
-                val channels = r.value
+                val channels = remember(r.value, vm.qualityChoice) { channelsOnce(r.value, vm.qualityChoice) }
                 if (channels.isEmpty()) {
                     EmptyView(
                         if (categoryId == FAVOURITES) "${holdPrompt()} any channel to add it to your favourites."
@@ -574,6 +574,7 @@ fun PhoneMoviesTab(vm: AppViewModel) {
                     )
                 } else {
                     val pad = LocalContentPadding.current
+                    val sortedMovies = remember(r.value, vm.movieSort) { sortMovies(r.value, vm.movieSort) }
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 104.dp),
                         state = vm.movies.grid(categoryId),
@@ -582,7 +583,10 @@ fun PhoneMoviesTab(vm: AppViewModel) {
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(r.value, key = { it.streamId }) { m ->
+                        item(key = "sort", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                            SortChip(sortName(vm.movieSort), "movie:$categoryId:sort") { vm.cycleMovieSort() }
+                        }
+                        items(sortedMovies, key = { it.streamId }) { m ->
                             PosterCard(
                                 title = m.name,
                                 image = m.poster,
@@ -620,6 +624,7 @@ fun PhoneSeriesTab(vm: AppViewModel) {
                     )
                 } else {
                     val pad = LocalContentPadding.current
+                    val sortedSeries = remember(r.value, vm.seriesSort) { sortSeries(r.value, vm.seriesSort) }
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 104.dp),
                         state = vm.series.grid(categoryId),
@@ -628,7 +633,10 @@ fun PhoneSeriesTab(vm: AppViewModel) {
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(r.value, key = { it.seriesId }) { s ->
+                        item(key = "sort", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                            SortChip(sortName(vm.seriesSort), "series:$categoryId:sort") { vm.cycleSeriesSort() }
+                        }
+                        items(sortedSeries, key = { it.seriesId }) { s ->
                             PosterCard(
                                 title = s.name,
                                 image = s.cover,
