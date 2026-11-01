@@ -577,42 +577,41 @@ internal fun GuideRow(
         }
         Box(Modifier.width(gridWidth).fillMaxHeight()) {
             val visible = programmes.orEmpty().filter { it.end > windowStart && it.start < windowEnd }
-            if (visible.isEmpty()) {
-                ProgrammeBlock(
-                    title = if (programmes == null) "Loading…" else "No guide information",
-                    time = "",
-                    live = true,
-                    compact = compact,
-                    focusKey = "guide:${channel.streamId}:none",
-                    autoFocus = autoFocusLive,
-                    modifier = Modifier.fillMaxSize(),
-                    onFocus = { onFocus(null) },
-                    onClick = { onPick(null) },
-                )
-            } else {
-                for (p in visible) {
-                    // Keyed by start time, so the highlighted programme keeps its highlight as the times move along.
-                    key(p.start) {
+            // One place draws every block, and the "Loading…" block shares its key with the programme
+            // on now. So when the listings arrive, the block you're on turns into that programme
+            // instead of disappearing, and the highlight stays put. (Scrolling fast used to land on
+            // a loading row, lose the highlight when it filled in, and jump back to the top.)
+            val placeholder = visible.isEmpty()
+            val slots: List<Programme?> = if (placeholder) listOf(null) else visible
+            for (p in slots) {
+                val slotKey: Any = if (p == null || p.isLive(now)) "now" else p.start
+                key(slotKey) {
+                    // A single call either way, so the same block (and its highlight) carries on.
+                    val live = p == null || p.isLive(now)
+                    val blockModifier = if (p == null) {
+                        Modifier.fillMaxSize()
+                    } else {
                         val start = maxOf(p.start, windowStart)
                         val end = minOf(p.end, windowEnd)
                         val x = dpPerMinute * ((start - windowStart) / 60f)
                         val w = dpPerMinute * ((end - start) / 60f)
-                        ProgrammeBlock(
-                            title = p.title,
-                            time = if (compact) "" else "${formatClock(p.start)} – ${formatClock(p.end)}",
-                            live = p.isLive(now),
-                            compact = compact,
-                            past = p.end <= now,
-                            catchup = p.end <= now && catchupAvailable(channel, p, now),
-                            progress = if (p.isLive(now)) ((now - p.start).toFloat() / (p.end - p.start).coerceAtLeast(1)) else null,
-                            focusKey = "guide:${channel.streamId}:${p.start}",
-                            autoFocus = autoFocusLive && p.isLive(now),
-                            modifier = Modifier.offset(x = x).width(w.coerceAtLeast(6.dp)).fillMaxHeight(),
-                            onFocus = { onFocus(p) },
-                            onClick = { onPick(p) },
-                            onLongClick = { onLongPick(p) },
-                        )
+                        Modifier.offset(x = x).width(w.coerceAtLeast(6.dp)).fillMaxHeight()
                     }
+                    ProgrammeBlock(
+                        title = p?.title ?: if (programmes == null) "Loading…" else "No guide information",
+                        time = if (p == null || compact) "" else "${formatClock(p.start)} – ${formatClock(p.end)}",
+                        live = live,
+                        compact = compact,
+                        past = p != null && p.end <= now,
+                        catchup = p != null && p.end <= now && catchupAvailable(channel, p, now),
+                        progress = if (p != null && p.isLive(now)) ((now - p.start).toFloat() / (p.end - p.start).coerceAtLeast(1)) else null,
+                        focusKey = if (live) "guide:${channel.streamId}:now" else "guide:${channel.streamId}:${p!!.start}",
+                        autoFocus = autoFocusLive && live,
+                        modifier = blockModifier,
+                        onFocus = { onFocus(p) },
+                        onClick = { onPick(p) },
+                        onLongClick = if (p != null) ({ onLongPick(p) }) else null,
+                    )
                 }
             }
             if (now in windowStart until windowEnd) {
