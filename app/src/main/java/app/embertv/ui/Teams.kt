@@ -533,17 +533,6 @@ private fun MatchStatsView(match: Match, modifier: Modifier) {
         }
     }
     val d = detail
-    // TVs: rows take focus so the remote can scroll the list; a faint highlight shows where you are.
-    @Composable
-    fun Modifier.tvRow(): Modifier {
-        if (!isTv) return this
-        var f by remember { mutableStateOf(false) }
-        return this
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (f) Color(0x1AFFFFFF) else Color.Transparent)
-            .onFocusChanged { f = it.isFocused }
-            .focusable()
-    }
     LazyColumn(modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = if (isTv) 16.dp else 0.dp, vertical = 4.dp)) {
         when {
             !loaded -> item(key = "loading") { SkeletonLines(Modifier.fillMaxWidth().padding(8.dp), widths = listOf(0.9f, 0.7f, 0.8f, 0.6f)) }
@@ -553,7 +542,7 @@ private fun MatchStatsView(match: Match, modifier: Modifier) {
                     style = Txt.Body,
                     color = Ember.Dim,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).tvRow(),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                 )
             }
             else -> {
@@ -561,7 +550,7 @@ private fun MatchStatsView(match: Match, modifier: Modifier) {
                     item(key = "ev-h") { SheetSection("Goals & cards") }
                     item(key = "ev") {
                         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x12FFFFFF)).padding(vertical = 6.dp)) {
-                            d.events.forEach { e -> EventRow(e, Modifier.tvRow()) }
+                            d.events.forEachIndexed { i, e -> StatsItem("ev:$i") { dark -> EventRow(e, dark) } }
                         }
                     }
                 }
@@ -569,9 +558,9 @@ private fun MatchStatsView(match: Match, modifier: Modifier) {
                     item(key = "st-h") { SheetSection("Stats", Modifier.padding(top = 16.dp)) }
                     item(key = "st") {
                         Column(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x12FFFFFF)).padding(horizontal = 14.dp, vertical = 8.dp),
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x12FFFFFF)).padding(vertical = 6.dp),
                         ) {
-                            d.stats.forEach { st -> StatRow(st, Modifier.tvRow()) }
+                            d.stats.forEachIndexed { i, st -> StatsItem("st:$i") { dark -> StatRow(st, dark) } }
                         }
                     }
                 }
@@ -580,42 +569,66 @@ private fun MatchStatsView(match: Match, modifier: Modifier) {
     }
 }
 
+/**
+ * One row of the stats. TVs: it takes focus like every list in the app (white, with black text), so the
+ * remote can move down through it. Phones: just the row.
+ */
 @Composable
-private fun EventRow(e: app.embertv.data.MatchEvent, modifier: Modifier) {
+private fun StatsItem(key: String, content: @Composable (dark: Boolean) -> Unit) {
+    if (!LocalIsTv.current) {
+        content(false)
+        return
+    }
+    FocusBox(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+        focusKey = "matchstats:$key",
+        shape = RoundedCornerShape(12.dp),
+        focusedScale = 1.02f,
+        color = Color.Transparent,
+        focusedColor = Color.White,
+        glassEdge = false,
+        onClick = {},
+    ) { focused -> content(focused) }
+}
+
+@Composable
+private fun EventRow(e: app.embertv.data.MatchEvent, dark: Boolean) {
+    val text = if (dark) Color.Black else Ember.Text
+    val dim = if (dark) Color(0xFF55555C) else Ember.Dim
     val label = e.player.ifBlank { if (e.kind == app.embertv.data.MatchEventKind.YELLOW || e.kind == app.embertv.data.MatchEventKind.RED) "Card" else "Goal" } +
         when (e.kind) {
             app.embertv.data.MatchEventKind.PENALTY -> " (pen)"
             app.embertv.data.MatchEventKind.OWN_GOAL -> " (og)"
             else -> ""
         }
-    Row(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
             if (e.home) Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(label, style = Txt.Label.copy(fontSize = 14.sp), color = Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(label, style = Txt.Label.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold), color = text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 Spacer(Modifier.width(8.dp))
-                EventIcon(e.kind)
+                EventIcon(e.kind, dark)
             }
         }
         Text(
             e.minute.ifBlank { "–" },
             style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold),
-            color = Ember.Dim,
+            color = dim,
             textAlign = TextAlign.Center,
             modifier = Modifier.width(64.dp),
             maxLines = 1,
         )
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             if (!e.home) Row(verticalAlignment = Alignment.CenterVertically) {
-                EventIcon(e.kind)
+                EventIcon(e.kind, dark)
                 Spacer(Modifier.width(8.dp))
-                Text(label, style = Txt.Label.copy(fontSize = 14.sp), color = Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(label, style = Txt.Label.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold), color = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
 }
 
 @Composable
-private fun EventIcon(kind: app.embertv.data.MatchEventKind) {
+private fun EventIcon(kind: app.embertv.data.MatchEventKind, dark: Boolean) {
     when (kind) {
         app.embertv.data.MatchEventKind.YELLOW, app.embertv.data.MatchEventKind.RED -> Box(
             Modifier
@@ -623,27 +636,31 @@ private fun EventIcon(kind: app.embertv.data.MatchEventKind) {
                 .clip(RoundedCornerShape(2.dp))
                 .background(if (kind == app.embertv.data.MatchEventKind.RED) Ember.Live else Color(0xFFFFD60A))
         )
-        else -> Icon(EmberIcons.Football, contentDescription = "Goal", tint = Ember.Text, modifier = Modifier.size(16.dp))
+        else -> Icon(EmberIcons.Football, contentDescription = "Goal", tint = if (dark) Color.Black else Ember.Text, modifier = Modifier.size(16.dp))
     }
 }
 
 @Composable
-private fun StatRow(st: app.embertv.data.MatchStat, modifier: Modifier) {
+private fun StatRow(st: app.embertv.data.MatchStat, dark: Boolean) {
+    val text = if (dark) Color.Black else Ember.Text
+    val dim = if (dark) Color(0xFF55555C) else Ember.Dim
+    val strong = if (dark) Color.Black else Color.White
+    val weak = if (dark) Color(0x33000000) else Color(0x59FFFFFF)
     val h = st.home.filter { it.isDigit() || it == '.' }.toFloatOrNull() ?: 0f
     val a = st.away.filter { it.isDigit() || it == '.' }.toFloatOrNull() ?: 0f
     val total = h + a
-    Column(modifier.fillMaxWidth().padding(vertical = 7.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(st.home, style = Txt.Label.copy(fontWeight = if (h > a) FontWeight.Bold else FontWeight.Medium), color = Ember.Text, modifier = Modifier.width(56.dp))
-            Text(st.label, style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Dim, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-            Text(st.away, style = Txt.Label.copy(fontWeight = if (a > h) FontWeight.Bold else FontWeight.Medium), color = Ember.Text, textAlign = TextAlign.End, modifier = Modifier.width(56.dp))
+            Text(st.home, style = Txt.Label.copy(fontWeight = if (h > a) FontWeight.Bold else FontWeight.Medium), color = text, modifier = Modifier.width(56.dp))
+            Text(st.label, style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = dim, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+            Text(st.away, style = Txt.Label.copy(fontWeight = if (a > h) FontWeight.Bold else FontWeight.Medium), color = text, textAlign = TextAlign.End, modifier = Modifier.width(56.dp))
         }
         Spacer(Modifier.height(6.dp))
         // Who's ahead: the home share in white from the left, the away share fainter from the right.
         Row(Modifier.fillMaxWidth().height(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             val hf = if (total > 0f) (h / total).coerceIn(0.02f, 0.98f) else 0.5f
-            Box(Modifier.weight(hf).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(if (h >= a) Color.White else Color(0x59FFFFFF)))
-            Box(Modifier.weight(1f - hf).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(if (a > h) Color.White else Color(0x59FFFFFF)))
+            Box(Modifier.weight(hf).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(if (h >= a) strong else weak))
+            Box(Modifier.weight(1f - hf).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(if (a > h) strong else weak))
         }
     }
 }
