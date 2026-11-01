@@ -42,6 +42,16 @@ object MatchFinder {
         "atletico madrid" to listOf("atletico", "atleti"),
         "heart of midlothian" to listOf("hearts"),
         "hibernian" to listOf("hibs"),
+        "juventus" to listOf("juve"),
+        "ssc napoli" to listOf("napoli"),
+        "as roma" to listOf("roma"),
+        "ss lazio" to listOf("lazio"),
+        "real madrid" to listOf("madrid"),
+        "fc barcelona" to listOf("barcelona", "barca"),
+        "bayer leverkusen" to listOf("leverkusen"),
+        "rb leipzig" to listOf("leipzig"),
+        "olympique marseille" to listOf("marseille"),
+        "olympique lyonnais" to listOf("lyon"),
     )
 
     // First words too common to identify a club by themselves.
@@ -73,6 +83,33 @@ object MatchFinder {
             .replace("&", " and ")
             .replace(NON_WORD, " ")
             .trim()
+
+    /**
+     * Who shows each competition in the UK, so their guides are read first. Without this, the
+     * dozens of Sky Sports channels could use up the guide limit before TNT Sports (Serie A, say) was checked.
+     */
+    private val UK_RIGHTS = listOf(
+        "serie a" to listOf("tnt sport"),
+        "champions league" to listOf("tnt sport", "amazon prime", "prime video"),
+        "europa" to listOf("tnt sport"),
+        "conference league" to listOf("tnt sport"),
+        "premier league" to listOf("sky sports", "sky sp", "tnt sport"),
+        "championship" to listOf("sky sports", "sky sp"),
+        "league one" to listOf("sky sports", "sky sp"),
+        "league two" to listOf("sky sports", "sky sp"),
+        "scottish" to listOf("sky sports", "sky sp", "premier sports"),
+        "laliga" to listOf("premier sports", "laliga"),
+        "la liga" to listOf("premier sports", "laliga"),
+        "bundesliga" to listOf("sky sports", "sky sp"),
+        "ligue 1" to listOf("bein", "ligue 1"),
+        "fa cup" to listOf("tnt sport", "bbc", "itv"),
+        "carabao" to listOf("sky sports", "sky sp"),
+    )
+
+    private fun rightsHolders(leagueName: String): List<String> {
+        val n = normalize(leagueName)
+        return UK_RIGHTS.filter { n.contains(it.first) }.flatMap { it.second }
+    }
 
     /** Names a team might go by in a channel name or guide listing. */
     fun aliases(team: TeamScore): List<String> {
@@ -186,11 +223,17 @@ object MatchFinder {
         match: Match,
         now: Long,
         /** How many channel guides to read (each is a request to the provider). Channel names are always checked. */
-        guideBudget: Int = 40,
+        guideBudget: Int = 60,
         onProgress: (Int, Int, List<MatchHit>) -> Unit,
     ): List<MatchHit> {
         val home = patterns(aliases(match.home))
         val away = patterns(aliases(match.away))
+        // The competition's name, for listings like "Live Serie A" that don't name the teams.
+        val leagueName = normalize(match.league.name)
+            .split(' ').filter { it !in setOf("english", "italian", "spanish", "german", "french", "scottish", "uefa", "the") }
+            .joinToString(" ")
+        val leaguePattern = if (leagueName.length >= 5) Regex("\\b" + Regex.escape(leagueName) + "\\b") else null
+        val holders = rightsHolders(match.league.name)
         val channels = try {
             repo.allChannels()
         } catch (e: CancellationException) {
@@ -257,6 +300,8 @@ object MatchFinder {
                 .sortedWith(
                     compareBy(
                         { regionRank(it, catNames[it.categoryId]) },
+                        // Whoever has the rights to this competition first (TNT for Serie A…).
+                        { c -> if (holders.isNotEmpty() && names[c.streamId]?.let { n -> holders.any { n.contains(it) } } == true) 0 else 1 },
                         { c -> if (names[c.streamId]?.let { n -> BROADCASTERS.take(7).any { n.contains(it) } } == true) 0 else 1 },
                     )
                 )
@@ -291,7 +336,12 @@ object MatchFinder {
                             val a = mentions(text, away)
                             when {
                                 h && a -> p to 8
+                                // "Live Serie A" on the channel that has the rights: very likely it.
+                                leaguePattern != null && leaguePattern.containsMatchIn(text) && (h || a) -> p to 7
+                                leaguePattern != null && leaguePattern.containsMatchIn(text) &&
+                                    holders.any { names[c.streamId]?.contains(it) == true } -> p to 6
                                 h || a -> p to 4
+                                leaguePattern != null && leaguePattern.containsMatchIn(text) -> p to 3
                                 else -> null
                             }
                         }
