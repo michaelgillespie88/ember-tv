@@ -127,19 +127,45 @@ private fun Context.findActivity(): Activity? {
     return null
 }
 
-/** On phones, play sideways and full screen; put things back when playback ends. */
+/**
+ * Phones: the player turns with the phone, upright or sideways, like Apple's TV app. The full
+ * screen button forces it sideways (handy with rotation lock on) and back again.
+ */
+internal object PhoneRotation {
+    var forceLandscape by androidx.compose.runtime.mutableStateOf(false)
+}
+
+/** The phone player's full screen button: sideways when upright, back to turning with the phone when sideways. */
+@Composable
+internal fun FullScreenButton() {
+    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    IconCircleButton(
+        if (landscape) EmberIcons.Shrink else EmberIcons.Expand,
+        if (landscape) "Exit full screen" else "Full screen",
+        size = 40.dp,
+        background = ControlBg,
+        glass = true,
+    ) { PhoneRotation.forceLandscape = !landscape }
+}
+
+/** On phones, play full screen, turning with the phone; put things back when playback ends. */
 @Composable
 internal fun PhoneFullscreen() {
     if (LocalIsTv.current) return
     val activity = LocalContext.current.findActivity() ?: return
+    val force = PhoneRotation.forceLandscape
+    LaunchedEffect(activity, force) {
+        activity.requestedOrientation =
+            if (force) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+    }
     DisposableEffect(activity) {
         val window = activity.window
         val controller = WindowCompat.getInsetsController(window, window.decorView)
-        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller.hide(WindowInsetsCompat.Type.systemBars())
         onDispose {
             controller.show(WindowInsetsCompat.Type.systemBars())
+            PhoneRotation.forceLandscape = false
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
@@ -988,8 +1014,16 @@ fun LivePlayerScreen(vm: AppViewModel, channelsIn: List<Channel>, startIndex: In
                     ) {
                         IconCircleButton(EmberIcons.Close, "Close", size = 40.dp, background = ControlBg, glass = true) { vm.pop() }
                         Spacer(Modifier.weight(1f))
-                        GlassPill("Scores", EmberIcons.Football) { scoresOpen = true }
-                        GlassPill("Channels", EmberIcons.ChannelList) { listOpen = true }
+                        val upright = androidx.compose.ui.platform.LocalConfiguration.current.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                        if (upright) {
+                            // Narrower when upright, so round buttons only.
+                            IconCircleButton(EmberIcons.Football, "Live scores", size = 40.dp, background = ControlBg, glass = true) { scoresOpen = true }
+                            IconCircleButton(EmberIcons.ChannelList, "Channels", size = 40.dp, background = ControlBg, glass = true) { listOpen = true }
+                        } else {
+                            GlassPill("Scores", EmberIcons.Football) { scoresOpen = true }
+                            GlassPill("Channels", EmberIcons.ChannelList) { listOpen = true }
+                        }
+                        FullScreenButton()
                         if (enterPip != null) IconCircleButton(EmberIcons.Pip, "Picture in picture", size = 40.dp, background = ControlBg, glass = true) { enterPip() }
                         IconCircleButton(EmberIcons.More, "More options", size = 40.dp, background = ControlBg, glass = true) { optionsOpen = true }
                     }
@@ -2285,6 +2319,8 @@ private fun VodTouchOverlay(
                     Text(item.subtitle, style = Txt.Caption, color = Color(0xFFCFCFD4), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
+            Spacer(Modifier.width(10.dp))
+            FullScreenButton()
             if (onPip != null) {
                 Spacer(Modifier.width(10.dp))
                 IconCircleButton(EmberIcons.Pip, "Picture in picture", size = 40.dp, background = ControlBg, glass = true, onClick = onPip)

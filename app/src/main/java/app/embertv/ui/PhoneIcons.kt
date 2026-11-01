@@ -302,6 +302,22 @@ object EmberIcons {
         moveTo(12.5f, 12f); lineTo(18f, 12f); lineTo(18f, 16f); lineTo(12.5f, 16f); close()
     }
 
+    /** Full screen: four corners pointing out. */
+    val Expand = outline("expand") {
+        moveTo(4f, 9f); lineTo(4f, 4f); lineTo(9f, 4f)
+        moveTo(15f, 4f); lineTo(20f, 4f); lineTo(20f, 9f)
+        moveTo(20f, 15f); lineTo(20f, 20f); lineTo(15f, 20f)
+        moveTo(9f, 20f); lineTo(4f, 20f); lineTo(4f, 15f)
+    }
+
+    /** Leave full screen: four corners pointing in. */
+    val Shrink = outline("shrink") {
+        moveTo(4f, 9f); lineTo(9f, 9f); lineTo(9f, 4f)
+        moveTo(15f, 4f); lineTo(15f, 9f); lineTo(20f, 9f)
+        moveTo(20f, 15f); lineTo(15f, 15f); lineTo(15f, 20f)
+        moveTo(9f, 20f); lineTo(9f, 15f); lineTo(4f, 15f)
+    }
+
     /** Catch-up: a clock with its hand turning back. */
     val Catchup = outline("catchup") {
         moveTo(4.6f, 9f)
