@@ -120,7 +120,7 @@ fun PhoneLiveTab(vm: AppViewModel) {
             is LoadResult.Loading -> SkeletonRows()
             is LoadResult.Err -> ErrorView(r.message) { vm.reload() }
             is LoadResult.Ok -> {
-                val channels = remember(r.value, vm.qualityChoice) { channelsOnce(r.value, vm.qualityChoice) }
+                val channels = remember(r.value, vm.qualityChoice, vm.channelsOnce) { channelsOnce(r.value, vm.qualityChoice, vm.channelsOnce) }
                 if (channels.isEmpty()) {
                     EmptyView(
                         if (categoryId == FAVOURITES) "${holdPrompt()} any channel to add it to your favourites."
@@ -190,7 +190,7 @@ fun PhoneGuideTab(vm: AppViewModel) {
             is LoadResult.Loading -> SkeletonRows()
             is LoadResult.Err -> ErrorView(r.message) { vm.reload() }
             is LoadResult.Ok -> {
-                val channels = remember(r.value, vm.qualityChoice) { channelsOnce(r.value, vm.qualityChoice) }
+                val channels = remember(r.value, vm.qualityChoice, vm.channelsOnce) { channelsOnce(r.value, vm.qualityChoice, vm.channelsOnce) }
                 if (channels.isEmpty()) {
                     EmptyView(
                         if (categoryId == FAVOURITES) "${holdPrompt()} any channel to add it to your favourites."

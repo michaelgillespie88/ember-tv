@@ -96,7 +96,7 @@ fun FavouritesSection(vm: AppViewModel) {
 @Composable
 private fun ChannelShelf(vm: AppViewModel, title: String, found: List<Channel>, keyPrefix: String) {
     // Each channel once in the results, not once per quality.
-    val channels = remember(found, vm.qualityChoice) { channelsOnce(found, vm.qualityChoice) }
+    val channels = remember(found, vm.qualityChoice, vm.channelsOnce) { channelsOnce(found, vm.qualityChoice, vm.channelsOnce) }
     Column {
         SectionHeader(title, Modifier.padding(start = edgePadding()))
         LazyRow(
@@ -556,6 +556,13 @@ fun SettingsSection(vm: AppViewModel) {
                 "For films and shows that come in HD, FHD and 4K",
                 focusKey = "set:quality",
             ) { vm.cycleQualityChoice() }
+            SettingRow(
+                "Show each channel once",
+                if (vm.channelsOnce) "On" else "Off",
+                if (vm.channelsOnce) "BBC One in FHD, HD and SD shows as one channel, playing your quality. Pick another copy from ••• while watching"
+                else "Every copy your provider lists is shown separately",
+                focusKey = "set:channelsonce",
+            ) { vm.toggleChannelsOnce() }
             SettingRow(
                 "Audio & subtitles",
                 listOf(

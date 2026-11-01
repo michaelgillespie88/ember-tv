@@ -201,7 +201,7 @@ private fun GuideGrid(
                     }
                     Spacer(Modifier.width(10.dp))
                     // Each channel once, whatever qualities the provider lists it in.
-                    val rows = remember(r.value, vm.qualityChoice) { combineChannelQualities(r.value, vm.qualityChoice) }
+                    val rows = remember(r.value, vm.qualityChoice, vm.channelsOnce) { combineChannelQualities(r.value, vm.qualityChoice, vm.channelsOnce) }
                     val channels = remember(rows) { rows.map { it.channel } }
                     val compact = vm.compactLists
                     val rowHeight = if (compact) COMPACT_ROW_HEIGHT else ROW_HEIGHT
@@ -790,10 +790,11 @@ internal fun DayPicker(now: Long, showing: Long, onDismiss: () -> Unit, onPick: 
 /** The guide's full guide data for one channel (past and future), loaded when it scrolls into view. */
 @Composable
 fun rememberFullProgrammes(repo: Repository, streamId: Int): List<Programme>? {
-    val programmes by produceState(repo.cachedFullEpg(streamId), repo, streamId) {
+    val id = EpgAlias.of(streamId)
+    val programmes by produceState(repo.cachedFullEpg(id), repo, id) {
         if (value == null) {
             delay(300)
-            value = repo.fullEpg(streamId)
+            value = repo.fullEpg(id)
         }
     }
     return programmes

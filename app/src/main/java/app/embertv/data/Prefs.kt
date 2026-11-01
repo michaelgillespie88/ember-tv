@@ -515,6 +515,13 @@ class Prefs(context: Context) {
             sp.edit().putString(pk("home_order"), JSONArray().apply { value.forEach { put(it) } }.toString()).apply()
         }
 
+    /** Whether a channel's quality copies (FHD, HD, SD) are shown as one. */
+    var channelsOnce: Boolean
+        get() = sp.getBoolean("channels_once", true)
+        set(value) {
+            sp.edit().putBoolean("channels_once", value).apply()
+        }
+
     /** How the Movies and Series grids are sorted: provider, newest, az, rating or year. */
     var movieSort: String
         get() = sp.getString("movie_sort", "provider") ?: "provider"

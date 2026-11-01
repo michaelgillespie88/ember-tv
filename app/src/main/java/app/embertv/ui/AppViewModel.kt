@@ -1369,6 +1369,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .sortedByDescending { tagRank(channelParts(it.name).second) }
     }
 
+    /** Show a channel's FHD, HD and SD copies as one (Settings → Show each channel once). */
+    var channelsOnce by mutableStateOf(prefs.channelsOnce)
+        private set
+
+    fun toggleChannelsOnce() {
+        channelsOnce = !channelsOnce
+        prefs.channelsOnce = channelsOnce
+    }
+
     // ---- Sorting Movies and Series ----
 
     var movieSort by mutableStateOf(prefs.movieSort)

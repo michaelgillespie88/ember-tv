@@ -98,7 +98,7 @@ private fun ChannelList(
         is LoadResult.Err -> ErrorView(r.message, modifier) { vm.reload() }
         is LoadResult.Ok -> {
             // Each channel once, whatever qualities the provider lists it in (like the guide).
-            val channels = remember(r.value, vm.qualityChoice) { channelsOnce(r.value, vm.qualityChoice) }
+            val channels = remember(r.value, vm.qualityChoice, vm.channelsOnce) { channelsOnce(r.value, vm.qualityChoice, vm.channelsOnce) }
             if (channels.isEmpty()) {
                 EmptyView(
                     if (categoryId == FAVOURITES) "${holdPrompt()} any channel to add it to your favourites."
@@ -133,10 +133,12 @@ private fun ChannelList(
 /** Loads now/next for a channel, after a short pause so fast scrolling doesn't flood the server. */
 @Composable
 fun rememberProgrammes(repo: Repository, streamId: Int): List<Programme>? {
-    val programmes by produceState(repo.cachedEpg(streamId), repo, streamId) {
+    // A quality copy without its own listings reads them from the copy that has them.
+    val id = EpgAlias.of(streamId)
+    val programmes by produceState(repo.cachedEpg(id), repo, id) {
         if (value == null) {
             delay(250)
-            value = repo.epg(streamId)
+            value = repo.epg(id)
         }
     }
     return programmes

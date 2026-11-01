@@ -123,31 +123,59 @@ fun tagRank(t: String?): Int = when (t) {
 class GuideChannel(val channel: app.embertv.data.Channel, val name: String, val tag: String?, val copies: Int)
 
 /**
+ * Where to read a channel's TV listings from, when it's a quality copy without its own: providers
+ * often attach the listings to just one copy (frequently the SD one). Filled in by
+ * [combineChannelQualities]; [rememberProgrammes] uses it everywhere.
+ */
+object EpgAlias {
+    private val map = java.util.concurrent.ConcurrentHashMap<Int, Int>()
+    fun of(streamId: Int): Int = map[streamId] ?: streamId
+    fun set(streamId: Int, source: Int) {
+        if (streamId != source) map[streamId] = source
+    }
+}
+
+/**
  * The same channel in several qualities (BBC One FHD, HD and SD) shown as one row, playing the copy
  * that suits Settings → Quality to play: Full HD or HD when that's chosen, otherwise the best.
+ * Only real quality copies are combined: channels that merely share a name, with no quality in
+ * it, stay separate. With [combine] off every copy is listed, as the provider sends them.
  */
-fun combineChannelQualities(channels: List<app.embertv.data.Channel>, qualityChoice: String): List<GuideChannel> {
+fun combineChannelQualities(channels: List<app.embertv.data.Channel>, qualityChoice: String, combine: Boolean = true): List<GuideChannel> {
+    if (!combine) return channels.distinctBy { it.streamId }.map { c -> channelParts(c.name).let { (n, t) -> GuideChannel(c, n, t, 1) } }
     val groups = LinkedHashMap<String, MutableList<Pair<app.embertv.data.Channel, String?>>>()
     for (c in channels) {
         val (clean, tag) = channelParts(c.name)
         val key = clean.lowercase().replace(Regex("[^a-z0-9]"), "")
         groups.getOrPut(key.ifEmpty { "id" + c.streamId }) { ArrayList() }.add(c to tag)
     }
-    return groups.values.map { copies ->
-        val want = when (qualityChoice) {
-            "FHD" -> 3
-            "HD" -> 2
-            else -> null
+    val want = when (qualityChoice) {
+        "FHD" -> 3
+        "HD" -> 2
+        else -> null
+    }
+    val out = ArrayList<GuideChannel>()
+    for (copies in groups.values) {
+        // Two or more without a quality are different channels with the same name: keep them all.
+        if (copies.size == 1 || copies.count { it.second == null } > 1) {
+            copies.forEach { (c, t) -> out += GuideChannel(c, channelParts(c.name).first, t, 1) }
+            continue
         }
         val pick = (if (want != null) copies.firstOrNull { tagRank(it.second) == want } else null)
             ?: copies.maxByOrNull { tagRank(it.second) }!!
-        GuideChannel(pick.first, channelParts(pick.first.name).first, pick.second, copies.size)
+        // Listings from the copy that has them, preferring the one being played.
+        val guide = copies.firstOrNull { it.first.streamId == pick.first.streamId && it.first.epgId.isNotBlank() }
+            ?: copies.firstOrNull { it.first.epgId.isNotBlank() }
+        if (guide != null) EpgAlias.set(pick.first.streamId, guide.first.streamId)
+        out += GuideChannel(pick.first, channelParts(pick.first.name).first, pick.second, copies.size)
     }
+    // The very same channel listed twice would trip up the lists; show it once.
+    return out.distinctBy { it.channel.streamId }
 }
 
 /** The same for every quality copy of a channel: "FHD : BBC One" and "SD : BBC ONE" both give "bbcone". */
 fun channelKey(name: String): String = channelParts(name).first.lowercase().replace(Regex("[^a-z0-9]"), "")
 
 /** Each channel once (see [combineChannelQualities]), as plain channels. */
-fun channelsOnce(channels: List<app.embertv.data.Channel>, qualityChoice: String): List<app.embertv.data.Channel> =
-    combineChannelQualities(channels, qualityChoice).map { it.channel }
+fun channelsOnce(channels: List<app.embertv.data.Channel>, qualityChoice: String, combine: Boolean = true): List<app.embertv.data.Channel> =
+    combineChannelQualities(channels, qualityChoice, combine).map { it.channel }
