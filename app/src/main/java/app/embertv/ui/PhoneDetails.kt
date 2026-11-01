@@ -120,7 +120,7 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
                 val movieQualities = movie.copy(versions = vm.versionsOf(movie)).qualities()
                 if (movieQualities.isNotEmpty()) {
                     Spacer(Modifier.height(10.dp))
-                    QualityChips(movieQualities)
+                    QualityChips(movieQualities, plan = vm.qualityPlan)
                 }
                 Spacer(Modifier.height(18.dp))
                 if (resume > 0) {
@@ -139,6 +139,11 @@ fun PhoneMovieDetail(vm: AppViewModel, movie: Movie) {
                 if (trailer != null) {
                     Spacer(Modifier.height(10.dp))
                     PillButton("Trailer", icon = EmberIcons.Play, modifier = Modifier.fillMaxWidth()) { vm.playTrailer(trailer) }
+                }
+                // Pick the quality yourself, whatever Settings says.
+                if (movieQualities.size > 1) {
+                    Spacer(Modifier.height(10.dp))
+                    PillButton("Choose quality", icon = EmberIcons.Sliders, modifier = Modifier.fillMaxWidth()) { vm.chooseMovieQuality(movie, fromStart = resume <= 0) }
                 }
                 Spacer(Modifier.height(10.dp))
                 PillButton(

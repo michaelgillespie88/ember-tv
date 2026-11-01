@@ -1809,6 +1809,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return repo?.client?.liveUrl(c.streamId, format) ?: ""
     }
 
+    /** Opens the quality choice for a film straight away, whatever Settings → Quality to play says. */
+    fun chooseMovieQuality(m: Movie, fromStart: Boolean) {
+        val versions = versionsOf(m)
+        if (versions.size <= 1) {
+            playMovie(m, fromStart)
+            return
+        }
+        choosingVersion = VersionChoice.ForMovie(Versions.cleanTitle(m.name), versions, if (fromStart) 0L else moviePosition(m))
+    }
+
+    /** What happens with qualities when Play is pressed, in words, for the film page. */
+    val qualityPlan: String
+        get() = when (qualityChoice) {
+            "best" -> "Plays the best quality"
+            "FHD" -> "Plays Full HD when there is one"
+            "HD" -> "Plays HD when there is one"
+            else -> "Choose when you play"
+        }
+
     /** Plays a film, asking which quality first when there's more than one (unless set in Settings). */
     fun playMovie(m: Movie, fromStart: Boolean) {
         // Still looking for other qualities: finish that first, so the choice is always offered.
@@ -1832,6 +1851,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (auto == null) {
                 choosingVersion = VersionChoice.ForMovie(Versions.cleanTitle(m.name), versions, startAt)
             } else {
+                // Picked for you by Settings: say which, so it's never a mystery.
+                notify("Playing in ${versions[auto].quality.title}")
                 playMovieVersion(versions[auto], startAt)
             }
             return

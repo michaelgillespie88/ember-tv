@@ -176,7 +176,7 @@ fun MovieDetailScreen(vm: AppViewModel, movie: Movie) {
                 val movieQualities = movie.copy(versions = vm.versionsOf(movie)).qualities()
                 if (movieQualities.isNotEmpty()) {
                     Spacer(Modifier.height(10.dp))
-                    QualityChips(movieQualities)
+                    QualityChips(movieQualities, plan = vm.qualityPlan)
                 }
                 Spacer(Modifier.height(18.dp))
                 when {
@@ -230,6 +230,10 @@ fun MovieDetailScreen(vm: AppViewModel, movie: Movie) {
                             autoFocus = true,
                             onClick = { vm.playMovie(movie, fromStart = true) },
                         )
+                    }
+                    // Pick the quality yourself, whatever Settings says.
+                    if (movieQualities.size > 1) {
+                        TvButton("Quality", focusKey = "detail:quality", onClick = { vm.chooseMovieQuality(movie, fromStart = resume <= 0) })
                     }
                     if (trailer != null) {
                         TvButton("Trailer", icon = "▷", focusKey = "detail:trailer", onClick = { vm.playTrailer(trailer) })

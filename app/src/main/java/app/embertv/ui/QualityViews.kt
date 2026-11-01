@@ -60,7 +60,7 @@ fun PosterBadge(text: String, modifier: Modifier = Modifier) {
 
 /** "4K  FHD  HD" chips for a detail screen. */
 @Composable
-fun QualityChips(qualities: List<Quality>, modifier: Modifier = Modifier) {
+fun QualityChips(qualities: List<Quality>, modifier: Modifier = Modifier, plan: String = "Choose when you play") {
     if (qualities.isEmpty()) return
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         for (q in qualities) {
@@ -75,7 +75,7 @@ fun QualityChips(qualities: List<Quality>, modifier: Modifier = Modifier) {
         }
         if (qualities.size > 1) {
             Spacer(Modifier.width(2.dp))
-            Text("Choose when you play", style = Txt.Caption, color = Ember.Dim)
+            Text(plan, style = Txt.Caption, color = Ember.Dim)
         }
     }
 }
