@@ -392,10 +392,15 @@ fun ChannelCard(
     logo: String,
     focusKey: String,
     modifier: Modifier = Modifier,
+    /** With these, the tile also shows what's on now and how far through it is. */
+    repo: app.embertv.data.Repository? = null,
+    streamId: Int = 0,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val now = LocalNow.current
+    val onNow = if (repo != null && streamId > 0) rememberProgrammes(repo, streamId)?.firstOrNull { it.isLive(now) } else null
     Column(modifier.width(210.dp)) {
         FocusBox(
             modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
@@ -414,13 +419,23 @@ fun ChannelCard(
             }
         }
         Spacer(Modifier.height(10.dp))
-        Text(
-            name,
-            style = Txt.Label,
-            color = if (focused) Ember.Text else Ember.Dim,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (onNow != null) {
+            // What's on, with the channel underneath and a thin bar for how far through it is.
+            Text(onNow.title, style = Txt.Label, color = if (focused) Ember.Text else Ember.Text.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(name, style = Txt.Caption, color = Ember.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(5.dp))
+            Box(Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)).background(Color(0x26FFFFFF))) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(onNow.progress(now).coerceIn(0f, 1f)).background(Ember.Text))
+            }
+        } else {
+            Text(
+                name,
+                style = Txt.Label,
+                color = if (focused) Ember.Text else Ember.Dim,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 

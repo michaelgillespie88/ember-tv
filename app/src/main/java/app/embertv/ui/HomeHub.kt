@@ -249,13 +249,16 @@ private fun LazyListScope.homeRows(
     val rowPadding = PaddingValues(horizontal = edge, vertical = 12.dp)
     // Each row by its id, so they can be shown in the profile's chosen order (Arrange Home).
     val rows = HashMap<String, () -> Unit>()
+    // One Sport row: live games first (with the channels showing them), then your teams' other fixtures.
     rows["sport"] = {
         val sport = vm.liveSport
-        if (sport.isNotEmpty()) {
+        val liveIds = sport.map { it.match.id }.toSet()
+        val fixtures = vm.teamMatches.filter { it.id !in liveIds }.take(8)
+        if (sport.isNotEmpty() || fixtures.isNotEmpty()) {
             item(key = "row-sport") {
-                HomeRow("Live Sport Now", edge) {
+                HomeRow(if (sport.isNotEmpty()) "Sport" else "Your Teams", edge) {
                     LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                        items(sport, key = { it.match.id }) { s ->
+                        items(sport, key = { "live-" + it.match.id }) { s ->
                             SportCard(
                                 s,
                                 continueWidth,
@@ -265,18 +268,7 @@ private fun LazyListScope.homeRows(
                                 onLongClick = { vm.pinMatch(s.match) },
                             )
                         }
-                    }
-                }
-            }
-        }
-    }
-    rows["teams"] = {
-        val matches = vm.teamMatches.take(8)
-        if (matches.isNotEmpty()) {
-            item(key = "row-teams") {
-                HomeRow("Your Teams", edge) {
-                    LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
-                        items(matches, key = { it.id }) { m ->
+                        items(fixtures, key = { "team-" + it.id }) { m ->
                             MatchCard(m, continueWidth, "home:match:${m.id}") { vm.findingMatch = m }
                         }
                     }
@@ -346,6 +338,8 @@ private fun LazyListScope.homeRows(
                             ChannelCard(
                                 name = c.name,
                                 logo = c.icon,
+                                repo = vm.repo,
+                                streamId = c.streamId,
                                 focusKey = "home:recent:${c.streamId}",
                                 onClick = { vm.push(Screen.PlayLive(recent, i)) },
                                 onLongClick = { vm.toggleFavourite(vm.favouriteOf(c)) },
@@ -366,6 +360,8 @@ private fun LazyListScope.homeRows(
                             ChannelCard(
                                 name = c.name,
                                 logo = c.icon,
+                                repo = vm.repo,
+                                streamId = c.streamId,
                                 focusKey = "home:fav:${c.streamId}",
                                 onClick = { vm.push(Screen.PlayLive(favChannels, i)) },
                                 onLongClick = { vm.toggleFavourite(vm.favouriteOf(c)) },
@@ -411,6 +407,8 @@ private fun LazyListScope.homeRows(
                             ChannelCard(
                                 name = c.name,
                                 logo = c.icon,
+                                repo = vm.repo,
+                                streamId = c.streamId,
                                 focusKey = "home:live:${c.streamId}",
                                 onClick = { vm.push(Screen.PlayLive(live.second, i)) },
                                 onLongClick = { vm.toggleFavourite(vm.favouriteOf(c)) },
@@ -440,6 +438,10 @@ private fun LazyListScope.homeRows(
                                 onLongClick = { vm.toggleFavourite(vm.favouriteOf(m)) },
                             )
                         }
+                        // The rest of this category, in Movies.
+                        item(key = "see-all") {
+                            SeeAllCard(posterWidth, "home:m:${cat.id}:all") { vm.openCategory(Tabs.MOVIES, cat.id) }
+                        }
                     }
                 }
             }
@@ -461,6 +463,9 @@ private fun LazyListScope.homeRows(
                                 onClick = { vm.push(Screen.SeriesDetail(s)) },
                                 onLongClick = { vm.toggleFavourite(vm.favouriteOf(s)) },
                             )
+                        }
+                        item(key = "see-all") {
+                            SeeAllCard(posterWidth, "home:s:${cat.id}:all") { vm.openCategory(Tabs.SERIES, cat.id) }
                         }
                     }
                 }
@@ -540,6 +545,35 @@ private fun LazyListScope.homeRows(
     }
 }
 
+/** The last tile of a category row: a frosted poster-sized "See all" that opens the whole category. */
+@Composable
+private fun SeeAllCard(width: Dp, focusKey: String, onClick: () -> Unit) {
+    Column(Modifier.width(width)) {
+        FocusBox(
+            modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f),
+            focusKey = focusKey,
+            focusedScale = 1.07f,
+            color = Color(0x14FFFFFF),
+            focusedColor = Color.White,
+            onClick = onClick,
+        ) { focused ->
+            Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Box(
+                    Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(if (focused) Color(0x14000000) else Color(0x1FFFFFFF)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.Icon(EmberIcons.ChevronRight, contentDescription = null, tint = if (focused) Color.Black else Ember.Text, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("See all", style = Txt.Label.copy(fontWeight = FontWeight.SemiBold), color = if (focused) Color.Black else Ember.Text)
+            }
+        }
+    }
+}
+
 @Composable
 private fun HomeRow(title: String, edge: Dp, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
@@ -576,13 +610,18 @@ fun HomeSection(vm: AppViewModel) {
     val feedState by rememberHomeFeed(vm, repo)
     var arranging by remember { mutableStateOf(false) }
     if (arranging) ArrangeHomeDialog(vm) { arranging = false }
+    // Apple TV style: the top bar tucks away once you're browsing the rows below the banner.
+    val homeList = vm.home.list("tv")
+    val scrolledDown by remember { androidx.compose.runtime.derivedStateOf { homeList.firstVisibleItemIndex > 0 } }
+    LaunchedEffect(scrolledDown) { vm.homeBarHidden = scrolledDown }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { vm.homeBarHidden = false } }
     when (val f = feedState) {
         is LoadResult.Loading -> SkeletonHome()
         is LoadResult.Err -> ErrorView(f.message) { vm.reload() }
         is LoadResult.Ok -> {
             val feed = f.value
             LazyColumn(
-                state = vm.home.list("tv"),
+                state = homeList,
                 contentPadding = PaddingValues(bottom = 48.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {

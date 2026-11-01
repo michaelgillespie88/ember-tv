@@ -65,8 +65,23 @@ fun HomeScreen(vm: AppViewModel) {
 
     val scope = rememberCoroutineScope()
     // Back from the content jumps up to the tab bar; back from the tab bar leaves the app.
+    // Shows the bar again for a moment so Back can move up to it.
+    var reveal by remember { mutableStateOf(false) }
+    LaunchedEffect(focusedTab) { if (focusedTab >= 0) reveal = false }
+    // "See all" on Home switched tab: move the highlight there too.
+    LaunchedEffect(vm.tabJump) {
+        if (vm.tabJump == 0) return@LaunchedEffect
+        delay(120)
+        runCatching { tabRequesters[vm.tab].requestFocus() }
+    }
     BackHandler(enabled = focusedTab < 0) {
-        if (vm.guideFullScreen) {
+        if (vm.tab == Tabs.HOME && vm.homeBarHidden) {
+            reveal = true
+            scope.launch {
+                delay(60)
+                runCatching { tabRequesters[vm.tab].requestFocus() }
+            }
+        } else if (vm.guideFullScreen) {
             // The full-screen guide hides the tabs; show them before moving up to them.
             vm.guideFullScreen = false
             scope.launch {
@@ -97,7 +112,8 @@ fun HomeScreen(vm: AppViewModel) {
         runCatching { tabRequesters[vm.tab].requestFocus() }
     }
 
-    val hideBar = vm.tab == Tabs.GUIDE && vm.guideFullScreen && focusedTab < 0
+    val hideBar = focusedTab < 0 && !reveal &&
+        ((vm.tab == Tabs.GUIDE && vm.guideFullScreen) || (vm.tab == Tabs.HOME && vm.homeBarHidden))
     // The same soft warm glow at the top of every page, like the guide.
     Column(
         Modifier

@@ -1346,6 +1346,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.showHints = HintsSetting.show
     }
 
+    /** Opens a film or series category from Home's "See all": switches tab and picks the category. */
+    fun openCategory(tab: Int, categoryId: String) {
+        if (tab == Tabs.MOVIES) movies.categoryId = categoryId else series.categoryId = categoryId
+        this.tab = tab
+        tabJump++
+    }
+
+    /** Goes up when something switches tab for you, so the TV can move its highlight to the new tab. */
+    var tabJump by mutableIntStateOf(0)
+
+    /** TVs: the top bar tucks away while you browse Home's rows below the banner. */
+    var homeBarHidden by mutableStateOf(false)
+
     /** Whether the next episode starts by itself after a short countdown. */
     var autoplayNext by mutableStateOf(true)
         private set
@@ -2517,8 +2530,7 @@ private const val VOD_UPDATE_EVERY_MS = 3 * 60 * 60_000L
 
 /** Home's rows that can be moved or turned off, with their names, in their usual order. */
 val HOME_ROWS = listOf(
-    "sport" to "Live Sport Now",
-    "teams" to "Your Teams",
+    "sport" to "Sport (live games and your teams)",
     "continue" to "Up Next",
     "new-episodes" to "New Episodes",
     "recently-added" to "Recently Added",
