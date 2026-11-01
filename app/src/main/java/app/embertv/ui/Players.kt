@@ -1394,7 +1394,7 @@ private fun BoxScope.ZapList(
                     }
                 }
             }
-            itemsIndexed(channels, key = { _, c -> c.streamId }) { i, c ->
+            itemsIndexed(channels, key = { i, c -> "$i-${c.streamId}" }) { i, c ->
                 ZapRow(vm, c, playing = i == current, onClick = { onPick(i) })
             }
         }

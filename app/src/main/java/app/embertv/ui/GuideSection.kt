@@ -927,7 +927,7 @@ fun PlayerGuide(vm: AppViewModel, channels: List<Channel>, current: Int, onZap: 
                             .fillMaxSize()
                             .onPreviewKeyEvent { ev -> guideKey(ev, focus?.programme, windowStart, windowEnd, step, onStep = { step = it.coerceIn(-MAX_STEPS, MAX_STEPS) }) },
                     ) {
-                        itemsIndexed(channels, key = { _, ch -> ch.streamId }) { i, ch ->
+                        itemsIndexed(channels, key = { i, ch -> "$i-${ch.streamId}" }) { i, ch ->
                             GuideRow(
                                 repo = repo,
                                 channel = ch,

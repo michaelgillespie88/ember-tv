@@ -1292,7 +1292,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val updatedMs = copies.maxOf { it.updated } * 1000L
                 // A minute's grace, as the provider's clock and ours never quite agree.
                 if (updatedMs > watchedAt + 60_000L) s to updatedMs else null
-            }.sortedByDescending { it.second }.take(20).map { it.first }
+            }.sortedByDescending { it.second }.map { it.first }.distinctBy { it.seriesId }.take(20)
         }
     }
 
@@ -1305,13 +1305,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val movie = r.loadedMovies().firstOrNull { m -> m.streamId == id || m.versions.any { it.streamId == id } }
                     ?: return null to emptyList()
                 val extras = try { movieExtras(movie, r.peekMovieInfo(movie.streamId)) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
-                val picks = moreLikeThis(movie, extras).filter { it.streamId != movie.streamId && !movieWatched(it) }.take(20)
+                val picks = moreLikeThis(movie, extras).filter { it.streamId != movie.streamId && !movieWatched(it) }.distinctBy { it.streamId }.take(20)
                 Versions.cleanTitle(movie.name) to picks
             } else {
                 val show = r.loadedSeries().firstOrNull { s -> s.seriesId == id || s.versions.any { it.seriesId == id } }
                     ?: return null to emptyList()
                 val extras = try { seriesExtras(show, r.peekSeriesInfo(show.seriesId)) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
-                val picks = moreLikeThis(show, extras).filter { it.seriesId != show.seriesId }.take(20)
+                val picks = moreLikeThis(show, extras).filter { it.seriesId != show.seriesId }.distinctBy { it.seriesId }.take(20)
                 Versions.cleanTitle(show.name) to picks
             }
         } catch (e: CancellationException) {
