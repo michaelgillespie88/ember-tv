@@ -99,27 +99,27 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
             .fillMaxHeight()
             .padding(if (isTv) 28.dp else 12.dp)
             .width(if (isTv) 420.dp else 360.dp)
-            .glassSurface(RoundedCornerShape(26.dp), Color(0xE0141418))
+            .glassSurface(RoundedCornerShape(26.dp), if (isTv) Color(0xE0141418) else Color(0xF214141A))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }
-            .padding(top = 20.dp)
+            .padding(top = if (isTv) 20.dp else 16.dp)
     ) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
+        Row(Modifier.fillMaxWidth().padding(horizontal = if (isTv) 20.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (isTv) Box(
                 Modifier.size(38.dp).glassSurface(CircleShape, Color(0x1AFFFFFF)),
                 contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Icon(EmberIcons.Football, contentDescription = null, tint = Ember.Text, modifier = Modifier.size(20.dp))
             }
-            Spacer(Modifier.width(12.dp))
+            if (isTv) Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("Live Scores", style = Txt.Headline.copy(fontWeight = FontWeight.Bold))
+                Text("Live Scores", style = Txt.Headline.copy(fontSize = if (isTv) Txt.Headline.fontSize else 20.sp, fontWeight = FontWeight.Bold))
                 Text(
                     if (updated == 0L) "Getting today's matches…" else "Updated ${formatClock(updated / 1000)}",
                     style = Txt.Caption,
                     color = Ember.Faint,
                 )
             }
-            if (!isTv) IconCircleButton(EmberIcons.Close, "Close scores", size = 38.dp, background = Color(0x1AFFFFFF), glass = true, onClick = onClose)
+            if (!isTv) IconCircleButton(EmberIcons.Close, "Close scores", size = 32.dp, background = Color(0x1AFFFFFF), glass = true, onClick = onClose)
         }
         Spacer(Modifier.height(10.dp))
         LazyRow(
@@ -128,7 +128,25 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
         ) {
             items(listOf(ALL_LEAGUES) + LEAGUES, key = { it.code }) { l ->
                 val selected = l.code == league.code
-                FocusBox(
+                if (!isTv) {
+                    // Phones: Apple chips, white when chosen.
+                    val shape = RoundedCornerShape(16.dp)
+                    Box(
+                        Modifier
+                            .height(32.dp)
+                            .then(if (selected) Modifier.clip(shape).background(Color.White) else Modifier.glassSurface(shape, Color(0x14FFFFFF)))
+                            .pressable { league = l }
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            l.name,
+                            style = Txt.Label.copy(fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
+                            color = if (selected) Color.Black else Ember.Text.copy(alpha = 0.85f),
+                            maxLines = 1,
+                        )
+                    }
+                } else FocusBox(
                     modifier = Modifier.height(34.dp),
                     focusKey = "scores:league:${l.code}",
                     shape = RoundedCornerShape(17.dp),
@@ -175,6 +193,31 @@ fun BoxScope.ScoresPanel(programmeTitle: String?, onClose: () -> Unit) {
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    if (!isTv) {
+                        // Phones: Apple grouped lists, one rounded block per section, rows split by hairlines.
+                        val sections = ArrayList<Pair<String, List<Match>>>()
+                        if (pinned.isNotEmpty()) sections += "On this channel" to pinned
+                        if (mine.isNotEmpty()) sections += "Your teams" to mine
+                        if (league.code == "all") {
+                            rest.groupBy { it.league.code }.values.forEach { g -> sections += g.first().league.name to g }
+                        } else if (rest.isNotEmpty()) {
+                            sections += league.name to rest
+                        }
+                        sections.forEachIndexed { si, (title, ms) ->
+                            item(key = "sec-$si-$title") {
+                                Column {
+                                    ScoresHeader(title)
+                                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x12FFFFFF))) {
+                                        ms.forEachIndexed { i, m ->
+                                            if (i > 0) Box(Modifier.padding(start = 40.dp).fillMaxWidth().height(0.5.dp).background(Color(0x22FFFFFF)))
+                                            PhoneMatchRow(m) { vm.findingMatch = m }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return@LazyColumn
+                    }
                     if (pinned.isNotEmpty()) {
                         item(key = "pinned-h") { ScoresHeader("On this channel") }
                         items(pinned, key = { "p" + it.id }) { MatchRow(it, highlight = true) { vm.findingMatch = it } }
@@ -260,6 +303,37 @@ private fun MatchRow(m: Match, highlight: Boolean, onClick: () -> Unit) {
                 } else {
                     Text(m.status, style = Txt.Caption, color = if (focused) Color(0xFF55555C) else Ember.Faint, maxLines = 1, textAlign = TextAlign.Center)
                 }
+            }
+        }
+    }
+}
+
+/** Phones: one match in a grouped list. Tap to find where it's showing. */
+@Composable
+private fun PhoneMatchRow(m: Match, onClick: () -> Unit) {
+    val live = m.state == MatchState.LIVE
+    Row(
+        Modifier.fillMaxWidth().pressable(onClick = onClick).padding(start = 14.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            TeamLine(m.home.shortName, m.home.logo, m.home.score, m.state, winner = (m.home.score.toIntOrNull() ?: 0) > (m.away.score.toIntOrNull() ?: 0), dark = false)
+            TeamLine(m.away.shortName, m.away.logo, m.away.score, m.state, winner = (m.away.score.toIntOrNull() ?: 0) > (m.home.score.toIntOrNull() ?: 0), dark = false)
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(Modifier.width(52.dp), contentAlignment = Alignment.CenterEnd) {
+            if (live) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(6.dp).clip(CircleShape).background(Ember.Live))
+                        Spacer(Modifier.width(4.dp))
+                        Text("LIVE", style = Txt.Caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp), color = Ember.Live)
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(m.status, style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Text, maxLines = 1)
+                }
+            } else {
+                Text(m.status, style = Txt.Caption, color = Ember.Faint, maxLines = 1, textAlign = TextAlign.End)
             }
         }
     }
