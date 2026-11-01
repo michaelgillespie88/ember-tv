@@ -457,6 +457,14 @@ fun SettingsSection(vm: AppViewModel) {
                 }
                 SettingRow("Background", Ember.backdrop.name, "The colour behind everything", focusKey = "set:backdrop") { pickingBackdrop = true }
                 SettingRow("Text size", vm.textSizeLabel, "Bigger is easier to read from across the room", focusKey = "set:textsize") { vm.cycleTextSize() }
+                if (!isTv) {
+                    SettingRow(
+                        "Screen direction",
+                        vm.screenDirectionLabel,
+                        "Sideways shows more of the TV guide and the rows on Home",
+                        focusKey = "set:direction",
+                    ) { vm.cycleScreenDirection() }
+                }
                 if (isTv) {
                     SettingRow(
                         "Remote hints",

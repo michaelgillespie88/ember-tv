@@ -556,6 +556,13 @@ class Prefs(context: Context) {
             sp.edit().putBoolean(pk("show_hints"), value).apply()
         }
 
+    /** Phones: which way the app faces. 0 turns with the phone, 1 always upright, 2 always sideways. */
+    var screenDirection: Int
+        get() = sp.getInt("screen_direction", 0)
+        set(value) {
+            sp.edit().putInt("screen_direction", value).apply()
+        }
+
     /** Whether the next episode starts by itself after a short countdown. */
     var autoplayNext: Boolean
         get() = sp.getBoolean(pk("autoplay_next"), true)

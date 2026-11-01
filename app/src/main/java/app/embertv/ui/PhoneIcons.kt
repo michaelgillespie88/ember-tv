@@ -119,6 +119,25 @@ object EmberIcons {
         moveTo(7f, 8f); lineTo(21f, 8f); lineTo(21f, 19f); lineTo(7f, 19f); close()
     }
 
+    // Filled versions for the phone's tab bar, as in Apple's apps.
+    val HomeFilled = solid("home-filled") {
+        moveTo(12f, 3f); lineTo(21.5f, 10.8f); lineTo(19f, 10.8f); lineTo(19f, 20.5f); lineTo(14.5f, 20.5f)
+        lineTo(14.5f, 15f); lineTo(9.5f, 15f); lineTo(9.5f, 20.5f); lineTo(5f, 20.5f); lineTo(5f, 10.8f); lineTo(2.5f, 10.8f); close()
+    }
+    val LiveFilled = solid("live-filled") {
+        moveTo(2.5f, 6.5f); lineTo(21.5f, 6.5f); lineTo(21.5f, 18.5f); lineTo(2.5f, 18.5f); close()
+        moveTo(8f, 20f); lineTo(16f, 20f); lineTo(16f, 21.5f); lineTo(8f, 21.5f); close()
+        moveTo(7.2f, 2.6f); lineTo(8.4f, 1.8f); lineTo(12f, 5.4f); lineTo(15.6f, 1.8f); lineTo(16.8f, 2.6f); lineTo(12.8f, 6.5f); lineTo(11.2f, 6.5f); close()
+    }
+    val MoviesFilled = solid("movies-filled") {
+        moveTo(3f, 9.5f); lineTo(21f, 9.5f); lineTo(21f, 20f); lineTo(3f, 20f); close()
+        moveTo(2.6f, 7.4f); lineTo(19.8f, 3.2f); lineTo(20.4f, 5.6f); lineTo(3.2f, 9.8f); close()
+    }
+    val SeriesFilled = solid("series-filled") {
+        moveTo(3f, 4f); lineTo(17f, 4f); lineTo(17f, 6.3f); lineTo(5.3f, 6.3f); lineTo(5.3f, 15f); lineTo(3f, 15f); close()
+        moveTo(7f, 8f); lineTo(21f, 8f); lineTo(21f, 19.5f); lineTo(7f, 19.5f); close()
+    }
+
     val Star = outline("star") { star() }
     val StarFilled = solid("star-filled") { star() }
 

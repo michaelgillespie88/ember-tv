@@ -1438,6 +1438,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var autoplayNext by mutableStateOf(true)
         private set
 
+    /** Phones: which way the app faces. 0 turns with the phone, 1 always upright, 2 always sideways. */
+    var screenDirection by mutableStateOf(prefs.screenDirection)
+        private set
+
+    val screenDirectionLabel: String
+        get() = when (screenDirection) {
+            1 -> "Upright"
+            2 -> "Sideways"
+            else -> "Turn with phone"
+        }
+
+    fun cycleScreenDirection() {
+        screenDirection = (screenDirection + 1) % 3
+        prefs.screenDirection = screenDirection
+    }
+
     fun toggleAutoplayNext() {
         autoplayNext = !autoplayNext
         prefs.autoplayNext = autoplayNext

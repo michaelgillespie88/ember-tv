@@ -806,11 +806,12 @@ private fun PhoneHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
     val info = (rememberLoad(movie.streamId) { repo.movieInfo(movie.streamId) }.value as? LoadResult.Ok)?.value
     val resume = vm.moviePosition(movie)
     val isFav = vm.isFavourite(ContentType.MOVIE, movie.streamId)
+    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
 
     Box(
         Modifier
             .fillMaxWidth()
-            .aspectRatio(4f / 5.6f)
+            .aspectRatio(if (landscape) 2.4f else 4f / 5.6f)
             .pointerInput(heroes.size) {
                 var travelled = 0f
                 detectHorizontalDragGestures(
@@ -827,7 +828,8 @@ private fun PhoneHero(vm: AppViewModel, repo: Repository, heroes: List<Movie>) {
     ) {
         Crossfade(targetState = movie, label = "hero") { m ->
             // Tall poster artwork filling the top of the page, as in Apple's TV app on iPhone.
-            val art = m.poster.ifBlank { info?.backdrop.orEmpty() }
+            // Sideways, wide artwork suits better.
+            val art = if (landscape && m.streamId == movie.streamId) info?.backdrop?.takeIf { it.isNotBlank() } ?: m.poster else m.poster.ifBlank { info?.backdrop.orEmpty() }
             Box(Modifier.fillMaxSize()) {
                 Placeholder(m.name, Modifier.fillMaxSize(), fontSizeSp = 32)
                 NetImage(art, Modifier.fillMaxSize())

@@ -80,16 +80,14 @@ private val CHIP_TABS = setOf(TAB_LIVE, TAB_GUIDE, TAB_MOVIES, TAB_SERIES)
 private class NavItem(val tab: Int, val label: String, val icon: ImageVector)
 
 private val NAV_ITEMS = listOf(
-    NavItem(TAB_HOME, "Home", EmberIcons.Home),
-    NavItem(TAB_LIVE, "Live", EmberIcons.Live),
-    NavItem(TAB_MOVIES, "Movies", EmberIcons.Movies),
-    NavItem(TAB_SERIES, "Series", EmberIcons.Series),
-    NavItem(TAB_FAVOURITES, "Favourites", EmberIcons.Star),
+    NavItem(TAB_HOME, "Home", EmberIcons.HomeFilled),
+    NavItem(TAB_LIVE, "Live", EmberIcons.LiveFilled),
+    NavItem(TAB_MOVIES, "Movies", EmberIcons.MoviesFilled),
+    NavItem(TAB_SERIES, "Series", EmberIcons.SeriesFilled),
+    NavItem(TAB_FAVOURITES, "Favourites", EmberIcons.StarFilled),
 )
 
-private val HEADER_ROW = 62.dp
-private val CHIPS_ROW = 52.dp
-private val TAB_BAR = 62.dp
+
 
 /** Side padding used by screens shared between TV and phone. */
 @Composable
@@ -114,6 +112,17 @@ fun PhoneHome(vm: AppViewModel) {
     fun openOverlayTab(target: Int) {
         if (tab !in OVERLAY_TABS) returnTab = tab
         vm.tab = target
+    }
+
+    // Sideways: a slimmer header and tab bar, so the guide and rows get the room.
+    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val HEADER_ROW = if (landscape) 50.dp else 62.dp
+    val CHIPS_ROW = if (landscape) 46.dp else 52.dp
+    val TAB_BAR = if (landscape) 54.dp else 62.dp
+    // The Screen direction setting.
+    val activity = androidx.compose.ui.platform.LocalContext.current.findActivity()
+    androidx.compose.runtime.LaunchedEffect(activity, vm.screenDirection) {
+        activity?.requestedOrientation = appOrientation(vm.screenDirection)
     }
 
     val backdrop = rememberBackdrop()
@@ -168,7 +177,7 @@ fun PhoneHome(vm: AppViewModel) {
                 // A big, bold page title, as in Apple's TV app; Home shows the Streammania wordmark, as on the TV.
                 if (isHome) Box(Modifier.weight(1f)) { Wordmark(large = true) } else Text(
                     TAB_TITLES[tab.coerceIn(0, TAB_TITLES.lastIndex)],
-                    style = Txt.LargeTitle.copy(fontSize = (if (mainTab) 32f else 26f).times(Txt.scale).sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
+                    style = Txt.LargeTitle.copy(fontSize = (if (landscape) 24f else if (mainTab) 32f else 26f).times(Txt.scale).sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
@@ -205,8 +214,8 @@ fun PhoneHome(vm: AppViewModel) {
                 Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(start = 14.dp, end = 14.dp, bottom = 8.dp)
-                    .fillMaxWidth()
+                    .padding(start = 14.dp, end = 14.dp, bottom = if (landscape) 6.dp else 8.dp)
+                    .then(if (landscape) Modifier.width(460.dp) else Modifier.fillMaxWidth())
                     .height(TAB_BAR)
                     .frosted(backdrop, RoundedCornerShape(32.dp), tint = Color(0xC716161B))
                     .padding(horizontal = 6.dp),

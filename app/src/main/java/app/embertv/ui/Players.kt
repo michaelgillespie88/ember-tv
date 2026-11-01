@@ -118,7 +118,7 @@ import java.util.Locale
 
 // ---------------- Shared player plumbing ----------------
 
-private fun Context.findActivity(): Activity? {
+internal fun Context.findActivity(): Activity? {
     var c: Context? = this
     while (c is ContextWrapper) {
         if (c is Activity) return c
@@ -148,12 +148,20 @@ internal fun FullScreenButton() {
     ) { PhoneRotation.forceLandscape = !landscape }
 }
 
+/** The orientation the phone app asks for outside the player, from the Screen direction setting. */
+internal fun appOrientation(direction: Int): Int = when (direction) {
+    1 -> ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+    2 -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+}
+
 /** On phones, play full screen, turning with the phone; put things back when playback ends. */
 @Composable
 internal fun PhoneFullscreen() {
     if (LocalIsTv.current) return
     val activity = LocalContext.current.findActivity() ?: return
     val force = PhoneRotation.forceLandscape
+    val direction = LocalAppVm.current.screenDirection
     LaunchedEffect(activity, force) {
         activity.requestedOrientation =
             if (force) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_FULL_USER
@@ -166,7 +174,7 @@ internal fun PhoneFullscreen() {
         onDispose {
             controller.show(WindowInsetsCompat.Type.systemBars())
             PhoneRotation.forceLandscape = false
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            activity.requestedOrientation = appOrientation(direction)
         }
     }
 }
