@@ -279,6 +279,47 @@ private fun AutoPip() {
  * While a player is open on a TV, switches the display's refresh rate to suit [stats]
  * (50Hz for UK channels, 24Hz for films). Hands control back to the system when the player closes.
  */
+/**
+ * 4K channels are often HDR. Asks the window for HDR while one plays, so the Fire TV switches the TV into
+ * HDR rather than showing it as ordinary video (which looks very dark). If the TV can't show that kind of
+ * HDR at all, says so once and points to the FHD version.
+ */
+@Composable
+private fun HdrGuard(exo: ExoPlayer, key: Any) {
+    val activity = LocalContext.current.findActivity() ?: return
+    val vm = LocalAppVm.current
+    var hdr by remember(key) { mutableStateOf(false) }
+    LaunchedEffect(key) {
+        // The picture's details arrive a moment after it starts.
+        repeat(40) {
+            val transfer = exo.videoFormat?.colorInfo?.colorTransfer
+            if (transfer != null) {
+                val isHdr = transfer == C.COLOR_TRANSFER_ST2084 || transfer == C.COLOR_TRANSFER_HLG
+                hdr = isHdr
+                if (isHdr) {
+                    val types = runCatching {
+                        @Suppress("DEPRECATION")
+                        activity.windowManager.defaultDisplay.hdrCapabilities?.supportedHdrTypes?.toList()
+                    }.getOrNull().orEmpty()
+                    val ok = if (transfer == C.COLOR_TRANSFER_HLG) android.view.Display.HdrCapabilities.HDR_TYPE_HLG in types
+                    else types.any { it == android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 || it == android.view.Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS || it == android.view.Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION }
+                    if (!ok) vm.notify("This is in HDR, which this TV can't show properly. Choose FHD in ••• for a brighter picture.")
+                }
+                return@LaunchedEffect
+            }
+            delay(500)
+        }
+    }
+    DisposableEffect(activity, hdr) {
+        if (hdr && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            runCatching { activity.window.colorMode = ActivityInfo.COLOR_MODE_HDR }
+        }
+        onDispose {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) runCatching { activity.window.colorMode = ActivityInfo.COLOR_MODE_DEFAULT }
+        }
+    }
+}
+
 @Composable
 private fun MatchFrameRate(stats: VideoStats?) {
     val vm = LocalAppVm.current
@@ -522,6 +563,7 @@ fun LivePlayerScreen(vm: AppViewModel, channelsIn: List<Channel>, startIndex: In
     val copies by produceState(emptyList<Channel>(), channel.streamId) { value = vm.channelCopies(channel) }
     // Live TV keeps the screen's own refresh rate (switching blanked the picture on every channel change).
     val videoStats = rememberVideoStats(exo, channel.streamId)
+    HdrGuard(exo, channel.streamId)
     // So coming back from catch-up returns to this channel, not the one the player opened on.
     LaunchedEffect(index) { vm.noteLiveIndex(index) }
 
@@ -1703,6 +1745,7 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
 
     var current by remember { mutableIntStateOf(startIndex.coerceIn(0, items.lastIndex)) }
     MatchFrameRate(rememberVideoStats(exo, current))
+    HdrGuard(exo, current)
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(true) }
