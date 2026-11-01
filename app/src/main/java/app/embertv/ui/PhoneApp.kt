@@ -121,8 +121,8 @@ fun PhoneHome(vm: AppViewModel) {
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val contentPadding = PaddingValues(
-        // Apple TV app style: every page starts under its large title.
-        top = statusTop + HEADER_ROW + (if (hasChips) CHIPS_ROW else 0.dp),
+        // Home's featured artwork runs up under the header, as in Apple's TV app; other pages start under their title.
+        top = if (isHome) 0.dp else statusTop + HEADER_ROW + (if (hasChips) CHIPS_ROW else 0.dp),
         bottom = navBottom + (if (mainTab) TAB_BAR + 20.dp else 12.dp),
     )
 
@@ -153,7 +153,7 @@ fun PhoneHome(vm: AppViewModel) {
             Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .frosted(backdrop, RectangleShape, tint = Color(0xB30B0B0E), edge = false)
+                .frosted(backdrop, RectangleShape, tint = if (isHome) Color(0x26000000) else Color(0xB30B0B0E), edge = false)
         ) {
             Spacer(Modifier.height(statusTop))
             Row(
@@ -165,8 +165,8 @@ fun PhoneHome(vm: AppViewModel) {
                     IconCircleButton(EmberIcons.Back, "Back", size = 38.dp, background = Color(0x1AFFFFFF), glass = true) { vm.tab = returnTab }
                     Spacer(Modifier.width(2.dp))
                 }
-                // A big, bold page title, as in Apple's TV app.
-                Text(
+                // A big, bold page title, as in Apple's TV app; Home shows the Streammania wordmark, as on the TV.
+                if (isHome) Box(Modifier.weight(1f)) { Wordmark(large = true) } else Text(
                     TAB_TITLES[tab.coerceIn(0, TAB_TITLES.lastIndex)],
                     style = Txt.LargeTitle.copy(fontSize = (if (mainTab) 32f else 26f).times(Txt.scale).sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
                     maxLines = 1,
@@ -220,7 +220,7 @@ fun PhoneHome(vm: AppViewModel) {
                             .fillMaxHeight()
                             .padding(vertical = 6.dp)
                             .clip(RoundedCornerShape(26.dp))
-                            .then(if (selected) Modifier.background(Color(0x1FFFFFFF)) else Modifier)
+                            .then(if (selected) Modifier.background(Color(0x2EFFFFFF)) else Modifier)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
@@ -230,11 +230,11 @@ fun PhoneHome(vm: AppViewModel) {
                     ) {
                         // iOS grey for the tabs you're not on.
                         val color = if (selected) Ember.Text else Color(0xFF8E8E93)
-                        Icon(item.icon, contentDescription = null, tint = color, modifier = Modifier.size(23.dp))
+                        Icon(item.icon, contentDescription = null, tint = color, modifier = Modifier.size(25.dp))
                         Spacer(Modifier.height(3.dp))
                         Text(
                             item.label,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                             color = color,
                             maxLines = 1,

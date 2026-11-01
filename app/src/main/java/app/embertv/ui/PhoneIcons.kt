@@ -302,6 +302,12 @@ object EmberIcons {
         moveTo(12.5f, 12f); lineTo(18f, 12f); lineTo(18f, 16f); lineTo(12.5f, 16f); close()
     }
 
+    /** Add: a plus. */
+    val Plus = outline("plus") {
+        moveTo(12f, 5f); lineTo(12f, 19f)
+        moveTo(5f, 12f); lineTo(19f, 12f)
+    }
+
     /** Full screen: four corners pointing out. */
     val Expand = outline("expand") {
         moveTo(4f, 9f); lineTo(4f, 4f); lineTo(9f, 4f)
