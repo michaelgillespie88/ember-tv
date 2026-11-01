@@ -254,9 +254,12 @@ private fun LazyListScope.homeRows(
         val sport = vm.liveSport
         val liveIds = sport.map { it.match.id }.toSet()
         val fixtures = vm.teamMatches.filter { it.id !in liveIds }.take(8)
-        if (sport.isNotEmpty() || fixtures.isNotEmpty()) {
+        // With nothing live, the next games in your leagues too, counting down.
+        val shown = liveIds + fixtures.map { it.id }
+        val leagueNext = if (sport.isEmpty()) vm.leagueFixtures.filter { it.id !in shown }.take(10) else emptyList()
+        if (sport.isNotEmpty() || fixtures.isNotEmpty() || leagueNext.isNotEmpty()) {
             item(key = "row-sport") {
-                HomeRow(if (sport.isNotEmpty()) "Sport" else "Your Teams", edge) {
+                HomeRow(if (sport.isNotEmpty() || leagueNext.isNotEmpty()) "Sport" else "Your Teams", edge) {
                     LazyRow(contentPadding = rowPadding, horizontalArrangement = Arrangement.spacedBy(gap)) {
                         items(sport, key = { "live-" + it.match.id }) { s ->
                             SportCard(
@@ -270,6 +273,9 @@ private fun LazyListScope.homeRows(
                         }
                         items(fixtures, key = { "team-" + it.id }) { m ->
                             MatchCard(m, continueWidth, "home:match:${m.id}") { vm.findingMatch = m }
+                        }
+                        items(leagueNext, key = { "league-" + it.id }) { m ->
+                            MatchCard(m, continueWidth, "home:league:${m.id}") { vm.findingMatch = m }
                         }
                     }
                 }

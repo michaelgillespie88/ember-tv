@@ -159,6 +159,12 @@ object ScoresClient {
         }
     }
 
+    /** Matches across [leagues] from [days] ago up to today, newest first. */
+    suspend fun recent(leagues: List<League>, days: Int): List<Match> = coroutineScope {
+        val range = day(-days) + "-" + day(0)
+        leagues.map { l -> async { matches(l, range) } }.awaitAll().flatten().distinctBy { it.id }.sortedByDescending { it.kickoff }
+    }
+
     /** Matches across [leagues] from today to [days] ahead, soonest first. */
     suspend fun upcoming(leagues: List<League>, days: Int): List<Match> = coroutineScope {
         val range = day(0) + "-" + day(days)

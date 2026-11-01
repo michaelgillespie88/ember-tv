@@ -167,7 +167,7 @@ fun TeamPicker(vm: AppViewModel, onDone: () -> Unit) {
 fun MatchCard(match: Match, width: Dp, focusKey: String, onClick: () -> Unit) {
     val live = match.state == MatchState.LIVE
     FocusBox(
-        modifier = Modifier.width(width).height(124.dp),
+        modifier = Modifier.width(width).height(150.dp),
         focusKey = focusKey,
         shape = RoundedCornerShape(16.dp),
         focusedScale = 1.05f,
@@ -190,13 +190,36 @@ fun MatchCard(match: Match, width: Dp, focusKey: String, onClick: () -> Unit) {
                     MatchState.UPCOMING -> Text(
                         "${formatDay(match.kickoff / 1000)} · ${formatClock(match.kickoff / 1000)}",
                         style = Txt.Caption,
-                        color = if (focused) Color.Black else Ember.Text,
+                        color = dim,
                     )
                 }
             }
             CardTeam(match.home, match.state, text)
             CardTeam(match.away, match.state, text)
+            if (match.state == MatchState.UPCOMING) {
+                // How long until kick-off, counting down.
+                Text(
+                    kickoffCountdown(match.kickoff, LocalNow.current),
+                    style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (focused) Color.Black else Ember.Text,
+                    maxLines = 1,
+                )
+            }
         }
+    }
+}
+
+/** "Kicks off in 42 min", "In 5h 20m", "Tomorrow", "In 3 days" for a kick-off at [kickoffMs]. */
+fun kickoffCountdown(kickoffMs: Long, nowSec: Long): String {
+    val mins = ((kickoffMs / 1000 - nowSec) / 60).coerceAtLeast(0)
+    val days = (startOfDay(kickoffMs / 1000) - startOfDay(nowSec)) / 86_400L
+    return when {
+        mins < 1 -> "Kicking off"
+        mins < 60 -> "Kicks off in $mins min"
+        mins < 12 * 60 -> "In ${mins / 60}h ${mins % 60}m"
+        days <= 0 -> "Later today"
+        days == 1L -> "Tomorrow"
+        else -> "In $days days"
     }
 }
 

@@ -2150,11 +2150,40 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Home calls this while it's showing: refreshes live matches every minute and finds their channels. */
+    /** The next games in your leagues (Settings → My leagues), for Home when nothing's live. */
+    var leagueFixtures by mutableStateOf<List<Match>>(emptyList())
+        private set
+    private var leagueJob: kotlinx.coroutines.Job? = null
+
     fun watchLiveSport(active: Boolean) {
         sportJob?.cancel()
         sportJob = null
+        leagueJob?.cancel()
+        leagueJob = null
         if (!active || !sportOnHome || profile?.kids == true) return
         val r = repo ?: return
+        // Your leagues' next games, a week ahead, checked every half hour.
+        leagueJob = viewModelScope.launch {
+            while (true) {
+                val mine = app.embertv.data.LEAGUES.filter { it.code in sportLeagues }
+                if (mine.isEmpty()) {
+                    leagueFixtures = emptyList()
+                } else {
+                    val next = try {
+                        ScoresClient.upcoming(mine, 7)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        null
+                    }
+                    if (next != null) {
+                        val nowMs = System.currentTimeMillis()
+                        leagueFixtures = next.filter { it.state == MatchState.UPCOMING && it.kickoff > nowMs }.sortedBy { it.kickoff }.take(12)
+                    }
+                }
+                kotlinx.coroutines.delay(30 * 60_000L)
+            }
+        }
         sportJob = viewModelScope.launch {
             // Let Home's own rows start first; the sport search can wait a moment.
             var waited = 0
@@ -2292,6 +2321,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val seen = HashMap<String, Match>()
             var fixtures = emptyList<Match>()
             var fixturesAt = 0L
+            var recentResults = emptyList<Match>()
+            var recentAt = 0L
             while (true) {
                 val ids = followedTeams.map { it.id }.toSet()
                 fun ours(m: Match) = m.home.id in ids || m.away.id in ids
@@ -2301,7 +2332,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val nowMs = System.currentTimeMillis()
                 if (nowMs - fixturesAt > 30 * 60_000L || fixtures.isEmpty() && nowMs - fixturesAt > 5 * 60_000L) {
                     fixtures = try {
-                        ScoresClient.upcoming(leagues, 21).filter { ours(it) }
+                        ScoresClient.upcoming(leagues, 45).filter { ours(it) }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -2327,9 +2358,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     if (before != null) announce(before, m, ids)
                     seen[m.id] = m
                 }
-                val merged = (today + fixtures.filter { f -> today.none { it.id == f.id } })
-                    .filter { it.state != MatchState.FINISHED || nowMs - it.kickoff < 4 * 3600_000L }
-                    .sortedWith(compareBy<Match>({ if (it.state == MatchState.LIVE) 0 else 1 }, { it.kickoff }))
+                // Yesterday's result stays until a day and a half after kick-off, so there's always
+                // something to see between games; the next fixture is always there (45 days ahead).
+                val recent = if (nowMs - recentAt > 30 * 60_000L) {
+                    recentAt = nowMs
+                    try {
+                        ScoresClient.recent(leagues, 2).filter { ours(it) && it.state == MatchState.FINISHED }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        recentResults
+                    }.also { recentResults = it }
+                } else recentResults
+                val all = (today + recent + fixtures).distinctBy { it.id }
+                val merged = all
+                    .filter { it.state != MatchState.FINISHED || nowMs - it.kickoff < 36 * 3600_000L }
+                    .sortedWith(
+                        compareBy<Match>(
+                            { when (it.state) { MatchState.LIVE -> 0; MatchState.FINISHED -> 1; MatchState.UPCOMING -> 2 } },
+                            { if (it.state == MatchState.FINISHED) -it.kickoff else it.kickoff },
+                        )
+                    )
                 teamMatches = merged
                 val busy = today.any {
                     it.state == MatchState.LIVE || (it.state == MatchState.UPCOMING && it.kickoff - nowMs < 20 * 60_000L)
