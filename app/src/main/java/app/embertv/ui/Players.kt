@@ -242,12 +242,18 @@ private fun rememberVideoStats(exo: ExoPlayer, key: Any): VideoStats? {
             val h = if (size.height > 0) size.height else format?.height ?: 0
             if (h > 0 || measured != null || declared != null) {
                 val m = measured?.takeIf { it > 1f }
-                value = when {
+                val next = when {
                     // A rate the stream states outright is exact; prefer it once it matches what's measured.
                     declared != null && (m == null || kotlin.math.abs(m - declared) < 1.5f) -> VideoStats(w, h, declared, declared = true)
                     m != null -> VideoStats(w, h, m)
                     else -> VideoStats(w, h, value?.fps, value?.declared ?: false)
                 }
+                // Only pass on real changes: tiny wobbles in the measured rate would redraw the player
+                // screen (and could nudge the TV's refresh rate) every second while you watch.
+                val old = value
+                val same = old != null && old.width == next.width && old.height == next.height && old.declared == next.declared &&
+                    ((old.fps == null && next.fps == null) || (old.fps != null && next.fps != null && kotlin.math.abs(old.fps - next.fps) < 0.5f))
+                if (!same) value = next
             }
         }
     }
@@ -1715,15 +1721,29 @@ fun VodPlayerScreen(vm: AppViewModel, items: List<VodItem>, startIndex: Int, sta
     LaunchedEffect(Unit) {
         var ticks = 0
         while (true) {
-            position = exo.currentPosition
-            duration = exo.duration.coerceAtLeast(0L)
-            if (isTv && ticks % 4 == 0) {
-                subtitleTracks = trackOptions(exo, C.TRACK_TYPE_TEXT).size
-                audioTracks = trackOptions(exo, C.TRACK_TYPE_AUDIO).size
+            // Only update the on-screen time when something shows it (the overlay, scrubbing, or the
+            // Up Next countdown near the end). Redrawing the whole player twice a second while you
+            // just watch made the picture stutter slightly on Fire TV Sticks.
+            val pos = exo.currentPosition
+            val dur = exo.duration.coerceAtLeast(0L)
+            val shown = overlayVisible || scrub != null || !exo.isPlaying || (dur > 0 && dur - pos < UP_NEXT_MS + 3_000)
+            if (shown || ticks % 20 == 0) {
+                position = pos
+                duration = dur
             }
             delay(500)
             ticks++
             if (ticks % 20 == 0 && exo.isPlaying) save(exo)
+        }
+    }
+
+    // What subtitles and languages there are, checked when the overlay comes up rather than all the time.
+    LaunchedEffect(overlayVisible, current) {
+        if (!isTv || !overlayVisible) return@LaunchedEffect
+        repeat(3) {
+            subtitleTracks = trackOptions(exo, C.TRACK_TYPE_TEXT).size
+            audioTracks = trackOptions(exo, C.TRACK_TYPE_AUDIO).size
+            delay(2_000)
         }
     }
 
