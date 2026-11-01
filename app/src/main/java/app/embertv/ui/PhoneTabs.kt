@@ -156,7 +156,7 @@ fun PhoneLiveTab(vm: AppViewModel) {
 // ---------------- Guide ----------------
 
 // Roomier than before, so titles fit: half an hour is 150dp wide.
-private val P_CHANNEL = 80.dp
+private val P_CHANNEL = 112.dp
 private val P_ROW = 64.dp
 private val P_PER_MINUTE = 5.dp
 private const val P_DAY_MINUTES = 24 * 60
@@ -448,10 +448,18 @@ private fun PhoneGuideRow(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            ChannelLogo(channel.icon, channel.name, Modifier.size(width = 48.dp, height = 30.dp))
-            if (channel.num > 0) {
-                Text(channel.num.toString(), style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp), color = Ember.Dim, maxLines = 1)
-            }
+            // The logo and the channel's own name (not its long provider number), so you can tell them apart.
+            ChannelLogo(channel.icon, channel.name, Modifier.size(width = 40.dp, height = 24.dp))
+            Spacer(Modifier.height(3.dp))
+            Text(
+                channelParts(channel.name).first,
+                style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp, lineHeight = 13.sp),
+                color = Ember.Text,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 6.dp),
+            )
         }
         Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scroll)) {
             Box(Modifier.width(P_PER_MINUTE * P_DAY_MINUTES.toFloat()).fillMaxHeight()) {
@@ -470,6 +478,10 @@ private fun PhoneGuideRow(
                         Text(if (programmes == null) "Loading…" else "No guide information", style = Txt.Caption.copy(fontSize = 13.sp, letterSpacing = 0.sp), color = Ember.Faint)
                     }
                 }
+                // The now line sits behind the programmes so it never runs through their names.
+                if (day == 0) {
+                    Box(Modifier.offset(x = P_PER_MINUTE * ((now - dayStart) / 60f)).width(2.dp).fillMaxHeight().background(Ember.Live))
+                }
                 for (p in list) {
                     key(p.start) {
                         val start = maxOf(p.start, dayStart)
@@ -479,6 +491,13 @@ private fun PhoneGuideRow(
                         val catchup = past && catchupAvailable(channel, p, now)
                         val isSelected = selected?.channel?.streamId == channel.streamId && selected.programme?.start == p.start
                         val shape = RoundedCornerShape(12.dp)
+                        // Keep the name in view when the programme started before the left edge.
+                        val density = LocalDensity.current
+                        val startPx = with(density) { (P_PER_MINUTE * ((start - dayStart) / 60f)).toPx() }
+                        val maxShift = with(density) { (P_PER_MINUTE * ((end - start) / 60f) - 130.dp).toPx() }.coerceAtLeast(0f)
+                        val shift by remember(startPx, maxShift) {
+                            derivedStateOf { (scroll.value - startPx).coerceIn(0f, maxShift) }
+                        }
                         Box(
                             Modifier
                                 .offset(x = P_PER_MINUTE * ((start - dayStart) / 60f))
@@ -504,7 +523,7 @@ private fun PhoneGuideRow(
                                 .padding(horizontal = 12.dp),
                             contentAlignment = Alignment.CenterStart,
                         ) {
-                            Column {
+                            Column(Modifier.padding(start = (shift / density.density).dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (catchup) {
                                         androidx.compose.material3.Icon(
@@ -547,9 +566,6 @@ private fun PhoneGuideRow(
                             }
                         }
                     }
-                }
-                if (day == 0) {
-                    Box(Modifier.offset(x = P_PER_MINUTE * ((now - dayStart) / 60f)).width(2.dp).fillMaxHeight().background(Ember.Live))
                 }
             }
         }
