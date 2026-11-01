@@ -361,13 +361,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     @Suppress("UNCHECKED_CAST")
     private fun knownMovieVersions(id: Int): List<Movie> {
         foundVersions.values.firstOrNull { l -> l.any { (it as? Movie)?.streamId == id } }?.let { return it.filterIsInstance<Movie>() }
-        val m = repo?.loadedMovies()?.firstOrNull { it.streamId == id || it.versions.any { v -> v.streamId == id } } ?: return emptyList()
+        // The grouped lists know a film's other qualities; the raw ones list each copy on its own.
+        val r = repo ?: return emptyList()
+        val m = r.loadedMovieGroups().firstOrNull { it.versions.size > 1 && (it.streamId == id || it.versions.any { v -> v.streamId == id }) }
+            ?: r.loadedMovies().firstOrNull { it.streamId == id }
+            ?: return emptyList()
         return versionsOf(m).ifEmpty { listOf(m) }
     }
 
     private fun knownSeriesVersions(id: Int): List<Series> {
         foundVersions.values.firstOrNull { l -> l.any { (it as? Series)?.seriesId == id } }?.let { return it.filterIsInstance<Series>() }
-        val s = repo?.loadedSeries()?.firstOrNull { it.seriesId == id || it.versions.any { v -> v.seriesId == id } } ?: return emptyList()
+        val r = repo ?: return emptyList()
+        val s = r.loadedSeriesGroups().firstOrNull { it.versions.size > 1 && (it.seriesId == id || it.versions.any { v -> v.seriesId == id }) }
+            ?: r.loadedSeries().firstOrNull { it.seriesId == id }
+            ?: return emptyList()
         return versionsOf(s).ifEmpty { listOf(s) }
     }
 
@@ -1816,6 +1823,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             playMovie(m, fromStart)
             return
         }
+        foundVersions["m:${m.streamId}"] = versions
         choosingVersion = VersionChoice.ForMovie(Versions.cleanTitle(m.name), versions, if (fromStart) 0L else moviePosition(m))
     }
 
@@ -1847,6 +1855,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val versions = versionsOf(m)
         val startAt = if (fromStart) 0L else moviePosition(m)
         if (versions.size > 1) {
+            // Remember the group, so the player can offer the other qualities while you watch.
+            foundVersions["m:${m.streamId}"] = versions
             val auto = autoVersion(versions.map { it.quality })
             if (auto == null) {
                 choosingVersion = VersionChoice.ForMovie(Versions.cleanTitle(m.name), versions, startAt)
@@ -1884,6 +1894,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (index !in episodes.indices) return
         val versions = versionsOf(s)
         if (versions.size > 1) {
+            foundVersions["s:${s.seriesId}"] = versions
             val auto = autoVersion(versions.map { it.quality })
             if (auto == null) {
                 choosingVersion = VersionChoice.ForEpisode(Versions.cleanTitle(s.name), versions, s, episodes, index, fromStart)

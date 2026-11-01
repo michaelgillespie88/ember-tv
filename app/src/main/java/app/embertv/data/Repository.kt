@@ -214,6 +214,11 @@ class Repository(val client: XtreamClient) {
         return merged
     }
 
+    /** Every film already loaded, grouped with its other qualities (Home rows, categories, recently added). */
+    fun loadedMovieGroups(): List<Movie> = mergedMovies.values.flatten()
+
+    fun loadedSeriesGroups(): List<Series> = mergedSeries.values.flatten()
+
     /** Every film already loaded (from any list), for matching suggestions. */
     fun loadedMovies(): List<Movie> =
         ((allMovies ?: emptyList()) + moviesByCat.values.flatten()).filter { filter(ContentType.MOVIE, it.categoryId) }
