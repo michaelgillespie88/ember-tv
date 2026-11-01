@@ -37,6 +37,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -154,9 +155,10 @@ fun PhoneLiveTab(vm: AppViewModel) {
 
 // ---------------- Guide ----------------
 
-private val P_CHANNEL = 74.dp
-private val P_ROW = 54.dp
-private val P_PER_MINUTE = 3.2.dp
+// Roomier than before, so titles fit: half an hour is 150dp wide.
+private val P_CHANNEL = 80.dp
+private val P_ROW = 64.dp
+private val P_PER_MINUTE = 5.dp
 private const val P_DAY_MINUTES = 24 * 60
 
 /**
@@ -202,18 +204,24 @@ fun PhoneGuideTab(vm: AppViewModel) {
                     fun watch(ch: Channel) = vm.push(Screen.PlayLive(channels, channels.indexOf(ch).coerceAtLeast(0)))
                     Box(Modifier.fillMaxSize()) {
                         Column(Modifier.fillMaxSize().padding(top = pad.calculateTopPadding() + 8.dp)) {
-                            PhoneGuideInfo(
-                                focus = selected,
-                                now = now,
-                                onWatch = { selected?.let { watch(it.channel) } },
-                                onMore = { selected?.let { f -> details = f to channels } },
-                            )
-                            Spacer(Modifier.height(8.dp))
+                            // The chosen programme's card, only once you've tapped one, so the grid gets the room.
+                            androidx.compose.animation.AnimatedVisibility(visible = selected?.programme != null) {
+                                Column {
+                                    PhoneGuideInfo(
+                                        focus = selected,
+                                        now = now,
+                                        onWatch = { selected?.let { watch(it.channel) } },
+                                        onMore = { selected?.let { f -> details = f to channels } },
+                                        onClose = { selected = null },
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                }
+                            }
                             PhoneTimeHeader(dayStart, now, day, scroll, onDay = { pickingDay = true })
                             LazyColumn(
                                 state = vm.guide.list(categoryId),
                                 contentPadding = PaddingValues(top = 2.dp, bottom = pad.calculateBottomPadding() + 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(3.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
                                 modifier = Modifier.fillMaxSize(),
                             ) {
                                 items(channels, key = { it.streamId }) { ch ->
@@ -273,38 +281,31 @@ fun PhoneGuideTab(vm: AppViewModel) {
 
 /** The chosen programme, Apple TV style, with Watch and More. */
 @Composable
-private fun PhoneGuideInfo(focus: GuideFocus?, now: Long, onWatch: () -> Unit, onMore: () -> Unit) {
-    Column(
+private fun PhoneGuideInfo(focus: GuideFocus?, now: Long, onWatch: () -> Unit, onMore: () -> Unit, onClose: () -> Unit) {
+    val p = focus?.programme ?: return
+    Box(
         Modifier
-            .padding(horizontal = 12.dp)
+            .padding(horizontal = 16.dp)
             .fillMaxWidth()
-            .heightIn(min = 112.dp)
-            .glassSurface(RoundedCornerShape(20.dp), Color(0x14FFFFFF))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .glassSurface(RoundedCornerShape(20.dp), Color(0x1AFFFFFF))
     ) {
-        if (focus?.programme == null) {
-            Text("TV GUIDE", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Dim)
-            Spacer(Modifier.height(4.dp))
-            Text("What's on", style = Txt.Headline.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold))
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Tap a programme to see what it's about, and tap it again to watch. Swipe sideways to move through the day.",
-                style = Txt.Caption.copy(letterSpacing = 0.sp, fontSize = 13.sp),
-                color = Ember.Dim,
-                maxLines = 3,
-            )
-            return
-        }
-        val p = focus.programme
+    IconCircleButton(EmberIcons.Close, "Close", Modifier.align(Alignment.TopEnd).padding(8.dp), size = 30.dp, background = Color(0x1FFFFFFF), onClick = onClose)
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 44.dp, top = 14.dp, bottom = 14.dp)) {
         val ch = focus.channel
         val live = p.isLive(now)
-        Text(
-            (if (ch.num > 0) "${ch.num}  ·  " else "") + ch.name.uppercase(),
-            style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp),
-            color = Ember.Text,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (live) {
+                Box(Modifier.size(7.dp).clip(CircleShape).background(Ember.Live))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                (if (ch.num > 0) "${ch.num}  ·  " else "") + channelParts(ch.name).first.uppercase(),
+                style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp),
+                color = Ember.Dim,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         Spacer(Modifier.height(3.dp))
         Text(p.title, style = Txt.Headline.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(3.dp))
@@ -340,6 +341,7 @@ private fun PhoneGuideInfo(focus: GuideFocus?, now: Long, onWatch: () -> Unit, o
             )
         }
     }
+    }
 }
 
 @Composable
@@ -360,8 +362,8 @@ private fun SmallPill(text: String, primary: Boolean, onClick: () -> Unit) {
 /** The day button and the times along the top, scrolling with the grid. */
 @Composable
 private fun PhoneTimeHeader(dayStart: Long, now: Long, day: Int, scroll: ScrollState, onDay: () -> Unit) {
-    Row(Modifier.fillMaxWidth().height(30.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.width(P_CHANNEL).padding(start = 8.dp)) {
+    Row(Modifier.fillMaxWidth().height(34.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(P_CHANNEL).padding(start = 12.dp)) {
             Row(
                 Modifier
                     .height(26.dp)
@@ -395,7 +397,7 @@ private fun PhoneTimeHeader(dayStart: Long, now: Long, day: Int, scroll: ScrollS
                     Row(Modifier.offset(x = x).fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.width(1.dp).height(10.dp).background(Color(0x33FFFFFF)))
                         Spacer(Modifier.width(5.dp))
-                        Text(formatClock(dayStart + slot * 1800L), style = Txt.Caption.copy(letterSpacing = 0.sp), color = Ember.Dim)
+                        Text(formatClock(dayStart + slot * 1800L), style = Txt.Caption.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp), color = Ember.Dim)
                     }
                 }
                 if (showNow) {
@@ -438,17 +440,17 @@ private fun PhoneGuideRow(
         // Pinned channel: tap to watch.
         Column(
             Modifier
-                .padding(start = 8.dp, end = 4.dp)
-                .width(P_CHANNEL - 12.dp)
+                .padding(start = 12.dp, end = 6.dp)
+                .width(P_CHANNEL - 18.dp)
                 .fillMaxHeight()
-                .glassSurface(RoundedCornerShape(10.dp), Color(0x0FFFFFFF))
+                .glassSurface(RoundedCornerShape(12.dp), Color(0x12FFFFFF))
                 .pressable(onClick = onWatch),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            ChannelLogo(channel.icon, channel.name, Modifier.size(width = 44.dp, height = 26.dp))
+            ChannelLogo(channel.icon, channel.name, Modifier.size(width = 48.dp, height = 30.dp))
             if (channel.num > 0) {
-                Text(channel.num.toString(), style = Txt.Caption.copy(fontSize = 10.sp, letterSpacing = 0.sp), color = Ember.Faint, maxLines = 1)
+                Text(channel.num.toString(), style = Txt.Caption.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp), color = Ember.Dim, maxLines = 1)
             }
         }
         Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scroll)) {
@@ -476,20 +478,20 @@ private fun PhoneGuideRow(
                         val past = p.end <= now
                         val catchup = past && catchupAvailable(channel, p, now)
                         val isSelected = selected?.channel?.streamId == channel.streamId && selected.programme?.start == p.start
-                        val shape = RoundedCornerShape(10.dp)
+                        val shape = RoundedCornerShape(12.dp)
                         Box(
                             Modifier
                                 .offset(x = P_PER_MINUTE * ((start - dayStart) / 60f))
-                                .width((P_PER_MINUTE * ((end - start) / 60f) - 3.dp).coerceAtLeast(4.dp))
+                                .width((P_PER_MINUTE * ((end - start) / 60f) - 4.dp).coerceAtLeast(4.dp))
                                 .fillMaxHeight()
                                 .then(
                                     if (isSelected) Modifier.clip(shape).background(Color.White)
                                     else Modifier.glassSurface(
                                         shape,
                                         when {
-                                            live -> Color(0x2EFFFFFF)
-                                            past -> Color(0x0AFFFFFF)
-                                            else -> Color(0x17FFFFFF)
+                                            live -> Color(0x33FFFFFF)
+                                            past -> Color(0x08FFFFFF)
+                                            else -> Color(0x14FFFFFF)
                                         },
                                     )
                                 )
@@ -499,7 +501,7 @@ private fun PhoneGuideRow(
                                     onLongClick = { onHold(p) },
                                     onClick = { onTap(p) },
                                 )
-                                .padding(horizontal = 9.dp),
+                                .padding(horizontal = 12.dp),
                             contentAlignment = Alignment.CenterStart,
                         ) {
                             Column {
@@ -515,12 +517,11 @@ private fun PhoneGuideRow(
                                     }
                                     Text(
                                         p.title,
-                                        style = Txt.Label.copy(fontSize = 13.sp, fontWeight = if (live) FontWeight.SemiBold else FontWeight.Medium),
+                                        style = Txt.Label.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                                         color = when {
                                             isSelected -> Color.Black
                                             past && !catchup -> Ember.Faint
-                                            live -> Ember.Text
-                                            else -> Ember.Dim
+                                            else -> Ember.Text
                                         },
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -528,8 +529,8 @@ private fun PhoneGuideRow(
                                 }
                                 Text(
                                     "${formatClock(p.start)} – ${formatClock(p.end)}",
-                                    style = Txt.Caption.copy(fontSize = 11.sp, letterSpacing = 0.sp),
-                                    color = if (isSelected) Color(0xFF555559) else Ember.Faint,
+                                    style = Txt.Caption.copy(fontSize = 12.sp, letterSpacing = 0.sp),
+                                    color = if (isSelected) Color(0xFF555559) else Ember.Dim,
                                     maxLines = 1,
                                 )
                             }
@@ -537,9 +538,10 @@ private fun PhoneGuideRow(
                                 Box(
                                     Modifier
                                         .align(Alignment.BottomStart)
-                                        .padding(bottom = 1.dp)
+                                        .padding(bottom = 6.dp)
                                         .fillMaxWidth(p.progress(now))
-                                        .height(2.dp)
+                                        .height(3.dp)
+                                        .clip(RoundedCornerShape(2.dp))
                                         .background(Ember.Text.copy(alpha = 0.85f))
                                 )
                             }
@@ -547,7 +549,7 @@ private fun PhoneGuideRow(
                     }
                 }
                 if (day == 0) {
-                    Box(Modifier.offset(x = P_PER_MINUTE * ((now - dayStart) / 60f)).width(1.5.dp).fillMaxHeight().background(Ember.Live.copy(alpha = 0.7f)))
+                    Box(Modifier.offset(x = P_PER_MINUTE * ((now - dayStart) / 60f)).width(2.dp).fillMaxHeight().background(Ember.Live))
                 }
             }
         }
