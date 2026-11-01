@@ -1680,11 +1680,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.screensaverMinutes = next
     }
 
-    /** Records a button press. Returns true if it woke the screensaver (and should go no further). */
-    fun userActivity(wake: Boolean = true): Boolean {
+    /** The film or show the screensaver is showing (a Movie or Series), for OK to open. */
+    var screensaverTarget: Any? = null
+
+    /**
+     * Records a button press. Returns true if it woke the screensaver (and should go no further).
+     * OK on the screensaver also opens what it was showing.
+     */
+    fun userActivity(wake: Boolean = true, keyCode: Int = 0): Boolean {
         lastActivity = android.os.SystemClock.uptimeMillis()
         if (screensaver && wake) {
             screensaver = false
+            val ok = keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
+                keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+            when (val t = screensaverTarget) {
+                is Movie -> if (ok) push(Screen.MovieDetail(t))
+                is Series -> if (ok) push(Screen.SeriesDetail(t))
+            }
+            screensaverTarget = null
             return true
         }
         return false

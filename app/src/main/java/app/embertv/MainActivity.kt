@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
             event.keyCode == KeyEvent.KEYCODE_VOLUME_MUTE
         if (event.action == KeyEvent.ACTION_DOWN) {
             // Any button counts as activity; the first one only wakes the screensaver.
-            if (vm.userActivity(wake = !volume)) {
+            if (vm.userActivity(wake = !volume, keyCode = event.keyCode)) {
                 swallowUp = event.keyCode
                 return true
             }
