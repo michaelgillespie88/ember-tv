@@ -788,8 +788,7 @@ fun PhoneHomeTab(vm: AppViewModel) {
                 if (heroes.isNotEmpty()) {
                     item(key = "hero") { PhoneHero(vm, repo, heroes) }
                 } else {
-                    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-                    item(key = "top") { Spacer(Modifier.height(top + 74.dp)) }
+                    item(key = "top") { Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 74.dp)) }
                 }
                 // Apple TV app sizes: big wide cards for Up Next, roomy posters, 20dp margins.
                 homeRows(vm, feed, edge = 20.dp, posterWidth = 118.dp, continueWidth = 270.dp, gap = 12.dp) { arranging = true }
