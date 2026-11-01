@@ -499,6 +499,7 @@ fun LivePlayerScreen(vm: AppViewModel, channelsIn: List<Channel>, startIndex: In
     var overlayToken by remember { mutableIntStateOf(0) }
     var listOpen by remember { mutableStateOf(false) }
     var guideOpen by remember { mutableStateOf(false) }
+    var guideGroup by remember { mutableStateOf<String?>(null) }
     // TVs: OK brings up a row of playback controls (pause, skip, guide…).
     var controlsOpen by remember { mutableStateOf(false) }
     var controlsToken by remember { mutableIntStateOf(0) }
@@ -879,34 +880,42 @@ fun LivePlayerScreen(vm: AppViewModel, channelsIn: List<Channel>, startIndex: In
             // Opened from "Where's it on?" (just the copies of one channel), the guide shows the
             // channel's whole group instead, so it's a real TV guide.
             val playingNow = channels.getOrNull(index)
-            val group by produceState<List<Channel>?>(null, playingNow?.categoryId) {
+            // The group the guide shows: the playing channel's own to begin with, or one picked at the top left.
+            val groupId = guideGroup ?: playingNow?.categoryId
+            val group by produceState<List<Channel>?>(null, groupId) {
                 val repo = vm.repo
-                value = if (playingNow == null || repo == null) null else try {
-                    channelsOnce(repo.channels(playingNow.categoryId), vm.qualityChoice, vm.channelsOnce)
+                value = if (groupId == null || repo == null) null else try {
+                    channelsOnce(repo.channels(groupId), vm.qualityChoice, vm.channelsOnce)
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     null
                 }
             }
-            val wider = group?.takeIf { g -> g.size > channels.size }
+            val wider = group?.takeIf { g -> guideGroup != null || g.size > channels.size }
             val guideList = wider ?: channels
             val guideIndex = if (wider == null) index else {
                 val name = playingNow?.let { channelParts(it.name).first }
                 wider.indexOfFirst { it.streamId == playingNow?.streamId }
-                    .takeIf { it >= 0 } ?: wider.indexOfFirst { channelParts(it.name).first == name }.coerceAtLeast(0)
+                    .takeIf { it >= 0 } ?: wider.indexOfFirst { channelParts(it.name).first == name }
             }
+            val playingInList = guideIndex >= 0
             // Rebuilt once the whole group arrives, so it opens on the playing channel.
-            androidx.compose.runtime.key(guideList.size) {
+            androidx.compose.runtime.key(groupId, guideList.size) {
             PlayerGuide(
                 vm = vm,
                 channels = guideList,
-                current = guideIndex,
+                current = guideIndex.coerceAtLeast(0),
                 onZap = { i ->
                     guideOpen = false
-                    if (wider == null) zapTo(i) else if (i == guideIndex) Unit else vm.replacePlayer(wider, i)
+                    if (wider == null) zapTo(i) else if (playingInList && i == guideIndex) Unit else vm.replacePlayer(wider, i)
                 },
-                onClose = { guideOpen = false },
+                onClose = {
+                    guideOpen = false
+                    guideGroup = null
+                },
+                groupId = groupId,
+                onGroupPicked = { guideGroup = it },
             )
             }
             return@Box

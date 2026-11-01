@@ -885,8 +885,20 @@ internal fun ProgrammeDialog(vm: AppViewModel, focus: GuideFocus, channels: List
  * the top of the panel. OK on something airing switches to it.
  */
 @Composable
-fun PlayerGuide(vm: AppViewModel, channels: List<Channel>, current: Int, onZap: (Int) -> Unit, onClose: () -> Unit) {
+fun PlayerGuide(
+    vm: AppViewModel,
+    channels: List<Channel>,
+    current: Int,
+    onZap: (Int) -> Unit,
+    onClose: () -> Unit,
+    /** The group shown, and how to change it (the group button at the top left, like the main guide). */
+    groupId: String? = null,
+    onGroupPicked: ((String) -> Unit)? = null,
+) {
     val repo = vm.repo ?: return
+    var pickingGroup by remember { mutableStateOf(false) }
+    val categories = (rememberLoad(repo) { repo.liveCategories() }.value as? LoadResult.Ok)?.value.orEmpty()
+    val groupName = categories.firstOrNull { it.id == groupId }?.name?.removePrefix("★  ") ?: "Groups"
     val now = LocalNow.current
     var step by remember { mutableIntStateOf(0) }
     var focus by remember { mutableStateOf<GuideFocus?>(null) }
@@ -918,7 +930,13 @@ fun PlayerGuide(vm: AppViewModel, channels: List<Channel>, current: Int, onZap: 
                 val gridWidth = maxWidth - CHANNEL_COLUMN
                 val dpPerMinute = gridWidth / WINDOW_MINUTES
                 Column(Modifier.fillMaxSize()) {
-                    TimeHeader(windowStart, dpPerMinute, now, "", {}, {}, {}, showChips = false)
+                    TimeHeader(
+                        windowStart, dpPerMinute, now, groupName,
+                        onGroup = { pickingGroup = true },
+                        onDay = {},
+                        onFocusHeader = {},
+                        showChips = onGroupPicked != null,
+                    )
                     LazyColumn(
                         state = state,
                         contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp),
@@ -954,4 +972,10 @@ fun PlayerGuide(vm: AppViewModel, channels: List<Channel>, current: Int, onZap: 
     }
     val d = details
     if (d != null) ProgrammeDialog(vm, d, channels) { details = null }
+    if (pickingGroup && onGroupPicked != null && categories.isNotEmpty()) {
+        GroupPicker(categories, groupId.orEmpty(), onDismiss = { pickingGroup = false }) {
+            pickingGroup = false
+            onGroupPicked(it)
+        }
+    }
 }
