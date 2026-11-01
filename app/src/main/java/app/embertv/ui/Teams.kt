@@ -264,29 +264,51 @@ fun BoxScope.TeamAlertBanner(vm: AppViewModel) {
             TeamAlert.Kind.KICK_OFF -> "Kick-off"
             TeamAlert.Kind.FULL_TIME -> "Full time"
         }
-        Row(
+        // Apple style: a frosted notification card. A small pill says what happened (white for your
+        // team's goal), then a mini scoreboard, then the competition.
+        val ourGoal = a.kind == TeamAlert.Kind.GOAL && a.good != false
+        Column(
             Modifier
-                .width(if (isTv) 420.dp else 340.dp)
-                .glassSurface(RoundedCornerShape(18.dp), Color(0xCC14141A))
-                .border(1.dp, if (a.kind == TeamAlert.Kind.GOAL && a.good != false) Ember.Accent else Color(0x33FFFFFF), RoundedCornerShape(18.dp))
-                .padding(horizontal = 18.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .width(if (isTv) 400.dp else 340.dp)
+                .glassSurface(RoundedCornerShape(22.dp), Color(0xE0141418))
+                .border(if (ourGoal) 1.5.dp else 0.dp, if (ourGoal) Color(0xCCFFFFFF) else Color.Transparent, RoundedCornerShape(22.dp))
+                .padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
-            Icon(EmberIcons.Football, contentDescription = null, tint = Ember.Accent, modifier = Modifier.size(28.dp))
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, style = Txt.Headline.copy(fontWeight = FontWeight.Bold), color = if (a.kind == TeamAlert.Kind.GOAL && a.good != false) Ember.Accent else Ember.Text)
-                    Spacer(Modifier.width(8.dp))
-                    if (m.state == MatchState.LIVE) Text(m.status, style = Txt.Caption, color = Ember.Live)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (ourGoal) Color.White else Color(0x24FFFFFF))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        title.uppercase(),
+                        style = Txt.Caption.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
+                        color = if (ourGoal) Color.Black else Ember.Text,
+                    )
                 }
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.width(8.dp))
+                if (m.state == MatchState.LIVE) {
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(Ember.Live))
+                    Spacer(Modifier.width(5.dp))
+                    Text(m.status, style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Text)
+                }
+                Spacer(Modifier.weight(1f))
+                Text(m.league.name, style = Txt.Caption, color = Ember.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(26.dp)) { NetImage(m.home.logo, Modifier.fillMaxSize(), ContentScale.Fit) }
+                Spacer(Modifier.width(8.dp))
+                Text(m.home.shortName, style = Txt.Label.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Text(
-                    "${m.home.shortName} ${m.home.score}–${m.away.score} ${m.away.shortName}",
-                    style = Txt.Label,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    "${m.home.score} – ${m.away.score}",
+                    style = Txt.Title.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(horizontal = 12.dp),
                 )
+                Text(m.away.shortName, style = Txt.Label.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.size(26.dp)) { NetImage(m.away.logo, Modifier.fillMaxSize(), ContentScale.Fit) }
             }
         }
     }
@@ -541,7 +563,7 @@ fun BoxScope.ScoreBug(vm: AppViewModel) {
             flashing = false
         }
     }
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(16.dp)
     Row(
         Modifier
             // Over a video it sits top left like a broadcaster's score; in the menus it moves to the
@@ -556,8 +578,9 @@ fun BoxScope.ScoreBug(vm: AppViewModel) {
                         .padding(start = if (isTv) 40.dp else 12.dp, top = if (isTv) 26.dp else 8.dp)
                 }
             )
-            .glassSurface(shape, if (flashing) Ember.Accent.copy(alpha = 0.55f) else Color(0xB3101014))
-            .border(1.dp, if (flashing) Ember.Accent else Color(0x33FFFFFF), shape)
+            // Frosted like everything else; when the score changes it lights up white for a few seconds.
+            .glassSurface(shape, if (flashing) Color(0x40FFFFFF) else Color(0xCC121216))
+            .border(if (flashing) 1.5.dp else 0.dp, if (flashing) Color.White else Color.Transparent, shape)
             .then(if (!isTv) Modifier.clickable { vm.unpinMatch() } else Modifier)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -574,15 +597,22 @@ fun BoxScope.ScoreBug(vm: AppViewModel) {
         Text(m.away.shortName.take(3).uppercase(), style = Txt.Label.copy(fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.width(7.dp))
         Box(Modifier.size(20.dp)) { NetImage(m.away.logo, Modifier.fillMaxSize(), ContentScale.Fit) }
+        // A hairline divider, then the minute with a red live dot (or FT / kick-off time).
         Spacer(Modifier.width(10.dp))
+        Box(Modifier.width(1.dp).height(16.dp).background(Color(0x33FFFFFF)))
+        Spacer(Modifier.width(10.dp))
+        if (m.state == MatchState.LIVE) {
+            Box(Modifier.size(6.dp).clip(CircleShape).background(Ember.Live))
+            Spacer(Modifier.width(5.dp))
+        }
         Text(
             when (m.state) {
                 MatchState.LIVE -> m.status
                 MatchState.FINISHED -> "FT"
                 MatchState.UPCOMING -> formatClock(m.kickoff / 1000)
             },
-            style = Txt.Caption,
-            color = if (m.state == MatchState.LIVE) Ember.Live else Ember.Dim,
+            style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold),
+            color = if (m.state == MatchState.LIVE) Ember.Text else Ember.Dim,
         )
     }
 }
