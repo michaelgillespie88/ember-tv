@@ -622,13 +622,14 @@ fun AppleSpinner(modifier: Modifier = Modifier, color: Color = Color.White) {
     }
     androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
         val spoke = maxHeight * 0.28f
+        val spokeWidth = maxWidth * 0.09f
         for (i in 0 until 8) {
             val age = (step - i + 8) % 8
             Box(Modifier.fillMaxSize().graphicsLayer { rotationZ = i * 45f }) {
                 Box(
                     Modifier
                         .align(Alignment.TopCenter)
-                        .size(width = maxWidth * 0.09f, height = spoke)
+                        .size(width = spokeWidth, height = spoke)
                         .clip(androidx.compose.foundation.shape.CircleShape)
                         .background(color.copy(alpha = 1f - age * 0.11f))
                 )
