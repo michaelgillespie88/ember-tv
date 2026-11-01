@@ -98,6 +98,25 @@ sealed interface VersionChoice {
         override val qualities get() = versions.map { it.quality }
         override val names get() = versions.map { it.name }
     }
+
+    /** Which copy of a channel to watch (FHD, HD, SD), asked before it opens. */
+    data class ForChannel(
+        override val title: String,
+        val copies: List<Channel>,
+        val channels: List<Channel>,
+        val index: Int,
+    ) : VersionChoice {
+        override val qualities get() = copies.map { c ->
+            when (channelParts(c.name).second) {
+                "4K" -> app.embertv.data.Quality.UHD
+                "FHD" -> app.embertv.data.Quality.FHD
+                "HD" -> app.embertv.data.Quality.HD
+                "SD" -> app.embertv.data.Quality.SD
+                else -> app.embertv.data.Quality.UNKNOWN
+            }
+        }
+        override val names get() = copies.map { it.name }
+    }
 }
 
 /** Something happening in a followed team's match. [good] is true when it's our team who scored. */
@@ -1175,7 +1194,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }.getOrNull()
 
     /** Plays a channel with the rest of its group, so channel up/down works as usual. */
-    fun playChannel(c: Channel) {
+    /** Plays [c] in its group's list. [ask] = false opens that exact copy without the quality card. */
+    fun playChannel(c: Channel, ask: Boolean = true) {
         val r = repo ?: return
         viewModelScope.launch {
             val list = try {
@@ -1186,7 +1206,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 emptyList()
             }
             val i = list.indexOfFirst { it.streamId == c.streamId }
-            if (i >= 0) push(Screen.PlayLive(list, i)) else push(Screen.PlayLive(listOf(c), 0))
+            val screen = if (i >= 0) Screen.PlayLive(list, i) else Screen.PlayLive(listOf(c), 0)
+            if (ask) push(screen) else pushNow(screen)
         }
     }
 
@@ -1529,6 +1550,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Navigation ----
 
     fun push(screen: Screen) {
+        // A channel that comes in several qualities: with Quality to play set to "Ask each time",
+        // ask which one before it opens, like films.
+        if (screen is Screen.PlayLive && qualityChoice == "ask" && channelsOnce) {
+            val ch = screen.channels.getOrNull(screen.index)
+            if (ch != null) {
+                viewModelScope.launch {
+                    val copies = channelCopies(ch)
+                    if (copies.size > 1) {
+                        choosingVersion = VersionChoice.ForChannel(channelParts(ch.name).first, copies, screen.channels, screen.index)
+                    } else {
+                        pushNow(screen)
+                    }
+                }
+                return
+            }
+        }
+        pushNow(screen)
+    }
+
+    /** Opens the copy picked from the quality card, in place of the one in the list. */
+    fun playChannelCopy(choice: VersionChoice.ForChannel, i: Int) {
+        choosingVersion = null
+        val copy = choice.copies.getOrNull(i) ?: return
+        val list = choice.channels.toMutableList()
+        if (choice.index in list.indices) list[choice.index] = copy
+        pushNow(Screen.PlayLive(list, choice.index))
+    }
+
+    private fun pushNow(screen: Screen) {
         // With another player chosen in Settings, channels and videos open there instead.
         // With a TV chosen from the phone, it plays there instead.
         val target = castTarget
@@ -1714,7 +1764,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         when (startOn) {
             "last" -> {
                 val last = recentChannels.firstOrNull()
-                if (last != null && stack.size == 1) playChannel(last.toChannel())
+                // Straight back to the copy you were watching, without asking about quality.
+                if (last != null && stack.size == 1) playChannel(last.toChannel(), ask = false)
             }
             "guide" -> tab = Tabs.GUIDE
         }

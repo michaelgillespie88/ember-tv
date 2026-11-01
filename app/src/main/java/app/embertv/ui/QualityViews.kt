@@ -112,6 +112,7 @@ fun VersionPickerDialog(vm: AppViewModel, choice: VersionChoice) {
         when (choice) {
             is VersionChoice.ForMovie -> vm.playMovieVersion(choice.versions[i], choice.startAt)
             is VersionChoice.ForEpisode -> vm.playEpisodeVersion(choice.versions[i], choice.from, choice.episodes, choice.index, choice.fromStart)
+            is VersionChoice.ForChannel -> vm.playChannelCopy(choice, i)
         }
     }
     val episodeLine = (choice as? VersionChoice.ForEpisode)?.let { c ->
