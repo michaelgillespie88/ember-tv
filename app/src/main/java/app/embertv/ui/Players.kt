@@ -876,16 +876,39 @@ fun LivePlayerScreen(vm: AppViewModel, channelsIn: List<Channel>, startIndex: In
         if (vm.inPip) return@Box
         // The guide floats over the lower part of the picture in a frosted panel.
         if (guideOpen) {
+            // Opened from "Where's it on?" (just the copies of one channel), the guide shows the
+            // channel's whole group instead, so it's a real TV guide.
+            val playingNow = channels.getOrNull(index)
+            val group by produceState<List<Channel>?>(null, playingNow?.categoryId) {
+                val repo = vm.repo
+                value = if (playingNow == null || repo == null) null else try {
+                    channelsOnce(repo.channels(playingNow.categoryId), vm.qualityChoice, vm.channelsOnce)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            val wider = group?.takeIf { g -> g.size > channels.size }
+            val guideList = wider ?: channels
+            val guideIndex = if (wider == null) index else {
+                val name = playingNow?.let { channelParts(it.name).first }
+                wider.indexOfFirst { it.streamId == playingNow?.streamId }
+                    .takeIf { it >= 0 } ?: wider.indexOfFirst { channelParts(it.name).first == name }.coerceAtLeast(0)
+            }
+            // Rebuilt once the whole group arrives, so it opens on the playing channel.
+            androidx.compose.runtime.key(guideList.size) {
             PlayerGuide(
                 vm = vm,
-                channels = channels,
-                current = index,
+                channels = guideList,
+                current = guideIndex,
                 onZap = { i ->
                     guideOpen = false
-                    zapTo(i)
+                    if (wider == null) zapTo(i) else if (i == guideIndex) Unit else vm.replacePlayer(wider, i)
                 },
                 onClose = { guideOpen = false },
             )
+            }
             return@Box
         }
 

@@ -1594,6 +1594,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         pushNow(Screen.PlayLive(list, choice.index))
     }
 
+    /** Swaps the playing channel's list for [channels] (the TV guide picked a channel outside it). */
+    fun replacePlayer(channels: List<Channel>, index: Int) {
+        if (stack.last() is Screen.PlayLive) pop()
+        pushNow(Screen.PlayLive(channels, index))
+    }
+
     private fun pushNow(screen: Screen) {
         // With another player chosen in Settings, channels and videos open there instead.
         // With a TV chosen from the phone, it plays there instead.
