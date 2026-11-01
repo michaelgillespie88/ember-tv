@@ -352,11 +352,25 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
                 .heightIn(max = if (isTv) 520.dp else 660.dp)
                 .clip(RoundedCornerShape(28.dp))
                 .background(dialogPanelColor())
-                .padding(if (isTv) 8.dp else 20.dp),
+                .padding(if (isTv) 8.dp else 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("WHERE'S IT ON?", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Dim)
-            Spacer(Modifier.height(10.dp))
+            if (isTv) {
+                Text("WHERE'S IT ON?", style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.3.sp), color = Ember.Dim)
+            } else {
+                // Phones: an Apple sheet header, the title with a round close button.
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(Modifier.width(32.dp))
+                    Text(
+                        "Where's it on?",
+                        style = Txt.Label.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconCircleButton(EmberIcons.Close, "Close", size = 32.dp, background = Color(0x1FFFFFFF), glass = true, onClick = close)
+                }
+            }
+            Spacer(Modifier.height(if (isTv) 10.dp else 14.dp))
             MatchHeader(match, now)
             Spacer(Modifier.height(16.dp))
             // Channels whose name or guide names both teams. Only if there are none, the weaker guesses.
@@ -366,7 +380,7 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
             LazyColumn(
                 Modifier.weight(1f, fill = false),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = if (isTv) 16.dp else 0.dp, vertical = 4.dp),
             ) {
                 if (shown.isNotEmpty()) {
                     item(key = "section") {
@@ -383,7 +397,18 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
                         }
                     }
                 }
-                itemsIndexed(shown, key = { _, h -> h.channel.streamId }) { i, h ->
+                if (!isTv && shown.isNotEmpty()) {
+                    // Phones: one Apple grouped list, rows split by hairlines.
+                    item(key = "group") {
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0x14FFFFFF))) {
+                            shown.forEachIndexed { i, h ->
+                                if (i > 0) Box(Modifier.padding(start = 78.dp).fillMaxWidth().height(0.5.dp).background(Color(0x22FFFFFF)))
+                                FoundRow(h, best = i == 0 && h.score >= 8, now = now) { vm.playFound(shown, i) }
+                            }
+                        }
+                    }
+                }
+                if (isTv) itemsIndexed(shown, key = { _, h -> h.channel.streamId }) { i, h ->
                     val p = h.programme
                     SheetOption(
                         title = h.channel.name,
@@ -429,14 +454,61 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
             }
             Spacer(Modifier.height(14.dp))
             // The two actions as frosted buttons, apart from the channels.
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                val pinned = vm.pinnedMatch?.id == match.id
-                GlassButton(if (pinned) "Unpin score" else "Pin score", EmberIcons.Football, autoFocus = isTv && done && hits.isEmpty()) {
+            val pinned = vm.pinnedMatch?.id == match.id
+            if (isTv) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    GlassButton(if (pinned) "Unpin score" else "Pin score", EmberIcons.Football, autoFocus = done && hits.isEmpty()) {
+                        if (pinned) vm.unpinMatch() else vm.pinMatch(match)
+                        close()
+                    }
+                    GlassButton("Close", EmberIcons.Close, onClick = close)
+                }
+            } else {
+                PillButton(if (pinned) "Unpin score" else "Pin score to the corner", Modifier.fillMaxWidth(), icon = EmberIcons.Football) {
                     if (pinned) vm.unpinMatch() else vm.pinMatch(match)
                     close()
                 }
-                GlassButton("Close", EmberIcons.Close, onClick = close)
             }
+        }
+    }
+}
+
+/** Phones: one channel showing the match, Apple list style: logo, clean name and quality, what's on, and a play button. */
+@Composable
+private fun FoundRow(h: app.embertv.data.MatchHit, best: Boolean, now: Long, onClick: () -> Unit) {
+    val (name, tag) = channelParts(h.channel.name)
+    val p = h.programme
+    Row(
+        Modifier.fillMaxWidth().pressable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ChannelLogo(h.channel.icon, h.channel.name, Modifier.size(width = 54.dp, height = 36.dp).clip(RoundedCornerShape(8.dp)))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            if (best) Text("BEST MATCH", style = Txt.Caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp), color = Ember.Dim)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, style = Txt.Label.copy(fontWeight = FontWeight.SemiBold), color = Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (tag != null) {
+                    Spacer(Modifier.width(6.dp))
+                    ChannelQualityTag(tag)
+                }
+            }
+            if (p != null) {
+                Text(
+                    if (p.isLive(now)) p.title else "${formatClock(p.start)} · ${p.title}",
+                    style = Txt.Caption,
+                    color = Ember.Dim,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(
+            Modifier.size(32.dp).clip(CircleShape).background(if (best) Color.White else Color(0x24FFFFFF)),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.Icon(EmberIcons.Play, contentDescription = "Watch", tint = if (best) Color.Black else Color.White, modifier = Modifier.size(14.dp))
         }
     }
 }

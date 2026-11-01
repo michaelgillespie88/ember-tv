@@ -175,7 +175,7 @@ fun PhoneHome(vm: AppViewModel) {
                     Spacer(Modifier.width(2.dp))
                 }
                 // A big, bold page title, as in Apple's TV app; Home shows the Streammania wordmark, as on the TV.
-                if (isHome) Box(Modifier.weight(1f)) { Wordmark(large = true) } else Text(
+                if (isHome) Box(Modifier.weight(1f)) { Wordmark() } else Text(
                     TAB_TITLES[tab.coerceIn(0, TAB_TITLES.lastIndex)],
                     style = Txt.LargeTitle.copy(fontSize = (if (landscape) 24f else if (mainTab) 32f else 26f).times(Txt.scale).sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
                     maxLines = 1,

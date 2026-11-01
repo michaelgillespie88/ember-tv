@@ -252,6 +252,8 @@ fun Wordmark(large: Boolean = false) {
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.5).sp,
             color = Ember.Text,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
