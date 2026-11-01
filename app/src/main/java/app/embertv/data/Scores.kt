@@ -54,6 +54,16 @@ data class TeamScore(val name: String, val shortName: String, val logo: String, 
 /** A club someone follows. [league] is the code of its domestic league. */
 data class Team(val id: String, val name: String, val shortName: String, val logo: String, val league: String)
 
+enum class MatchEventKind { GOAL, PENALTY, OWN_GOAL, YELLOW, RED }
+
+/** A goal or card: the minute ("67'"), what happened, who, and for which side. */
+data class MatchEvent(val minute: String, val kind: MatchEventKind, val player: String, val home: Boolean)
+
+/** One team stat, as shown: "Possession", "58%", "42%". */
+data class MatchStat(val label: String, val home: String, val away: String)
+
+data class MatchDetail(val events: List<MatchEvent>, val stats: List<MatchStat>)
+
 data class Match(
     val id: String,
     val league: League,
@@ -192,6 +202,93 @@ object ScoresClient {
                 MatchState.FINISHED -> shortDetail.ifBlank { "FT" }
             }
             Match(ev.s("id"), league, home, away, state, label, kickoff)
+        }
+    }
+
+    /**
+     * Goals, cards and team stats for one match, from ESPN's match summary. Null if it can't be read.
+     * Reads both the summary's key events and the scoreboard-style details, whichever is there.
+     */
+    suspend fun detail(match: Match): MatchDetail? {
+        val root = fetch("https://site.api.espn.com/apis/site/v2/sports/soccer/${match.league.code}/summary?event=${match.id}") ?: return null
+        fun isHome(teamId: String, teamName: String): Boolean? = when {
+            teamId.isNotEmpty() && teamId == match.home.id -> true
+            teamId.isNotEmpty() && teamId == match.away.id -> false
+            teamName.isNotEmpty() && teamName == match.home.name -> true
+            teamName.isNotEmpty() && teamName == match.away.name -> false
+            else -> null
+        }
+        fun kindOf(text: String, scoring: Boolean, yellow: Boolean, red: Boolean): MatchEventKind? {
+            val t = text.lowercase()
+            return when {
+                t.contains("own goal") -> MatchEventKind.OWN_GOAL
+                t.contains("penalty") && (scoring || t.contains("goal") || t.contains("scored")) && !t.contains("miss") && !t.contains("saved") -> MatchEventKind.PENALTY
+                red || t.contains("red card") || t.contains("red-card") || t.contains("second yellow") -> MatchEventKind.RED
+                yellow || t.contains("yellow") -> MatchEventKind.YELLOW
+                scoring || t == "goal" || t.startsWith("goal") -> MatchEventKind.GOAL
+                else -> null
+            }
+        }
+        val events = ArrayList<MatchEvent>()
+        for (e in asArray(root.opt("keyEvents")).objects()) {
+            val type = e.optJSONObject("type") ?: JSONObject()
+            val kind = kindOf(type.s("text").ifEmpty { type.s("type") }, e.optBoolean("scoringPlay"), false, false) ?: continue
+            val team = e.optJSONObject("team") ?: JSONObject()
+            val home = isHome(team.s("id"), team.s("displayName")) ?: continue
+            val player = asArray(e.opt("participants")).objects().firstOrNull()?.optJSONObject("athlete")?.s("displayName").orEmpty()
+            val minute = e.optJSONObject("clock")?.s("displayValue").orEmpty()
+            events += MatchEvent(minute, kind, player, home)
+        }
+        if (events.isEmpty()) {
+            val comp = root.optJSONObject("header")?.let { asArray(it.opt("competitions")).objects().firstOrNull() }
+            for (d in asArray(comp?.opt("details")).objects()) {
+                val type = d.optJSONObject("type") ?: JSONObject()
+                val kind = kindOf(type.s("text"), d.optBoolean("scoringPlay"), d.optBoolean("yellowCard"), d.optBoolean("redCard")) ?: continue
+                val team = d.optJSONObject("team") ?: JSONObject()
+                val home = isHome(team.s("id"), team.s("displayName")) ?: continue
+                val player = asArray(d.opt("athletesInvolved")).objects().firstOrNull()?.s("displayName").orEmpty()
+                val minute = d.optJSONObject("clock")?.s("displayValue").orEmpty()
+                events += MatchEvent(minute, kind, player, home)
+            }
+        }
+        // Team stats, in a sensible order, as "home" / "away" display values.
+        val wanted = listOf(
+            "possessionPct" to "Possession",
+            "totalShots" to "Shots",
+            "shotsOnTarget" to "On target",
+            "wonCorners" to "Corners",
+            "foulsCommitted" to "Fouls",
+            "yellowCards" to "Yellow cards",
+            "redCards" to "Red cards",
+            "offsides" to "Offsides",
+            "saves" to "Saves",
+        )
+        val box = asArray(root.optJSONObject("boxscore")?.opt("teams")).objects()
+        val byTeam = HashMap<Boolean, Map<String, String>>()
+        for ((i, t) in box.withIndex()) {
+            val team = t.optJSONObject("team") ?: JSONObject()
+            val home = when (t.s("homeAway")) {
+                "home" -> true
+                "away" -> false
+                else -> isHome(team.s("id"), team.s("displayName")) ?: (i == 0)
+            }
+            byTeam[home] = asArray(t.opt("statistics")).objects().associate { it.s("name") to it.s("displayValue") }
+        }
+        val stats = wanted.mapNotNull { (key, label) ->
+            val h = byTeam[true]?.get(key)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val a = byTeam[false]?.get(key)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            if (key == "possessionPct") MatchStat(label, h.substringBefore('.') + "%", a.substringBefore('.') + "%") else MatchStat(label, h, a)
+        }
+        return MatchDetail(events.sortedBy { minuteValue(it.minute) }, stats)
+    }
+
+    /** "45'+2'" → 45.02, for ordering. */
+    private fun minuteValue(m: String): Double {
+        val parts = Regex("\\d+").findAll(m).map { it.value.toDouble() }.toList()
+        return when (parts.size) {
+            0 -> 999.0
+            1 -> parts[0]
+            else -> parts[0] + parts[1] / 100.0
         }
     }
 

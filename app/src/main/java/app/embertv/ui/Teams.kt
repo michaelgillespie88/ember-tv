@@ -6,6 +6,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -372,7 +374,16 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
             }
             Spacer(Modifier.height(if (isTv) 10.dp else 14.dp))
             MatchHeader(match, now)
+            // Where to watch it, or (once it's kicked off) the goals, cards and stats instead.
+            var tab by remember(match.id) { mutableIntStateOf(0) }
+            if (match.state != MatchState.UPCOMING) {
+                Spacer(Modifier.height(14.dp))
+                SegmentedTabs(listOf("Where to watch", "Stats"), tab) { tab = it }
+            }
             Spacer(Modifier.height(16.dp))
+            if (tab == 1) {
+                MatchStatsView(match, Modifier.weight(1f, fill = false))
+            } else {
             // Channels whose name or guide names both teams. Only if there are none, the weaker guesses.
             val certain = hits.filter { it.score >= 8 }
             val shown = (certain.ifEmpty { hits }).take(40)
@@ -452,6 +463,7 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
                     }
                 }
             }
+            }
             Spacer(Modifier.height(14.dp))
             // The two actions as frosted buttons, apart from the channels.
             val pinned = vm.pinnedMatch?.id == match.id
@@ -469,6 +481,169 @@ fun MatchFinderDialog(vm: AppViewModel, match: Match) {
                     close()
                 }
             }
+        }
+    }
+}
+
+/** Apple's segmented control: a frosted track with the chosen option in white. */
+@Composable
+private fun SegmentedTabs(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    val isTv = LocalIsTv.current
+    Row(
+        Modifier.glassSurface(RoundedCornerShape(20.dp), Color(0x14FFFFFF)).padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        options.forEachIndexed { i, label ->
+            val chosen = i == selected
+            FocusBox(
+                modifier = Modifier.height(if (isTv) 38.dp else 34.dp),
+                focusKey = "matchtab:$i",
+                shape = RoundedCornerShape(17.dp),
+                focusedScale = 1.04f,
+                color = if (chosen) Color(0x33FFFFFF) else Color.Transparent,
+                focusedColor = Color.White,
+                glassEdge = false,
+                onClick = { onSelect(i) },
+            ) { focused ->
+                Box(Modifier.fillMaxHeight().padding(horizontal = if (isTv) 22.dp else 18.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        label,
+                        style = Txt.Label.copy(fontSize = 14.sp, fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Medium),
+                        color = if (focused) Color.Black else if (chosen) Ember.Text else Ember.Dim,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Goals and cards down the middle (home on the left, away on the right), then the team stats with bars. */
+@Composable
+private fun MatchStatsView(match: Match, modifier: Modifier) {
+    val isTv = LocalIsTv.current
+    var detail by remember(match.id) { mutableStateOf<app.embertv.data.MatchDetail?>(null) }
+    var loaded by remember(match.id) { mutableStateOf(false) }
+    LaunchedEffect(match.id) {
+        while (true) {
+            ScoresClient.detail(match)?.let { detail = it }
+            loaded = true
+            if (match.state != MatchState.LIVE) break
+            delay(60_000)
+        }
+    }
+    val d = detail
+    // TVs: rows take focus so the remote can scroll the list; a faint highlight shows where you are.
+    @Composable
+    fun Modifier.tvRow(): Modifier {
+        if (!isTv) return this
+        var f by remember { mutableStateOf(false) }
+        return this
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (f) Color(0x1AFFFFFF) else Color.Transparent)
+            .onFocusChanged { f = it.isFocused }
+            .focusable()
+    }
+    LazyColumn(modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = if (isTv) 16.dp else 0.dp, vertical = 4.dp)) {
+        when {
+            !loaded -> item(key = "loading") { SkeletonLines(Modifier.fillMaxWidth().padding(8.dp), widths = listOf(0.9f, 0.7f, 0.8f, 0.6f)) }
+            d == null || (d.events.isEmpty() && d.stats.isEmpty()) -> item(key = "none") {
+                Text(
+                    "No stats for this game yet. They usually appear a few minutes after kick-off.",
+                    style = Txt.Body,
+                    color = Ember.Dim,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).tvRow(),
+                )
+            }
+            else -> {
+                if (d.events.isNotEmpty()) {
+                    item(key = "ev-h") { SheetSection("Goals & cards") }
+                    item(key = "ev") {
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x12FFFFFF)).padding(vertical = 6.dp)) {
+                            d.events.forEach { e -> EventRow(e, Modifier.tvRow()) }
+                        }
+                    }
+                }
+                if (d.stats.isNotEmpty()) {
+                    item(key = "st-h") { SheetSection("Stats", Modifier.padding(top = 16.dp)) }
+                    item(key = "st") {
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x12FFFFFF)).padding(horizontal = 14.dp, vertical = 8.dp),
+                        ) {
+                            d.stats.forEach { st -> StatRow(st, Modifier.tvRow()) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventRow(e: app.embertv.data.MatchEvent, modifier: Modifier) {
+    val label = e.player.ifBlank { if (e.kind == app.embertv.data.MatchEventKind.YELLOW || e.kind == app.embertv.data.MatchEventKind.RED) "Card" else "Goal" } +
+        when (e.kind) {
+            app.embertv.data.MatchEventKind.PENALTY -> " (pen)"
+            app.embertv.data.MatchEventKind.OWN_GOAL -> " (og)"
+            else -> ""
+        }
+    Row(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+            if (e.home) Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(label, style = Txt.Label.copy(fontSize = 14.sp), color = Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Spacer(Modifier.width(8.dp))
+                EventIcon(e.kind)
+            }
+        }
+        Text(
+            e.minute.ifBlank { "–" },
+            style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold),
+            color = Ember.Dim,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(64.dp),
+            maxLines = 1,
+        )
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            if (!e.home) Row(verticalAlignment = Alignment.CenterVertically) {
+                EventIcon(e.kind)
+                Spacer(Modifier.width(8.dp))
+                Text(label, style = Txt.Label.copy(fontSize = 14.sp), color = Ember.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventIcon(kind: app.embertv.data.MatchEventKind) {
+    when (kind) {
+        app.embertv.data.MatchEventKind.YELLOW, app.embertv.data.MatchEventKind.RED -> Box(
+            Modifier
+                .size(width = 11.dp, height = 15.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(if (kind == app.embertv.data.MatchEventKind.RED) Ember.Live else Color(0xFFFFD60A))
+        )
+        else -> Icon(EmberIcons.Football, contentDescription = "Goal", tint = Ember.Text, modifier = Modifier.size(16.dp))
+    }
+}
+
+@Composable
+private fun StatRow(st: app.embertv.data.MatchStat, modifier: Modifier) {
+    val h = st.home.filter { it.isDigit() || it == '.' }.toFloatOrNull() ?: 0f
+    val a = st.away.filter { it.isDigit() || it == '.' }.toFloatOrNull() ?: 0f
+    val total = h + a
+    Column(modifier.fillMaxWidth().padding(vertical = 7.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(st.home, style = Txt.Label.copy(fontWeight = if (h > a) FontWeight.Bold else FontWeight.Medium), color = Ember.Text, modifier = Modifier.width(56.dp))
+            Text(st.label, style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold), color = Ember.Dim, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+            Text(st.away, style = Txt.Label.copy(fontWeight = if (a > h) FontWeight.Bold else FontWeight.Medium), color = Ember.Text, textAlign = TextAlign.End, modifier = Modifier.width(56.dp))
+        }
+        Spacer(Modifier.height(6.dp))
+        // Who's ahead: the home share in white from the left, the away share fainter from the right.
+        Row(Modifier.fillMaxWidth().height(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            val hf = if (total > 0f) (h / total).coerceIn(0.02f, 0.98f) else 0.5f
+            Box(Modifier.weight(hf).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(if (h >= a) Color.White else Color(0x59FFFFFF)))
+            Box(Modifier.weight(1f - hf).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(if (a > h) Color.White else Color(0x59FFFFFF)))
         }
     }
 }
