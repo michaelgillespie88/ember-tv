@@ -2247,14 +2247,19 @@ private fun PlayerButton(
 
 /** Apple TV style progress: a rounded bar, with a playhead when paused or skipping. */
 @Composable
-private fun PlayerScrubber(fraction: Float, showHead: Boolean, modifier: Modifier = Modifier) {
+private fun PlayerScrubber(fraction: Float, showHead: Boolean, modifier: Modifier = Modifier, focused: Boolean = false) {
     val f = fraction.coerceIn(0f, 1f)
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth().height(16.dp), contentAlignment = Alignment.CenterStart) {
+    // Picked up (choosing a point): a thicker bar and a bigger white playhead with a soft glass ring.
+    val bar = if (focused) 10.dp else 6.dp
+    val head = if (focused) 22.dp else 16.dp
+    val ring = if (focused) 34.dp else head
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth().height(ring), contentAlignment = Alignment.CenterStart) {
         Box(
             Modifier
+                .padding(horizontal = (ring - head) / 2)
                 .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .height(bar)
+                .clip(RoundedCornerShape(bar / 2))
                 .background(Color(0x40FFFFFF))
         ) {
             Box(Modifier.fillMaxHeight().fillMaxWidth(f).background(Color(0xF2FFFFFF)))
@@ -2262,11 +2267,13 @@ private fun PlayerScrubber(fraction: Float, showHead: Boolean, modifier: Modifie
         if (showHead) {
             Box(
                 Modifier
-                    .padding(start = (maxWidth - 16.dp) * f)
-                    .size(16.dp)
-                    .clip(CircleShape)
-                    .background(Color.White)
-            )
+                    .padding(start = (maxWidth - ring) * f)
+                    .size(ring)
+                    .then(if (focused) Modifier.glassSurface(CircleShape, Color(0x33FFFFFF)) else Modifier),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.size(head).clip(CircleShape).background(Color.White))
+            }
         }
     }
 }
@@ -2316,21 +2323,28 @@ private fun VodOverlay(
             if (barFocused) {
                 // The marker's time in a white bubble above it, and how far that is from where you were.
                 androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().height(34.dp)) {
-                    val bubble = 120.dp
+                    val bubble = 170.dp
                     val x = ((maxWidth - bubble) * fraction.coerceIn(0f, 1f) + 0.dp)
                     Column(
                         Modifier.padding(start = x).width(bubble),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Box(Modifier.clip(RoundedCornerShape(10.dp)).background(Color.White).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                        // White, like everything picked in the app: the time in bold, the jump in grey.
+                        Row(
+                            Modifier.clip(RoundedCornerShape(12.dp)).background(Color.White).padding(horizontal = 12.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             val delta = jumpBy ?: 0L
-                            val sign = if (delta < 0) "−" else "+"
-                            Text(
-                                formatMs(position) + if (kotlin.math.abs(delta) >= 1_000) "  ($sign${formatMs(kotlin.math.abs(delta))})" else "",
-                                style = Txt.Caption.copy(fontWeight = FontWeight.Bold),
-                                color = Color.Black,
-                                maxLines = 1,
-                            )
+                            Text(formatMs(position), style = Txt.Label.copy(fontWeight = FontWeight.Bold), color = Color.Black, maxLines = 1)
+                            if (kotlin.math.abs(delta) >= 1_000) {
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    (if (delta < 0) "−" else "+") + formatMs(kotlin.math.abs(delta)),
+                                    style = Txt.Caption.copy(fontWeight = FontWeight.SemiBold),
+                                    color = Color(0xFF55555C),
+                                    maxLines = 1,
+                                )
+                            }
                         }
                     }
                 }
@@ -2339,7 +2353,7 @@ private fun VodOverlay(
             PlayerScrubber(
                 fraction = fraction,
                 showHead = scrubbing || !playing || barFocused,
-                modifier = if (barFocused) Modifier.graphicsLayer { scaleY = 1.35f } else Modifier,
+                focused = barFocused,
             )
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
